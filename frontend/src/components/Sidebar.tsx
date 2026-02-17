@@ -121,15 +121,6 @@ export function Sidebar({ isOpen, chats, currentChatId, onSelectChat, onNewChat,
           );
         })}
       </div>
-
-      <div className="p-3 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm font-semibold">
-            U
-          </div>
-          <span className="text-sm md:text-base text-gray-700 dark:text-gray-300">Benutzer</span>
-        </div>
-      </div>
     </div>
   );
 }
