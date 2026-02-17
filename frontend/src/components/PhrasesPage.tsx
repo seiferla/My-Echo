@@ -1,10 +1,9 @@
-import {ArrowLeft, Copy, Check} from 'lucide-react';
+import {ArrowLeft, Volume2} from 'lucide-react';
 import {useNavigate} from 'react-router';
 import {useState, useEffect} from 'react';
 
 export function PhrasesPage() {
   const navigate = useNavigate();
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [phrases, setPhrases] = useState<string[]>([]);
 
   useEffect(() => {
@@ -52,11 +51,6 @@ export function PhrasesPage() {
         .map(([phrase]) => phrase);
   };
 
-  const copyToClipboard = (phrase: string, index: number) => {
-    navigator.clipboard.writeText(phrase);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
-  };
 
   const speechSynthesis = (phrase: string) => {
     if ('speechSynthesis' in window) {
@@ -89,31 +83,22 @@ export function PhrasesPage() {
         <div className="flex-1 overflow-y-auto px-3 md:px-4 py-4 md:py-6">
           <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {phrases.map((phrase, index) => (
-                <button
+                <div
                     key={index}
-                    onClick={() => speechSynthesis(phrase)}
-                    className="group relative flex items-center justify-between gap-3 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2f2f2f] hover:border-sky-400 dark:hover:border-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all touch-manipulation"
+                    className="group relative flex items-center justify-between gap-3 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#2f2f2f] hover:border-sky-400 dark:hover:border-sky-500 transition-all"
                 >
               <span
                   className="text-sm md:text-base text-gray-800 dark:text-gray-200 text-left flex-1">
                 {phrase}
               </span>
                   <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyToClipboard(phrase, index);
-                      }}
-                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
-                      aria-label="Kopieren"
+                      onClick={() => speechSynthesis(phrase)}
+                      className="p-2 hover:bg-sky-100 dark:hover:bg-sky-900/50 rounded-lg transition-colors"
+                      aria-label="Sprachausgabe"
                   >
-                    {copiedIndex === index ? (
-                        <Check className="w-4 h-4 text-green-500 flex-shrink-0"/>
-                    ) : (
-                        <Copy
-                            className="w-4 h-4 text-gray-400 group-hover:text-sky-600 dark:group-hover:text-sky-400 flex-shrink-0 transition-colors"/>
-                    )}
+                    <Volume2 className="w-5 h-5 text-gray-600 dark:text-gray-400 hover:text-sky-600 dark:hover:text-sky-400 flex-shrink-0 transition-colors"/>
                   </button>
-                </button>
+                </div>
             ))}
           </div>
 
