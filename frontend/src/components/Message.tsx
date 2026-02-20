@@ -1,23 +1,15 @@
 import { Bot, Volume2 } from 'lucide-react';
+import { useSpeech } from '../hooks/useSpeech';
+import { ChatMessage } from '../types';
 
 interface MessageProps {
-  message: {
-    role: 'user' | 'assistant';
-    content: string;
-  };
+  message: ChatMessage;
   isTyping?: boolean;
 }
 
 export function Message({ message, isTyping }: MessageProps) {
   const isUser = message.role === 'user';
-
-  const handleSpeak = () => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(message.content);
-      utterance.lang = 'de-DE';
-      window.speechSynthesis.speak(utterance);
-    }
-  };
+  const { speak } = useSpeech();
 
   return (
     <div
@@ -28,7 +20,7 @@ export function Message({ message, isTyping }: MessageProps) {
       <div className="max-w-3xl mx-auto flex gap-3 md:gap-4">
         {isUser ? (
           <button
-            onClick={handleSpeak}
+            onClick={() => speak(message.content)}
             className="w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-purple-500 to-pink-500 text-white hover:from-purple-600 hover:to-pink-600 transition-all touch-manipulation"
             title="Nachricht vorlesen"
           >

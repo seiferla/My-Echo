@@ -1,16 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './Sidebar';
 import { ChatArea } from './ChatArea';
 import { Menu, PenSquare, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { Chat, ChatMessage } from '../types';
 
 export function ChatInterface() {
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentChatId, setCurrentChatId] = useState('1');
-  const [chats, setChats] = useState([
+  const [chats, setChats] = useState<Chat[]>([
     { id: '1', title: 'Neuer Chat', messages: [], timestamp: Date.now() },
   ]);
+  const isLoadedRef = useRef(false);
 
   // Lade Chats aus localStorage beim Start
   useEffect(() => {
@@ -23,10 +25,12 @@ export function ChatInterface() {
         console.error('Fehler beim Laden der Chats:', e);
       }
     }
+    isLoadedRef.current = true;
   }, []);
 
-  // Speichere Chats in localStorage bei Änderungen
+  // Speichere Chats in localStorage bei Änderungen (nicht beim ersten Render)
   useEffect(() => {
+    if (!isLoadedRef.current) return;
     localStorage.setItem('myEchoChats', JSON.stringify(chats));
   }, [chats]);
 
@@ -47,7 +51,7 @@ export function ChatInterface() {
     setCurrentChatId(id);
   };
 
-  const updateChat = (id: string, messages: any[]) => {
+  const updateChat = (id: string, messages: ChatMessage[]) => {
     setChats(chats.map(chat => 
       chat.id === id 
         ? { ...chat, messages, title: messages[0]?.content.slice(0, 30) || 'Neuer Chat' }

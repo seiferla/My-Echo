@@ -2,6 +2,7 @@
 import os
 import httpx
 from fastapi import FastAPI, WebSocket
+from fastapi.websockets import WebSocketDisconnect
 
 app = FastAPI()
 VLLM_URL = os.getenv("VLLM_URL", "http://localhost:8000")
@@ -12,18 +13,25 @@ async def tts_proxy(websocket: WebSocket):
 
   # Nutze einen persistenten HTTP-Client für die Verbindung zu vLLM
   async with httpx.AsyncClient(timeout=None) as client:
-    while True:
-      data = await websocket.receive_json()
+    try:
+      while True:
+        data = await websocket.receive_json()
 
-      async with client.stream(
-          "POST",
-          f"{VLLM_URL}/v1/audio/speech",
-          json={
-            "model": "qwen3-tts",
-            "input": data["text"],
-            "voice": "custom"
-          }
-      ) as response:
+        async with client.stream(
+            "POST",
+            f"{VLLM_URL}/v1/audio/speech",
+            json={
+              "model": "qwen3-tts",
+              "input": data["text"],
+              "voice": "custom"
+            }
+        ) as response:
+          response.raise_for_status()
+          async for chunk in response.aiter_bytes():
+            await websocket.send_bytes(chunk)
 
-        async for chunk in response.aiter_bytes():
-          await websocket.send_bytes(chunk)
+    except WebSocketDisconnect:
+      pass
+    except Exception as e:
+      print(f"Error in tts_proxy: {e}")
+      await websocket.close(code=1011)

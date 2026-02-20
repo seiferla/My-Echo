@@ -1,10 +1,13 @@
 import {ArrowLeft, Volume2} from 'lucide-react';
 import {useNavigate} from 'react-router';
 import {useState, useEffect} from 'react';
+import {useSpeech} from '../hooks/useSpeech';
+import {Chat, ChatMessage} from '../types';
 
 export function PhrasesPage() {
   const navigate = useNavigate();
   const [phrases, setPhrases] = useState<string[]>([]);
+  const { speak } = useSpeech();
 
   useEffect(() => {
     // Lade Chats aus localStorage
@@ -28,12 +31,12 @@ export function PhrasesPage() {
     }
   }, []);
 
-  const extractFrequentPhrases = (chats: any[]) => {
+  const extractFrequentPhrases = (chats: Chat[]) => {
     const phraseCount: { [key: string]: number } = {};
 
     // Sammle alle User-Nachrichten
     chats.forEach(chat => {
-      chat.messages?.forEach((message: any) => {
+      chat.messages?.forEach((message: ChatMessage) => {
         if (message.role === 'user') {
           const content = message.content.trim();
           if (content.length > 0 && content.length < 100) {
@@ -52,13 +55,7 @@ export function PhrasesPage() {
   };
 
 
-  const speechSynthesis = (phrase: string) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(phrase);
-      utterance.lang = 'de-DE';
-      window.speechSynthesis.speak(utterance);
-    }
-  }
+  const speechSynthesis = (phrase: string) => speak(phrase);
 
   return (
       <div className="flex flex-col h-screen bg-white dark:bg-[#212121]">

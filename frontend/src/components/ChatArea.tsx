@@ -1,18 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send } from 'lucide-react';
 import { Message } from './Message';
-
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
+import { useSpeech } from '../hooks/useSpeech';
+import { ChatMessage, Chat } from '../types';
 
 interface ChatAreaProps {
-  chat?: {
-    id: string;
-    title: string;
-    messages: ChatMessage[];
-  };
+  chat?: Chat;
   onUpdateChat: (messages: ChatMessage[]) => void;
 }
 
@@ -20,6 +13,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { speak } = useSpeech();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -42,11 +36,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     setInput('');
 
     // Nachricht vorlesen
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(userMessage.content);
-      utterance.lang = 'de-DE';
-      window.speechSynthesis.speak(utterance);
-    }
+    speak(userMessage.content);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

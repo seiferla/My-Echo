@@ -1,12 +1,6 @@
 import { Plus, MessageSquare, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router';
-
-interface Chat {
-  id: string;
-  title: string;
-  messages: any[];
-  timestamp: number;
-}
+import { Chat } from '../types';
 
 interface SidebarProps {
   isOpen: boolean;
