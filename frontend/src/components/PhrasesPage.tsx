@@ -58,7 +58,7 @@ export function PhrasesPage() {
     };
 
     return (
-        <div className="flex flex-col h-screen bg-white dark:bg-[#212121]">
+        <div className="flex flex-col h-screen bg-white dark:bg-[#212121]" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
             <header className="flex items-center gap-3 px-3 md:px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                 <button
                     onClick={() => navigate('/')}

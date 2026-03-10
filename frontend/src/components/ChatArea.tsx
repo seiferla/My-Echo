@@ -68,7 +68,7 @@ export function ChatArea({chat, onUpdateChat}: ChatAreaProps) {
         <div className="flex-1 flex flex-col overflow-hidden">
             {/* Fullscreen compose overlay */}
             {isComposing && (
-                <div className="fixed inset-0 z-50 bg-white dark:bg-[#212121] flex flex-col">
+                <div className="fixed inset-0 z-50 bg-white dark:bg-[#212121] flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
                     {/* Top bar */}
                     <div
                         className="flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -106,16 +106,16 @@ export function ChatArea({chat, onUpdateChat}: ChatAreaProps) {
                 {chat?.messages.length === 0 ? (
                     <div className="h-full flex items-center justify-center px-4">
                         <div className="text-center max-w-2xl">
-                            <h1 className="text-3xl md:text-4xl lg:text-5xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
+                            <h1 className="text-2xl md:text-4xl lg:text-5xl font-semibold text-gray-800 dark:text-gray-100 mb-2 md:mb-4">
                                 myEcho
                             </h1>
-                            <p className="text-sm md:text-base text-gray-600 dark:text-gray-400">
+                            <p className="text-xs md:text-base text-gray-600 dark:text-gray-400">
                                 Wie kann ich Ihnen heute helfen?
                             </p>
                         </div>
                     </div>
                 ) : (
-                    <div className="max-w-3xl mx-auto px-3 md:px-4 py-4 md:py-8">
+                    <div className="max-w-3xl mx-auto px-2 md:px-4 py-2 md:py-8">
                         {chat.messages.map((message, index) => (
                             <Message
                                 key={index}
@@ -145,12 +145,12 @@ export function ChatArea({chat, onUpdateChat}: ChatAreaProps) {
             </div>
 
             {/* Bottom input bar */}
-            <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-[#212121]">
-                <div className="max-w-3xl mx-auto px-3 md:px-4 py-3 md:py-4">
-                    <div className="relative flex items-center gap-2">
+            <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-[#212121]" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+                <div className="max-w-3xl mx-auto px-2 md:px-4 py-2 md:py-4">
+                    <div className="relative flex items-center gap-1.5 md:gap-2">
                         <button
                             onClick={() => setIsComposing(true)}
-                            className="flex-1 text-left resize-none rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#2f2f2f] px-3 md:px-4 py-2.5 md:py-3 text-sm md:text-base hover:border-sky-400 dark:hover:border-sky-500 transition-colors truncate"
+                            className="flex-1 text-left resize-none rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#2f2f2f] px-3 md:px-4 py-2 md:py-3 text-sm md:text-base hover:border-sky-400 dark:hover:border-sky-500 transition-colors truncate"
                         >
                             {input ? (
                                 <span className="text-gray-900 dark:text-gray-100">{input}</span>

@@ -66,7 +66,7 @@ export function Sidebar({ isOpen, chats, currentChatId, onSelectChat, onNewChat,
     if (!isOpen) return null;
 
     return (
-        <div className="w-64 md:w-72 bg-gray-50 dark:bg-[#171717] border-r border-gray-200 dark:border-gray-700 flex flex-col fixed md:relative h-full z-20 md:z-0">
+        <div className="w-[85%] max-w-[280px] md:w-72 bg-gray-50 dark:bg-[#171717] border-r border-gray-200 dark:border-gray-700 flex flex-col fixed md:relative h-full z-20 md:z-0" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
             <div className="p-3 space-y-2">
                 <button
                     onClick={onNewChat}

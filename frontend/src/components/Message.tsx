@@ -112,11 +112,11 @@ export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
 
     return (
         <div
-            className={`py-4 md:py-6 px-2 md:px-4 group/msg ${
+            className={`py-3 md:py-6 px-1 md:px-4 group/msg ${
                 isUser ? 'bg-white dark:bg-[#212121]' : 'bg-gray-50 dark:bg-[#2f2f2f]'
             }`}
         >
-            <div className="max-w-3xl mx-auto flex gap-3 md:gap-4">
+            <div className="max-w-3xl mx-auto flex gap-2 md:gap-4">
                 {/* Left icon – speaker for user, bot avatar for assistant */}
                 {isUser ? (
                     <button
