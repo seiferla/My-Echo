@@ -1,12 +1,11 @@
-FROM node:18-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY . .
 
-RUN chmod +x node_modules/.bin/vite
 RUN npm run build
 
 FROM nginx:stable-alpine
