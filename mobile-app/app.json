@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "myEcho",
-    "slug": "myecho-mobile",
+    "slug": "myecho",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -36,8 +36,9 @@
         "origin": false
       },
       "eas": {
-        "projectId": "b507622a-c204-4e69-9649-6e058b4793bc"
+        "projectId": "d1945129-f6d3-46d5-8ac3-60bb0d8ca0d0"
       }
-    }
+    },
+    "owner": "testkiuis-organization"
   }
 }

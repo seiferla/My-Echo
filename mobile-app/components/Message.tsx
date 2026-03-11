@@ -29,17 +29,20 @@ export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
     }, []);
 
     const handleSpeak = async () => {
-        const speaking = await Speech.isSpeakingAsync();
-        if (speaking || isPlaying) {
-            Speech.stop();
+        if (isPlaying) {
+            await Speech.stop();
             setIsPlaying(false);
-            if (!isPlaying) return; // If we were just stopping another speech
+            return;
         }
 
+        // Stop any other ongoing speech before starting new one
+        await Speech.stop();
+        
         setIsPlaying(true);
         Speech.speak(message.content, {
             language: 'de-DE',
             onDone: () => setIsPlaying(false),
+            onStopped: () => setIsPlaying(false),
             onError: () => setIsPlaying(false),
         });
     };
@@ -58,7 +61,7 @@ export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
         ]}>
             {!isUser && (
                 <View style={styles.avatar}>
-                    <Bot size={24} color="#6366f1" />
+                    <Bot size={24} color="#60a5fa" />
                 </View>
             )}
 
@@ -96,11 +99,11 @@ export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
                 {!isEditing && (
                     <View style={styles.footerActions}>
                         <TouchableOpacity onPress={handleSpeak} style={styles.iconButton}>
-                            {isPlaying ? <Pause size={20} color="#94a3b8" /> : <Volume2 size={20} color="#94a3b8" />}
+                            {isPlaying ? <Pause size={20} color="#000000" /> : <Volume2 size={20} color="#000000" />}
                         </TouchableOpacity>
                         {isUser && (
                             <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.iconButton}>
-                                <Pencil size={20} color="#94a3b8" />
+                                <Pencil size={20} color="#000000" />
                             </TouchableOpacity>
                         )}
                     </View>
@@ -138,7 +141,7 @@ const styles = StyleSheet.create({
         borderRadius: 20,
     },
     userBubble: {
-        backgroundColor: '#6366f1',
+        backgroundColor: '#60a5fa',
         borderBottomRightRadius: 4,
     },
     assistantBubble: {
