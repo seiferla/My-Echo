@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
     View, 
     Text, 
@@ -6,9 +6,13 @@ import {
     ScrollView, 
     StyleSheet, 
     SafeAreaView,
-    Dimensions
+    Dimensions,
+    Modal,
+    TouchableWithoutFeedback,
+    TextInput,
+    Alert
 } from 'react-native';
-import { Plus, MessageSquare, MessageCircle } from 'lucide-react-native';
+import { Plus, MessageSquare, MessageCircle, Pin, Pencil, Trash2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
@@ -18,6 +22,7 @@ interface Chat {
     title: string;
     messages: any[];
     timestamp: number;
+    pinned?: boolean;
 }
 
 interface SidebarProps {
@@ -25,15 +30,78 @@ interface SidebarProps {
     currentChatId: string;
     onSelectChat: (id: string) => void;
     onNewChat: () => void;
+    onPinChat: (id: string) => void;
+    onRenameChat: (id: string, newTitle: string) => void;
+    onDeleteChat: (id: string) => void;
     onClose: () => void;
 }
 
-export function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onClose }: SidebarProps) {
+export function Sidebar({ 
+    chats, 
+    currentChatId, 
+    onSelectChat, 
+    onNewChat, 
+    onPinChat,
+    onRenameChat,
+    onDeleteChat,
+    onClose 
+}: SidebarProps) {
     const router = useRouter();
+    const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+    const [isMenuVisible, setIsMenuVisible] = useState(false);
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [newTitle, setNewTitle] = useState('');
 
     const handleSelectChat = (id: string) => {
         onSelectChat(id);
         onClose();
+    };
+
+    const handleLongPress = (id: string, currentTitle: string) => {
+        setSelectedChatId(id);
+        setNewTitle(currentTitle);
+        setIsMenuVisible(true);
+    };
+
+    const handlePin = () => {
+        if (selectedChatId) {
+            onPinChat(selectedChatId);
+            setIsMenuVisible(false);
+        }
+    };
+
+    const handleRename = () => {
+        setIsMenuVisible(false);
+        setIsRenaming(true);
+    };
+
+    const submitRename = () => {
+        if (selectedChatId && newTitle.trim()) {
+            onRenameChat(selectedChatId, newTitle.trim());
+            setIsRenaming(false);
+            setSelectedChatId(null);
+        }
+    };
+
+    const handleDelete = () => {
+        if (selectedChatId) {
+            Alert.alert(
+                "Chat löschen",
+                "Möchten Sie diesen Chat wirklich löschen?",
+                [
+                    { text: "Abbrechen", style: "cancel", onPress: () => setIsMenuVisible(false) },
+                    { 
+                        text: "Löschen", 
+                        style: "destructive", 
+                        onPress: () => {
+                            onDeleteChat(selectedChatId);
+                            setIsMenuVisible(false);
+                            setSelectedChatId(null);
+                        } 
+                    }
+                ]
+            );
+        }
     };
 
     const groupChatsByDate = () => {
@@ -43,6 +111,7 @@ export function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onClose
         const oneMonth = 30 * oneDay;
 
         const groups: { [key: string]: Chat[] } = {
+            'Gepinnt': [],
             'Heute': [],
             'Gestern': [],
             'Letzte 7 Tage': [],
@@ -51,6 +120,10 @@ export function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onClose
         };
 
         chats.forEach(chat => {
+            if (chat.pinned) {
+                groups['Gepinnt'].push(chat);
+                return;
+            }
             const diff = now - chat.timestamp;
             if (diff < oneDay) {
                 groups['Heute'].push(chat);
@@ -103,15 +176,20 @@ export function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onClose
                                 <TouchableOpacity
                                     key={chat.id}
                                     onPress={() => handleSelectChat(chat.id)}
+                                    onLongPress={() => handleLongPress(chat.id, chat.title)}
                                     style={[
                                         styles.chatItem,
                                         chat.id === currentChatId && styles.activeChatItem
                                     ]}
                                 >
-                                    <MessageSquare 
-                                        size={28} 
-                                        color={chat.id === currentChatId ? "#0284c7" : "#4b5563"} 
-                                    />
+                                    {chat.pinned ? (
+                                        <Pin size={24} color="#0284c7" />
+                                    ) : (
+                                        <MessageSquare 
+                                            size={28} 
+                                            color={chat.id === currentChatId ? "#0284c7" : "#4b5563"} 
+                                        />
+                                    )}
                                     <Text 
                                         style={[
                                             styles.chatItemText,
@@ -136,6 +214,70 @@ export function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onClose
                     <Text style={styles.userName}>Benutzer</Text>
                 </View>
             </View>
+
+            {/* Kontext-Menü Modal */}
+            <Modal
+                visible={isMenuVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsMenuVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => setIsMenuVisible(false)}>
+                    <View style={styles.menuOverlay}>
+                        <View style={styles.menuContainer}>
+                            <TouchableOpacity style={styles.menuItem} onPress={handlePin}>
+                                <Pin size={20} color="#374151" />
+                                <Text style={styles.menuItemText}>
+                                    {chats.find(c => c.id === selectedChatId)?.pinned ? 'Anheften aufheben' : 'Anheften'}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.menuItem} onPress={handleRename}>
+                                <Pencil size={20} color="#374151" />
+                                <Text style={styles.menuItemText}>Umbenennen</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.menuItem, styles.deleteItem]} onPress={handleDelete}>
+                                <Trash2 size={20} color="#ef4444" />
+                                <Text style={[styles.menuItemText, styles.deleteText]}>Löschen</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* Umbenennen Modal */}
+            <Modal
+                visible={isRenaming}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsRenaming(false)}
+            >
+                <View style={styles.menuOverlay}>
+                    <View style={styles.renameContainer}>
+                        <Text style={styles.renameTitle}>Chat umbenennen</Text>
+                        <TextInput
+                            style={styles.renameInput}
+                            value={newTitle}
+                            onChangeText={setNewTitle}
+                            autoFocus={true}
+                            selectTextOnFocus={true}
+                        />
+                        <View style={styles.renameButtons}>
+                            <TouchableOpacity 
+                                style={styles.renameButton} 
+                                onPress={() => setIsRenaming(false)}
+                            >
+                                <Text style={styles.renameButtonText}>Abbrechen</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.renameButton, styles.renameSubmitButton]} 
+                                onPress={submitRename}
+                            >
+                                <Text style={[styles.renameButtonText, styles.renameSubmitButtonText]}>Speichern</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -245,5 +387,88 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#374151',
         fontWeight: '500',
+    },
+    menuOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    menuContainer: {
+        backgroundColor: '#ffffff',
+        borderRadius: 16,
+        width: 250,
+        padding: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 5,
+    },
+    menuItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        padding: 16,
+        borderRadius: 12,
+    },
+    menuItemText: {
+        fontSize: 16,
+        color: '#374151',
+        fontWeight: '500',
+    },
+    deleteItem: {
+        borderTopWidth: 1,
+        borderTopColor: '#f3f4f6',
+        marginTop: 4,
+    },
+    deleteText: {
+        color: '#ef4444',
+    },
+    renameContainer: {
+        backgroundColor: '#ffffff',
+        borderRadius: 16,
+        width: 300,
+        padding: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 5,
+    },
+    renameTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#111827',
+        marginBottom: 16,
+    },
+    renameInput: {
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+        borderRadius: 8,
+        padding: 12,
+        fontSize: 16,
+        marginBottom: 20,
+    },
+    renameButtons: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 12,
+    },
+    renameButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+    },
+    renameButtonText: {
+        fontSize: 16,
+        color: '#6b7280',
+        fontWeight: '500',
+    },
+    renameSubmitButton: {
+        backgroundColor: '#0ea5e9',
+    },
+    renameSubmitButtonText: {
+        color: '#ffffff',
     }
 });

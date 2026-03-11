@@ -28,6 +28,7 @@ interface Chat {
     title: string;
     messages: ChatMessage[];
     timestamp: number;
+    pinned?: boolean;
 }
 
 export default function ChatScreen() {
@@ -74,6 +75,31 @@ export default function ChatScreen() {
         setChats([newChat, ...chats]);
         setCurrentChatId(newChat.id);
         setIsSidebarOpen(false);
+    };
+
+    const pinChat = (id: string) => {
+        setChats(prevChats => prevChats.map(chat =>
+            chat.id === id ? { ...chat, pinned: !chat.pinned } : chat
+        ));
+    };
+
+    const renameChat = (id: string, newTitle: string) => {
+        setChats(prevChats => prevChats.map(chat =>
+            chat.id === id ? { ...chat, title: newTitle } : chat
+        ));
+    };
+
+    const deleteChat = (id: string) => {
+        setChats(prevChats => {
+            const newChats = prevChats.filter(chat => chat.id !== id);
+            if (newChats.length === 0) {
+                return [{ id: Date.now().toString(), title: 'Neuer Chat', messages: [], timestamp: Date.now() }];
+            }
+            if (id === currentChatId) {
+                setCurrentChatId(newChats[0].id);
+            }
+            return newChats;
+        });
     };
 
     const selectChat = (id: string) => {
@@ -137,6 +163,9 @@ export default function ChatScreen() {
                             currentChatId={currentChatId}
                             onSelectChat={selectChat}
                             onNewChat={createNewChat}
+                            onPinChat={pinChat}
+                            onRenameChat={renameChat}
+                            onDeleteChat={deleteChat}
                             onClose={() => setIsSidebarOpen(false)}
                         />
                     </Animated.View>
