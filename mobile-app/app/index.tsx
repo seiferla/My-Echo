@@ -45,10 +45,27 @@ export default function ChatScreen() {
             const savedChats = await storage.getItem('myEchoChats');
             if (savedChats) {
                 try {
-                    const parsed = JSON.parse(savedChats);
-                    setChats(parsed);
-                    if (parsed.length > 0) {
-                        setCurrentChatId(parsed[0].id);
+                    const parsed: Chat[] = JSON.parse(savedChats);
+                    
+                    // Prüfe ob ein neuer Chat für heute erstellt werden muss
+                    const today = new Date().setHours(0, 0, 0, 0);
+                    const latestChat = parsed[0]; // Chats sind nach timestamp absteigend sortiert (neuere oben)
+                    
+                    if (latestChat && new Date(latestChat.timestamp).setHours(0, 0, 0, 0) < today) {
+                        const newChat: Chat = {
+                            id: Date.now().toString(),
+                            title: 'Neuer Chat',
+                            messages: [],
+                            timestamp: Date.now(),
+                        };
+                        const updatedChats = [newChat, ...parsed];
+                        setChats(updatedChats);
+                        setCurrentChatId(newChat.id);
+                    } else {
+                        setChats(parsed);
+                        if (parsed.length > 0) {
+                            setCurrentChatId(parsed[0].id);
+                        }
                     }
                 } catch (e) {
                     console.error('Fehler beim Laden der Chats:', e);
