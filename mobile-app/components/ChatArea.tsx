@@ -1,17 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-    View, 
-    Text, 
-    ScrollView, 
-    TouchableOpacity, 
-    TextInput, 
-    StyleSheet, 
-    KeyboardAvoidingView, 
+import {
+    View,
+    Text,
+    ScrollView,
+    TouchableOpacity,
+    TextInput,
+    StyleSheet,
+    KeyboardAvoidingView,
     Platform,
     Modal,
     SafeAreaView
 } from 'react-native';
-import { Send, X } from 'lucide-react-native';
+import { Send, X, Save } from 'lucide-react-native';
 import { Message } from './Message';
 
 interface ChatMessage {
@@ -58,6 +58,21 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
         setIsComposing(false);
     };
 
+    const handleSave = () => {
+        if (!input.trim() || !chat) return;
+
+        const userMessage: ChatMessage = {
+            role: 'user',
+            content: input,
+        };
+
+        const updatedMessages = [...chat.messages, userMessage];
+        onUpdateChat(updatedMessages);
+        setLastSentIndex(null); // Set to null to avoid autoPlay
+        setInput('');
+        setIsComposing(false);
+    };
+
     const handleClose = () => {
         setIsComposing(false);
     };
@@ -75,13 +90,22 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                         <TouchableOpacity onPress={handleClose} style={styles.modalButton}>
                             <X size={32} color="#4b5563" />
                         </TouchableOpacity>
-                        <TouchableOpacity 
-                            onPress={handleSend} 
-                            disabled={!input.trim()} 
-                            style={[styles.modalButton, styles.sendButton, !input.trim() && styles.disabledButton]}
-                        >
-                            <Send size={32} color="white" />
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                            <TouchableOpacity
+                                onPress={handleSave}
+                                disabled={!input.trim()}
+                                style={[styles.modalButton, styles.saveButton, !input.trim() && styles.disabledButton]}
+                            >
+                                <Save size={32} color="white" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={handleSend}
+                                disabled={!input.trim()}
+                                style={[styles.modalButton, styles.sendButton, !input.trim() && styles.disabledButton]}
+                            >
+                                <Send size={32} color="white" />
+                            </TouchableOpacity>
+                        </View>
                     </View>
                     <TextInput
                         style={styles.modalInput}
@@ -97,7 +121,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
             </Modal>
 
             {/* Messages list */}
-            <ScrollView 
+            <ScrollView
                 ref={scrollViewRef}
                 style={styles.messagesList}
                 contentContainerStyle={styles.scrollContent}
@@ -138,18 +162,24 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
             >
                 <SafeAreaView style={styles.inputArea}>
                     <View style={styles.inputContainer}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={() => setIsComposing(true)}
                             style={styles.inputFake}
                         >
-                            <Text 
+                            <Text
                                 style={[styles.inputFakeText, !input && styles.placeholderText]}
                                 numberOfLines={1}
                             >
                                 {input || "Nachricht senden..."}
                             </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity 
+                        <TouchableOpacity
+                            onPress={() => input.trim() ? handleSave() : setIsComposing(true)}
+                            style={styles.circleSaveButton}
+                        >
+                            <Save size={24} color="white" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
                             onPress={() => input.trim() ? handleSend() : setIsComposing(true)}
                             style={styles.circleSendButton}
                         >
@@ -184,6 +214,9 @@ const styles = StyleSheet.create({
     },
     sendButton: {
         backgroundColor: '#0ea5e9',
+    },
+    saveButton: {
+        backgroundColor: '#10b981',
     },
     disabledButton: {
         opacity: 0.4,
@@ -254,6 +287,19 @@ const styles = StyleSheet.create({
     },
     circleSendButton: {
         backgroundColor: '#0ea5e9',
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    circleSaveButton: {
+        backgroundColor: '#10b981',
         width: 50,
         height: 50,
         borderRadius: 25,
