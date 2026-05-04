@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+mobile-app/node_modules/
+
+# Expo / React Native
+.expo/
+mobile-app/.expo/
+
+# IDE / OS
+.idea/
+mobile-app/.idea/
+.DS_Store
+
+# misc
+*.hsw
+*~
