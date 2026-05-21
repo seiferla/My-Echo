@@ -10,7 +10,7 @@ import {
     Animated,
     TouchableWithoutFeedback
 } from 'react-native';
-import { Menu, PenSquare, MessageCircle } from 'lucide-react-native';
+import { Menu, PenSquare } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Sidebar } from '../components/Sidebar';
 import { ChatArea } from '../components/ChatArea';
@@ -144,12 +144,6 @@ export default function ChatScreen() {
                 <View style={styles.headerTitleContainer}>
                     <Text style={styles.headerTitle}>myEcho</Text>
                 </View>
-                <TouchableOpacity 
-                    onPress={() => router.push('/phrases')} 
-                    style={styles.headerIcon}
-                >
-                    <MessageCircle size={24} color="#0ea5e9" />
-                </TouchableOpacity>
                 <TouchableOpacity onPress={createNewChat} style={styles.headerIcon}>
                     <PenSquare size={24} color="#0ea5e9" />
                 </TouchableOpacity>

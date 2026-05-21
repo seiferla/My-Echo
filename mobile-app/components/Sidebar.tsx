@@ -12,7 +12,7 @@ import {
     TextInput,
     Alert
 } from 'react-native';
-import { Plus, MessageSquare, MessageCircle, Pin, Pencil, Trash2 } from 'lucide-react-native';
+import { Plus, MessageSquare, Pin, Pencil, Trash2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 const { width } = Dimensions.get('window');
@@ -154,16 +154,7 @@ export function Sidebar({
                     <Text style={styles.newChatText}>Neuer Chat</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                    onPress={() => {
-                        router.push('/phrases');
-                        onClose();
-                    }}
-                    style={styles.phrasesButton}
-                >
-                    <MessageCircle size={24} color="#0284c7" />
-                    <Text style={styles.phrasesText}>Phrasen</Text>
-                </TouchableOpacity>
+
             </View>
 
             <ScrollView style={styles.chatList}>
@@ -308,21 +299,7 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         color: '#374151',
     },
-    phrasesButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        padding: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#38bdf8',
-        backgroundColor: '#f0f9ff',
-    },
-    phrasesText: {
-        fontSize: 18,
-        fontWeight: '500',
-        color: '#0369a1',
-    },
+
     chatList: {
         flex: 1,
         paddingHorizontal: 12,
