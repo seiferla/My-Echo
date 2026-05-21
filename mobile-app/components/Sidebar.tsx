@@ -202,7 +202,7 @@ export function Sidebar({
                     <View style={styles.userAvatar}>
                         <Text style={styles.userAvatarText}>U</Text>
                     </View>
-                    <Text style={styles.userName}>Benutzer</Text>
+                    <Text style={styles.userName}>Mama🌺</Text>
                 </View>
             </View>
 
