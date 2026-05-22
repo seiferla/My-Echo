@@ -6,9 +6,9 @@
 
 Capture short messages and play them back aloud — backed by a FastAPI proxy to a custom-voice TTS model.
 
-![Expo](https://img.shields.io/badge/Expo-52-000020?logo=expo&logoColor=white)
-![React Native](https://img.shields.io/badge/React%20Native-0.76-61DAFB?logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript&logoColor=white)
+![Expo](https://img.shields.io/badge/Expo-56-000020?logo=expo&logoColor=white)
+![React Native](https://img.shields.io/badge/React%20Native-0.85-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.136-009688?logo=fastapi&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 
@@ -40,9 +40,12 @@ The app gives users a calm, chat-style interface to type what they want to say a
 
 ## Motivation
 
-This project began with a simple goal: to build an accessible application for people who suffer from voice disorders. Speaking can be exhausting, painful, or impossible for many — and existing solutions often feel clinical or hard to use.
+
+This project began with a simple goal: to build an accessible application for people who suffer from voice disorders. Speaking can be exhausting, painful, or impossible for many — and existing solutions are to complicated for people. 
 
 **myEcho** is meant to be the opposite: a lightweight, friendly tool that helps users communicate without friction, whether at home, with family, or out in the world.
+
+I try to give them their voice back !!!
 
 ---
 
