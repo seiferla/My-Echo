@@ -18,6 +18,8 @@ Capture short messages and play them back aloud — backed by a FastAPI proxy to
 
 ## Table of Contents
 
+- [About](#about)
+- [Motivation](#motivation)
 - [Overview](#overview)
 - [Project Structure](#project-structure)
 - [Quick Start](#quick-start)
@@ -25,6 +27,22 @@ Capture short messages and play them back aloud — backed by a FastAPI proxy to
 - [Backend](#backend)
 - [Docker Compose](#docker-compose)
 - [Status](#status)
+
+---
+
+## About
+
+**MyEcho is a project designed to assist individuals with voice disorders in articulating their thoughts, facilitating easier and more effective communication.**
+
+The app gives users a calm, chat-style interface to type what they want to say and have it spoken back in a natural voice — turning written words into a reliable, repeatable spoken output for everyday conversations.
+
+---
+
+## Motivation
+
+This project began with a simple goal: to build an accessible application for people who suffer from voice disorders. Speaking can be exhausting, painful, or impossible for many — and existing solutions often feel clinical or hard to use.
+
+**myEcho** is meant to be the opposite: a lightweight, friendly tool that helps users communicate without friction, whether at home, with family, or out in the world.
 
 ---
 
