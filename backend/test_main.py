@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from starlette.websockets import WebSocketDisconnect
 
@@ -11,10 +11,10 @@ async def _aiter_bytes(chunks):
         yield chunk
 
 
-class TTSProxyTests(unittest.IsolatedAsyncioTestCase):
+class TestTextToSpeechProxy(unittest.IsolatedAsyncioTestCase):
     async def test_forwards_text_and_streams_audio_chunks(self):
         websocket = AsyncMock()
-        websocket.receive_json.side_effect = [{"text": "Hallo"}, WebSocketDisconnect()]
+        websocket.receive_json.side_effect = [{"text": "Hello"}, WebSocketDisconnect()]
 
         response = MagicMock()
         response.aiter_bytes = lambda: _aiter_bytes([b"chunk-1", b"chunk-2"])
@@ -39,9 +39,9 @@ class TTSProxyTests(unittest.IsolatedAsyncioTestCase):
         client.stream.assert_called_once_with(
             "POST",
             f"{main.VLLM_URL}/v1/audio/speech",
-            json={"model": "qwen3-tts", "input": "Hallo", "voice": "custom"},
+            json={"model": "qwen3-tts", "input": "Hello", "voice": "custom"},
         )
-        websocket.send_bytes.assert_has_awaits([unittest.mock.call(b"chunk-1"), unittest.mock.call(b"chunk-2")])
+        websocket.send_bytes.assert_has_awaits([call(b"chunk-1"), call(b"chunk-2")])
 
     async def test_disconnect_before_message_skips_upstream_request(self):
         websocket = AsyncMock()
