@@ -27,8 +27,11 @@ permissions:
   contents: write # nötig, um bei Tags ein Release zu erstellen
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "22"
   JAVA_VERSION: "17"
+  # JS-basierte Actions auf den Node-24-Runtime zwingen. Ohne das laufen
+  # actions/* noch auf dem ab Juni 2026 deprecateten Node-20-Runtime.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # Schnelles Qualitäts-Gate vor dem teuren nativen Build.
@@ -42,7 +45,7 @@ jobs:
         working-directory: mobile-app
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -68,7 +71,7 @@ jobs:
       FORMAT: ${{ github.event.inputs.format || 'apk' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node
         uses: actions/setup-node@v4
