@@ -34,35 +34,10 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # Schnelles Qualitäts-Gate vor dem teuren nativen Build.
-  quality:
-    name: Typecheck
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    defaults:
-      run:
-        working-directory: mobile-app
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
-      - name: Set up Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: mobile-app/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: TypeScript typecheck
-        run: npx tsc --noEmit
-
   build-android:
+    # Quality-Gate (Typecheck) ist als erster Step in diesem Job integriert —
+    # spart das doppelte Runner-Setup eines separaten quality-Jobs.
     name: Build (${{ github.event.inputs.format || 'apk' }})
-    needs: quality
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -80,6 +55,13 @@ jobs:
           cache: npm
           cache-dependency-path: mobile-app/package-lock.json
 
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      # Quality-Gate vor dem teuren nativen Build. Bricht früh ab, falls Typen kaputt.
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
@@ -88,9 +70,6 @@ jobs:
 
       - name: Set up Gradle (mit Caching)
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Versionsname bestimmen
         id: version
@@ -101,8 +80,49 @@ jobs:
             echo "name=$(node -p "require('./app.json').expo.version")" >> "$GITHUB_OUTPUT"
           fi
 
+      # ----------------------------------------------------------------------
+      # Prebuild-Cache:
+      # `expo prebuild` ist deterministisch bezogen auf app.json + lockfile +
+      # die App-Sourcen. Wenn nichts davon sich geändert hat, sparen wir uns
+      # die Generierung des android/-Ordners komplett.
+      #
+      # Wichtig: Restore/Save sind getrennt, damit der NACHHER generierte
+      # Keystore (android/app/myecho.keystore) NICHT mit in den Cache wandert.
+      # ----------------------------------------------------------------------
+      - name: Restore prebuild cache
+        id: prebuild-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: mobile-app/android
+          key: prebuild-${{ runner.os }}-${{ hashFiles('mobile-app/app.json', 'mobile-app/package-lock.json', 'mobile-app/app/**', 'mobile-app/assets/**') }}
+
       - name: Expo prebuild (Android)
+        if: steps.prebuild-cache.outputs.cache-hit != 'true'
         run: npx expo prebuild --platform android --no-install
+
+      - name: Save prebuild cache
+        if: steps.prebuild-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: mobile-app/android
+          key: ${{ steps.prebuild-cache.outputs.cache-primary-key }}
+
+      # ----------------------------------------------------------------------
+      # Native-Build-Cache:
+      # Cacht die teuren Outputs des Gradle-/C++-Builds (Hermes, JSI, fbjni,
+      # Kotlin-Compile-Cache). Hat den Keystore explizit nicht im Pfad,
+      # darf also bedenkenlos gespeichert werden.
+      # ----------------------------------------------------------------------
+      - name: Cache native build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            mobile-app/android/.gradle
+            mobile-app/android/app/.cxx
+            mobile-app/node_modules/react-native/ReactAndroid/build
+          key: native-${{ runner.os }}-${{ hashFiles('mobile-app/package-lock.json', 'mobile-app/android/build.gradle', 'mobile-app/android/app/build.gradle') }}
+          restore-keys: |
+            native-${{ runner.os }}-
 
       - name: Signing-Keystore aus Secrets einrichten
         env:
@@ -136,11 +156,21 @@ jobs:
           # Monoton steigender versionCode pro Lauf; Versionsname aus Tag/app.json.
           ANDROID_VERSION_CODE: ${{ github.run_number }}
           ANDROID_VERSION_NAME: ${{ steps.version.outputs.name }}
+          # Mehr Heap fürs Gradle-Daemon-JVM. ubuntu-latest hat 7 GB RAM;
+          # 4 GB für Gradle verhindert GC-Thrashing bei großen RN-Builds.
+          GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
+          # --no-daemon weggelassen: gradle/actions/setup-gradle managed den Daemon
+          # und spart so pro Aufruf ~10s JVM-Startup.
+          # --parallel: parallele Modul-Builds (RN/Expo verträgt das in aktuellen Versionen).
+          COMMON_FLAGS="--build-cache --parallel --stacktrace"
           if [ "$FORMAT" = "aab" ]; then
-            ./gradlew bundleRelease --no-daemon --stacktrace
+            # AAB für den Store: alle ABIs (Google liefert pro Gerät die passende).
+            ./gradlew bundleRelease $COMMON_FLAGS
           else
-            ./gradlew assembleRelease --no-daemon --stacktrace
+            # APK zum Sideloaden: nur arm64-v8a (alle modernen Phones) -> ~4x schneller.
+            ./gradlew assembleRelease $COMMON_FLAGS \
+              -PreactNativeArchitectures=arm64-v8a
           fi
 
       - name: Artefakt-Pfad ermitteln
