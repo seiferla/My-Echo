@@ -17,6 +17,9 @@ import { Message } from './Message';
 interface ChatMessage {
     role: 'user' | 'assistant';
     content: string;
+    timestamp?: number;
+    via?: 'send' | 'save';
+    editCount?: number;
 }
 
 interface ChatAreaProps {
@@ -49,6 +52,8 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
         const userMessage: ChatMessage = {
             role: 'user',
             content: input,
+            timestamp: Date.now(),
+            via: 'send',
         };
 
         const updatedMessages = [...chat.messages, userMessage];
@@ -64,6 +69,8 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
         const userMessage: ChatMessage = {
             role: 'user',
             content: input,
+            timestamp: Date.now(),
+            via: 'save',
         };
 
         const updatedMessages = [...chat.messages, userMessage];
@@ -143,7 +150,9 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                                     message.role === 'user'
                                         ? (newContent) => {
                                             const updated = chat.messages.map((m, i) =>
-                                                i === index ? { ...m, content: newContent } : m
+                                                i === index
+                                                    ? { ...m, content: newContent, editCount: (m.editCount ?? 0) + 1 }
+                                                    : m
                                             );
                                             onUpdateChat(updated);
                                         }

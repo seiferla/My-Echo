@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { Bot, Volume2, Pause, Pencil, Check, X } from 'lucide-react-native';
 import * as Speech from 'expo-speech';
+import { recordTtsRequest } from '../utils/ttsLog';
 
 interface MessageProps {
     message: {
@@ -18,6 +19,15 @@ export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editText, setEditText] = useState(message.content);
+    const speakStartRef = useRef<number | null>(null);
+
+    // Protokolliert eine abgeschlossene Sprachausgabe genau einmal.
+    const logSpeak = () => {
+        if (speakStartRef.current === null) return;
+        const durationMs = Date.now() - speakStartRef.current;
+        speakStartRef.current = null;
+        recordTtsRequest(message.content.length, durationMs).catch(() => {});
+    };
 
     useEffect(() => {
         if (autoPlay && isUser) {
@@ -39,11 +49,12 @@ export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
         await Speech.stop();
         
         setIsPlaying(true);
+        speakStartRef.current = Date.now();
         Speech.speak(message.content, {
             language: 'de-DE',
-            onDone: () => setIsPlaying(false),
-            onStopped: () => setIsPlaying(false),
-            onError: () => setIsPlaying(false),
+            onDone: () => { setIsPlaying(false); logSpeak(); },
+            onStopped: () => { setIsPlaying(false); logSpeak(); },
+            onError: () => { setIsPlaying(false); speakStartRef.current = null; },
         });
     };
 
