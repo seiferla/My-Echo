@@ -111,12 +111,16 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          # Whitespace/Zeilenumbrüche aus dem Secret entfernen, dann dekodieren
-          # (kopiertes base64 ist oft umgebrochen -> sonst "invalid input").
-          printf '%s' "$KEYSTORE_B64" | tr -d '[:space:]' | base64 -d > android/app/myecho.keystore
+          # Secret säubern: alle Whitespaces (inkl. Zeilenumbrüche) entfernen.
+          B64="$(printf '%s' "$KEYSTORE_B64" | tr -d '[:space:]')"
+          INVALID="$(printf '%s' "$B64" | tr -d 'A-Za-z0-9+/=' | wc -c | tr -d ' ')"
+          # Diagnose (gibt nur Zahlen aus, nicht das Secret selbst):
+          echo "Diagnose ANDROID_KEYSTORE_BASE64: Länge=${#B64} (erwartet ~3488), Nicht-base64-Zeichen=$INVALID (erwartet 0)"
+          # Dekodieren; --ignore-garbage überspringt versehentlich mitkopierte Fremdzeichen.
+          printf '%s' "$B64" | base64 --decode --ignore-garbage > android/app/myecho.keystore 2>/dev/null || true
           # Sanity-Check: gültiger Keystore mit diesem Passwort?
           if ! keytool -list -keystore android/app/myecho.keystore -storepass "$STORE_PASSWORD" >/dev/null 2>&1; then
-            echo "::error::Keystore ungültig. Prüfe ANDROID_KEYSTORE_BASE64 (gültiges base64?) und ANDROID_KEYSTORE_PASSWORD."
+            echo "::error::Keystore ungültig. Vermutlich ist ANDROID_KEYSTORE_BASE64 unvollständig (Länge ${#B64}, erwartet ~3488) oder ANDROID_KEYSTORE_PASSWORD falsch. Secret am besten per 'gh secret set' aus der Datei setzen."
             exit 1
           fi
           cat > android/keystore.properties <<EOF
