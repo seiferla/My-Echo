@@ -1,0 +1,151 @@
+name: Android Release
+
+# Baut die signierte myEcho-Android-App auf GitHubs Runnern.
+# Das native android/-Projekt liegt nicht im Repo, sondern wird hier per
+# `expo prebuild` frisch erzeugt und dann mit Gradle gebaut.
+#
+# Auslöser:
+#   - manuell (workflow_dispatch) mit Wahl APK oder AAB
+#   - bei einem Versions-Tag v*.*.* -> Build + GitHub-Release mit angehängter Datei
+on:
+  workflow_dispatch:
+    inputs:
+      format:
+        description: "Build-Format"
+        type: choice
+        options: [apk, aab]
+        default: apk
+  push:
+    tags: ["v*.*.*"]
+
+# Pro Branch/Tag nur ein Lauf gleichzeitig; ältere laufende Builds abbrechen.
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # nötig, um bei Tags ein Release zu erstellen
+
+env:
+  NODE_VERSION: "20"
+  JAVA_VERSION: "17"
+
+jobs:
+  # Schnelles Qualitäts-Gate vor dem teuren nativen Build.
+  quality:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: mobile-app
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+  build-android:
+    name: Build (${{ github.event.inputs.format || 'apk' }})
+    needs: quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-app
+    env:
+      FORMAT: ${{ github.event.inputs.format || 'apk' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile-app/package-lock.json
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle (mit Caching)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Versionsname bestimmen
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=$(node -p "require('./app.json').expo.version")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Expo prebuild (Android)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Signing-Keystore aus Secrets einrichten
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/myecho.keystore
+          cat > android/keystore.properties <<EOF
+          storeFile=myecho.keystore
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: Gradle-Build
+        working-directory: mobile-app/android
+        env:
+          # Monoton steigender versionCode pro Lauf; Versionsname aus Tag/app.json.
+          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          if [ "$FORMAT" = "aab" ]; then
+            ./gradlew bundleRelease --no-daemon --stacktrace
+          else
+            ./gradlew assembleRelease --no-daemon --stacktrace
+          fi
+
+      - name: Artefakt-Pfad ermitteln
+        id: artifact
+        working-directory: mobile-app/android
+        run: |
+          if [ "$FORMAT" = "aab" ]; then
+            file=$(ls app/build/outputs/bundle/release/*.aab | head -1)
+          else
+            file=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          fi
+          echo "path=mobile-app/android/$file" >> "$GITHUB_OUTPUT"
+
+      - name: APK/AAB als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: myecho-${{ steps.version.outputs.name }}-${{ env.FORMAT }}
+          path: ${{ steps.artifact.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: GitHub-Release erstellen (nur bei Tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.artifact.outputs.path }}
+          generate_release_notes: true
