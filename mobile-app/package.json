@@ -20,7 +20,6 @@
     "expo-speech": "~56.0.3",
     "expo-status-bar": "~56.0.4",
     "lucide-react-native": "^1.16.0",
-    "nativewind": "^4.2.4",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "react-native": "0.85.3",
@@ -28,8 +27,7 @@
     "react-native-safe-area-context": "5.8.0",
     "react-native-screens": "~4.25.2",
     "react-native-svg": "15.15.5",
-    "react-native-web": "~0.21.2",
-    "tailwindcss": "^3.4.19"
+    "react-native-web": "~0.21.2"
   },
   "devDependencies": {
     "@expo/config-plugins": "^56.0.8",
@@ -37,6 +35,7 @@
     "typescript": "^6.0.3"
   },
   "overrides": {
+    "react-native-reanimated": "4.3.1",
     "@xmldom/xmldom": "^0.9.10",
     "postcss": "^8.5.10",
     "tar": "^7.5.11",
