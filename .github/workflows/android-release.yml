@@ -48,7 +48,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -74,7 +74,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -105,13 +105,25 @@ jobs:
         run: npx expo prebuild --platform android --no-install
 
       - name: Signing-Keystore aus Secrets einrichten
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/myecho.keystore
+          # Whitespace/Zeilenumbrüche aus dem Secret entfernen, dann dekodieren
+          # (kopiertes base64 ist oft umgebrochen -> sonst "invalid input").
+          printf '%s' "$KEYSTORE_B64" | tr -d '[:space:]' | base64 -d > android/app/myecho.keystore
+          # Sanity-Check: gültiger Keystore mit diesem Passwort?
+          if ! keytool -list -keystore android/app/myecho.keystore -storepass "$STORE_PASSWORD" >/dev/null 2>&1; then
+            echo "::error::Keystore ungültig. Prüfe ANDROID_KEYSTORE_BASE64 (gültiges base64?) und ANDROID_KEYSTORE_PASSWORD."
+            exit 1
+          fi
           cat > android/keystore.properties <<EOF
           storeFile=myecho.keystore
-          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
           EOF
 
       - name: Gradle-Build
