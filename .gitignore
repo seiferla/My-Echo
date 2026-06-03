@@ -6,6 +6,11 @@ mobile-app/node_modules/
 .expo/
 mobile-app/.expo/
 
+# Native Projekte (Expo CNG) — werden per `expo prebuild` neu generiert,
+# gebaut wird in GitHub Actions. Nicht einchecken.
+/mobile-app/android/
+/mobile-app/ios/
+
 # IDE / OS
 .idea/
 mobile-app/.idea/
