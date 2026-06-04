@@ -1,21 +1,21 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, AudioPlayer } from 'expo-audio';
 import * as Speech from 'expo-speech';
 import { BACKEND_WS_URL } from './config';
 
-// Aktuell laufende expo-av Sound-Instanz — für Stop-Unterstützung.
-let currentSound: Audio.Sound | null = null;
+// Aktuell laufender expo-audio Player — für Stop-Unterstützung.
+let currentPlayer: AudioPlayer | null = null;
 
 /**
  * Stoppt jede laufende Sprachausgabe (Cloud oder lokal).
  */
-export async function stopSpeaking(): Promise<void> {
-    if (currentSound) {
-        await currentSound.stopAsync().catch(() => {});
-        await currentSound.unloadAsync().catch(() => {});
-        currentSound = null;
+export function stopSpeaking(): void {
+    if (currentPlayer) {
+        currentPlayer.pause();
+        currentPlayer.remove();
+        currentPlayer = null;
     }
-    await Speech.stop();
+    Speech.stop();
 }
 
 /**
@@ -60,15 +60,15 @@ async function speakWithCloud(text: string): Promise<void> {
                     encoding: FileSystem.EncodingType.Base64,
                 });
 
-                const { sound } = await Audio.Sound.createAsync({ uri: path });
-                currentSound = sound;
-                await sound.playAsync();
+                const player = createAudioPlayer({ uri: path });
+                currentPlayer = player;
+                player.play();
 
-                sound.setOnPlaybackStatusUpdate((status) => {
-                    if (status.isLoaded && status.didJustFinish) {
-                        sound.unloadAsync().catch(() => {});
+                player.addListener('playbackStatusUpdate', (status) => {
+                    if (status.didJustFinish) {
+                        player.remove();
                         FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
-                        currentSound = null;
+                        currentPlayer = null;
                         resolve();
                     }
                 });

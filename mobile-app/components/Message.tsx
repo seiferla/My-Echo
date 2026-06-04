@@ -42,7 +42,7 @@ export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
 
     const handleSpeak = async () => {
         if (isPlaying) {
-            await stopSpeaking();
+            stopSpeaking();
             setIsPlaying(false);
             return;
         }
