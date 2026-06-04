@@ -27,23 +27,53 @@ async def tts_proxy(websocket: WebSocket):
             await websocket.close(code=1003, reason="Kein Text übergeben")
             return
         async with websockets.connect(WS_URL, additional_headers=headers) as ws:
+            # 1. Start-Event: konfiguriert Format, Stimme und Prosodie
             await ws.send(msgpack.packb({
                 "event": "start",
                 "request": {
                     "text": "",
                     "format": "mp3",
                     "latency": "normal",
-                    "reference_id": "daaad6c2df01439cae59d4f8e3a08284",
+                    "reference_id": AUDIO_REFERENCE_ID,
                     "prosody": {
-                        "speed": 0.85,   # 1.0 = normal, 0.5–2.0 möglich
-                        "volume": 2      # 0 = normal
+                        "speed": 0.85,
+                        "volume": 2,
                     }
                 }
             }))
+
+            await ws.send(msgpack.packb({
+                "event": "text",
+                "text": text,
+            }))
+
+            await ws.send(msgpack.packb({"event": "flush"}))
+            await ws.send(msgpack.packb({"event": "stop"}))
+
+            async for message in ws:
+                msg = msgpack.unpackb(message)
+                event = msg.get("event")
+
+                if event == "audio":
+                    audio_b64 = base64.b64encode(msg["audio"]).decode()
+                    await websocket.send_text(audio_b64)
+
+                elif event == "finish":
+                    break
+
+    except WebSocketDisconnect:
+        pass
     except Exception as e:
         print(f"Error in tts_proxy: {e}")
-        if not websocket.client_state.name == "DISCONNECTED":
-            await websocket.close(code=1011, reason=str(e))
+        try:
+            await websocket.send_json({"error": str(e)})
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 @app.get("/health")
 async def health():
