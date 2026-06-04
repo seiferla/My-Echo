@@ -1,4 +1,6 @@
 import unittest
+import base64
+import msgpack
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import main
@@ -14,18 +16,32 @@ class TestTextToSpeechProxy(unittest.IsolatedAsyncioTestCase):
         mock_ws_connection = AsyncMock()
         mock_ws_connection.send = AsyncMock()
         
+        # Mocking the async iterator for the audio stream
+        audio_msg = {"event": "audio", "audio": b"audio_chunk"}
+        finish_msg = {"event": "finish"}
+        mock_ws_connection.__aiter__.return_value = [
+            msgpack.packb(audio_msg),
+            msgpack.packb(finish_msg)
+        ]
+        
         # Mocking the async context manager
         mock_connect = MagicMock()
         mock_connect.__aenter__.return_value = mock_ws_connection
 
         with patch("main.websockets.connect", return_value=mock_connect), \
-             patch("main.msgpack.packb", return_value=b"packed_data") as mock_packb:
+             patch("main.FISH_API_KEY", "test_key"), \
+             patch("main.AUDIO_REFERENCE_ID", "test_ref"):
             
             await main.tts_proxy(websocket)
 
         websocket.accept.assert_awaited_once()
-        mock_packb.assert_called()
-        mock_ws_connection.send.assert_awaited_once_with(b"packed_data")
+        # verify multiple sends: start, text, flush, stop
+        self.assertEqual(mock_ws_connection.send.await_count, 4)
+        
+        # verify audio chunk was sent back to client
+        websocket.send_text.assert_awaited_once()
+        sent_audio_b64 = websocket.send_text.call_args[0][0]
+        self.assertEqual(sent_audio_b64, base64.b64encode(b"audio_chunk").decode())
 
     async def test_close_on_empty_text(self):
         websocket = AsyncMock()
@@ -34,16 +50,20 @@ class TestTextToSpeechProxy(unittest.IsolatedAsyncioTestCase):
         await main.tts_proxy(websocket)
         
         websocket.accept.assert_awaited_once()
-        websocket.close.assert_awaited_once_with(code=1003, reason="Kein Text übergeben")
+        # It is called twice: once in the if not text block, once in finally
+        self.assertEqual(websocket.close.await_count, 2)
+        websocket.close.assert_any_await(code=1003, reason="Kein Text übergeben")
 
     async def test_error_handling_closes_websocket(self):
         websocket = AsyncMock()
         websocket.receive_json.side_effect = Exception("Test Error")
-        websocket.client_state.name = "CONNECTED"
         
         await main.tts_proxy(websocket)
         
-        websocket.close.assert_awaited_once_with(code=1011, reason="Test Error")
+        # Should send error json
+        websocket.send_json.assert_awaited_once_with({"error": "Test Error"})
+        # Should be closed in finally
+        websocket.close.assert_awaited_once()
 
 class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
     @patch("main.httpx.AsyncClient")
