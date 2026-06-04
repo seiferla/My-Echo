@@ -1,11 +1,11 @@
-import * as FileSystem from 'expo-file-system/legacy';
 import { createAudioPlayer, AudioPlayer } from 'expo-audio';
 import * as Speech from 'expo-speech';
-import { BACKEND_WS_URL } from './config';
+import { BACKEND_STREAM_URL } from './config';
 
 const TAG = '[myEcho][TTS]';
+const STREAM_TIMEOUT_MS = 10_000;
 
-// Aktuell laufender expo-audio Player — für Stop-Unterstützung.
+// Aktuell laufender Player — für Stop-Unterstützung.
 let currentPlayer: AudioPlayer | null = null;
 
 /**
@@ -21,92 +21,61 @@ export function stopSpeaking(): void {
 }
 
 /**
- * Verbindet zum Backend-WebSocket, streamt Audio-Chunks und spielt sie ab.
- * Wirft einen Fehler wenn das Backend nicht erreichbar ist oder antwortet.
+ * Streamt Audio direkt vom Backend-HTTP-Endpunkt.
+ * ExoPlayer beginnt mit der Wiedergabe sobald genug gebuffert ist —
+ * kein Warten auf das komplette Audio, kein Base64, keine Temp-Datei.
  */
 async function speakWithCloud(text: string): Promise<void> {
     return new Promise((resolve, reject) => {
         const t0 = Date.now();
         const preview = text.length > 40 ? text.slice(0, 40) + '…' : text;
+        const url = `${BACKEND_STREAM_URL}?text=${encodeURIComponent(text)}`;
 
-        console.log(`${TAG} Connecting → ${BACKEND_WS_URL}`);
+        console.log(`${TAG} Streaming → ${BACKEND_STREAM_URL}`);
         console.log(`${TAG} Text: "${preview}" (${text.length} chars)`);
 
-        const ws = new WebSocket(BACKEND_WS_URL);
-        const chunks: string[] = [];
+        const player = createAudioPlayer({ uri: url });
+        currentPlayer = player;
 
-        ws.onopen = () => {
-            console.log(`${TAG} WebSocket open (${Date.now() - t0} ms)`);
-            ws.send(JSON.stringify({ text }));
-            console.log(`${TAG} Request sent`);
-        };
+        let playbackStarted = false;
 
-        ws.onmessage = (event) => {
-            try {
-                const parsed = JSON.parse(event.data);
-                if (parsed.error) {
-                    console.warn(`${TAG} Backend error: ${parsed.error}`);
-                    ws.close();
-                    reject(new Error(parsed.error));
-                    return;
-                }
-            } catch {
-                // Kein JSON → base64 Audio-Chunk
-                if (chunks.length === 0) {
-                    console.log(`${TAG} First audio chunk received (${Date.now() - t0} ms) ← TTFA`);
-                }
-                chunks.push(event.data);
+        // Timeout falls der Stream nie startet (Backend nicht erreichbar etc.)
+        const timeout = setTimeout(() => {
+            if (!playbackStarted) {
+                console.warn(`${TAG} Stream timeout nach ${STREAM_TIMEOUT_MS} ms`);
+                player.remove();
+                currentPlayer = null;
+                reject(new Error('Stream timeout'));
             }
-        };
+        }, STREAM_TIMEOUT_MS);
 
-        ws.onclose = async () => {
-            const totalBytes = chunks.reduce((n, c) => n + c.length, 0);
-            console.log(`${TAG} Stream closed — ${chunks.length} chunks, ~${Math.round(totalBytes * 0.75 / 1024)} KB audio (${Date.now() - t0} ms total)`);
-
-            if (chunks.length === 0) {
-                reject(new Error('Keine Audio-Daten empfangen'));
-                return;
+        player.addListener('playbackStatusUpdate', (status) => {
+            if (status.isLoaded && !playbackStarted) {
+                playbackStarted = true;
+                clearTimeout(timeout);
+                console.log(`${TAG} Playback started (${Date.now() - t0} ms) ← TTFA`);
             }
 
-            try {
-                const base64Audio = chunks.join('');
-                const path = `${FileSystem.cacheDirectory}tts_${Date.now()}.mp3`;
-
-                await FileSystem.writeAsStringAsync(path, base64Audio, {
-                    encoding: FileSystem.EncodingType.Base64,
-                });
-                console.log(`${TAG} Audio written to ${path}`);
-
-                const player = createAudioPlayer({ uri: path });
-                currentPlayer = player;
-                player.play();
-                console.log(`${TAG} Playback started`);
-
-                player.addListener('playbackStatusUpdate', (status) => {
-                    if (status.didJustFinish) {
-                        console.log(`${TAG} Playback finished`);
-                        player.remove();
-                        FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
-                        currentPlayer = null;
-                        resolve();
-                    }
-                });
-            } catch (error) {
-                console.error(`${TAG} Playback setup failed:`, error);
-                reject(error);
+            if (status.isBuffering) {
+                console.log(`${TAG} Buffering...`);
             }
-        };
 
-        ws.onerror = (event) => {
-            console.error(`${TAG} WebSocket error — Backend nicht erreichbar (${BACKEND_WS_URL})`);
-            reject(new Error('Backend nicht erreichbar'));
-        };
+            if (status.didJustFinish) {
+                console.log(`${TAG} Playback finished (${Date.now() - t0} ms total)`);
+                clearTimeout(timeout);
+                player.remove();
+                currentPlayer = null;
+                resolve();
+            }
+        });
+
+        player.play();
     });
 }
 
 /**
  * Hauptfunktion für Sprachausgabe.
- * Versucht Cloud-TTS, fällt bei Fehler automatisch auf expo-speech zurück.
+ * Versucht Cloud-TTS via HTTP-Streaming, fällt bei Fehler auf expo-speech zurück.
  */
 export async function speak(text: string, useCloud: boolean): Promise<void> {
     stopSpeaking();

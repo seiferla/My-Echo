@@ -4,6 +4,7 @@ import msgpack
 import httpx
 import websockets
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 
 app = FastAPI()
 
@@ -77,6 +78,45 @@ async def tts_proxy(websocket: WebSocket):
             await websocket.close()
         except Exception:
             pass
+
+@app.get("/stream/tts")
+async def stream_tts(text: str):
+    headers = {
+        "Authorization": f"Bearer {FISH_API_KEY}",
+        "model": AUDIO_MODEL,
+    }
+
+    async def generate():
+        async with websockets.connect(WS_URL, additional_headers=headers) as ws:
+            await ws.send(msgpack.packb({
+                "event": "start",
+                "request": {
+                    "text": "",
+                    "format": "mp3",
+                    "latency": "normal",
+                    "reference_id": AUDIO_REFERENCE_ID,
+                    "prosody": {
+                        "speed": 0.85,
+                        "volume": 2,
+                    }
+                }
+            }))
+            await ws.send(msgpack.packb({"event": "text", "text": text}))
+            await ws.send(msgpack.packb({"event": "flush"}))
+            await ws.send(msgpack.packb({"event": "stop"}))
+
+            async for message in ws:
+                msg = msgpack.unpackb(message)
+                if msg.get("event") == "audio":
+                    yield msg["audio"]
+                elif msg.get("event") == "finish":
+                    break
+
+    return StreamingResponse(
+        generate(),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 @app.get("/health")
 async def health():
