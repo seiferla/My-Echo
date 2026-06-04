@@ -1,17 +1,14 @@
 services:
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: myecho-backend:latest
+    image: ghcr.io/seiferla/myecho-backend:latest
     container_name: myecho-backend
     restart: unless-stopped
     ports:
       - "4444:4444"
     environment:
-      FISH_API_KEY: ${FISH_API_KEY}
-      FISH_AUDIO_MODEL: ${FISH_AUDIO_MODEL:-s1}
-      FISH_AUDIO_REFERENCE_ID: ${FISH_AUDIO_REFERENCE_ID}
+      TTS_API_KEY: ${TTS_API_KEY}
+      TTS_MODEL: ${TTS_MODEL:-s2-pro}
+      TTS_VOICE: ${TTS_VOICE:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4444/health', timeout=2)"]
       interval: 30s
