@@ -5,9 +5,9 @@ import {
     ScrollView,
     StyleSheet,
     TouchableOpacity,
-    SafeAreaView,
     Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { BarChart, PieChart } from 'react-native-chart-kit';

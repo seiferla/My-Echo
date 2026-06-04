@@ -9,8 +9,8 @@ import {
     KeyboardAvoidingView,
     Platform,
     Modal,
-    SafeAreaView
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Send, X, Save } from 'lucide-react-native';
 import { Message } from './Message';
 
@@ -92,7 +92,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                 animationType="slide"
                 presentationStyle="fullScreen"
             >
-                <SafeAreaView style={styles.modalContainer}>
+                <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom', 'left', 'right']}>
                     <View style={styles.modalHeader}>
                         <TouchableOpacity onPress={handleClose} style={styles.modalButton}>
                             <X size={32} color="#4b5563" />
@@ -169,7 +169,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
-                <SafeAreaView style={styles.inputArea}>
+                <SafeAreaView style={styles.inputArea} edges={['bottom', 'left', 'right']}>
                     <View style={styles.inputContainer}>
                         <TouchableOpacity
                             onPress={() => setIsComposing(true)}

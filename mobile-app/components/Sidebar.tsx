@@ -5,13 +5,13 @@ import {
     TouchableOpacity,
     ScrollView,
     StyleSheet,
-    SafeAreaView,
     Dimensions,
     Modal,
     TouchableWithoutFeedback,
     TextInput,
     Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 

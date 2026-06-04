@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    View, 
-    StyleSheet, 
-    SafeAreaView,
+import {
+    View,
+    StyleSheet,
     TouchableOpacity,
     Text,
     Modal,
@@ -10,6 +9,7 @@ import {
     Animated,
     TouchableWithoutFeedback
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Menu, PenSquare } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Sidebar } from '../components/Sidebar';
