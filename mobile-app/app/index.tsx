@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { Sidebar } from '../components/Sidebar';
 import { ChatArea } from '../components/ChatArea';
 import { storage } from '../utils/storage';
+import { useCloudStatus } from '../context/CloudStatusContext';
 
 const { width } = Dimensions.get('window');
 
@@ -34,6 +35,7 @@ interface Chat {
 export default function ChatScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { isAvailable } = useCloudStatus();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [currentChatId, setCurrentChatId] = useState('1');
     const [chats, setChats] = useState<Chat[]>([
@@ -144,6 +146,10 @@ export default function ChatScreen() {
                 </TouchableOpacity>
                 <View style={styles.headerTitleContainer}>
                     <Text style={styles.headerTitle}>myEcho</Text>
+                    <View style={[
+                        styles.statusDot,
+                        { backgroundColor: isAvailable ? '#22c55e' : '#d1d5db' }
+                    ]} />
                 </View>
                 <TouchableOpacity onPress={createNewChat} style={styles.headerIcon}>
                     <PenSquare size={24} color="#0ea5e9" />
@@ -207,6 +213,15 @@ const styles = StyleSheet.create({
     headerTitleContainer: {
         flex: 1,
         alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 6,
+    },
+    statusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        marginTop: 2,
     },
     headerTitle: {
         fontSize: 18,

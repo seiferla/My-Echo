@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { Bot, Volume2, Pause, Pencil, Check, X } from 'lucide-react-native';
-import * as Speech from 'expo-speech';
+import { speak, stopSpeaking } from '../utils/tts';
+import { useCloudStatus } from '../context/CloudStatusContext';
 import { recordTtsRequest } from '../utils/ttsLog';
 
 interface MessageProps {
@@ -16,6 +17,7 @@ interface MessageProps {
 
 export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
     const isUser = message.role === 'user';
+    const { isAvailable } = useCloudStatus();
     const [isPlaying, setIsPlaying] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editText, setEditText] = useState(message.content);
@@ -34,28 +36,28 @@ export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
             handleSpeak();
         }
         return () => {
-            Speech.stop();
+            stopSpeaking();
         };
     }, []);
 
     const handleSpeak = async () => {
         if (isPlaying) {
-            await Speech.stop();
+            await stopSpeaking();
             setIsPlaying(false);
             return;
         }
 
-        // Stop any other ongoing speech before starting new one
-        await Speech.stop();
-        
         setIsPlaying(true);
         speakStartRef.current = Date.now();
-        Speech.speak(message.content, {
-            language: 'de-DE',
-            onDone: () => { setIsPlaying(false); logSpeak(); },
-            onStopped: () => { setIsPlaying(false); logSpeak(); },
-            onError: () => { setIsPlaying(false); speakStartRef.current = null; },
-        });
+
+        try {
+            await speak(message.content, isAvailable);
+            logSpeak();
+        } catch {
+            speakStartRef.current = null;
+        } finally {
+            setIsPlaying(false);
+        }
     };
 
     const handleEditSave = () => {
