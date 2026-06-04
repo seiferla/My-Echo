@@ -40,6 +40,11 @@ async def tts_proxy(websocket: WebSocket):
                     }
                 }
             }))
+    except Exception as e:
+        print(f"Error in tts_proxy: {e}")
+        if not websocket.client_state.name == "DISCONNECTED":
+            await websocket.close(code=1011, reason=str(e))
+
 @app.get("/health")
 async def health():
     url = "https://api.fish.audio/wallet/self/api-credit"

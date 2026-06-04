@@ -1,77 +1,68 @@
 import unittest
-from unittest.mock import AsyncMock, MagicMock, call, patch
-
-from starlette.websockets import WebSocketDisconnect
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import main
-
-
-async def _aiter_bytes(chunks):
-    for chunk in chunks:
-        yield chunk
 
 
 class TestTextToSpeechProxy(unittest.IsolatedAsyncioTestCase):
     async def test_forwards_text_and_streams_audio_chunks(self):
         websocket = AsyncMock()
-        websocket.receive_json.side_effect = [{"text": "Hello"}, WebSocketDisconnect()]
+        websocket.receive_json.return_value = {"text": "Hello"}
+        websocket.client_state.name = "CONNECTED"
 
-        response = MagicMock()
-        response.aiter_bytes = lambda: _aiter_bytes([b"chunk-1", b"chunk-2"])
+        # Mock websockets.connect
+        mock_ws_connection = AsyncMock()
+        mock_ws_connection.send = AsyncMock()
+        
+        # Mocking the async context manager
+        mock_connect = MagicMock()
+        mock_connect.__aenter__.return_value = mock_ws_connection
 
-        stream_cm = AsyncMock()
-        stream_cm.__aenter__.return_value = response
-        stream_cm.__aexit__.return_value = None
-
-        client = MagicMock()
-        client.stream.return_value = stream_cm
-
-        client_cm = AsyncMock()
-        client_cm.__aenter__.return_value = client
-        client_cm.__aexit__.return_value = None
-
-        with patch("main.httpx.AsyncClient", return_value=client_cm) as async_client:
-            with self.assertRaises(WebSocketDisconnect):
-                await main.tts_proxy(websocket)
+        with patch("main.websockets.connect", return_value=mock_connect), \
+             patch("main.msgpack.packb", return_value=b"packed_data") as mock_packb:
+            
+            await main.tts_proxy(websocket)
 
         websocket.accept.assert_awaited_once()
-        async_client.assert_called_once_with(timeout=None)
-        client.stream.assert_called_once_with(
-            "POST",
-            f"{main.VLLM_URL}/v1/audio/speech",
-            json={"model": "qwen3-tts", "input": "Hello", "voice": "custom"},
-        )
-        websocket.send_bytes.assert_has_awaits([call(b"chunk-1"), call(b"chunk-2")])
+        mock_packb.assert_called()
+        mock_ws_connection.send.assert_awaited_once_with(b"packed_data")
 
-    async def test_disconnect_before_message_skips_upstream_request(self):
+    async def test_close_on_empty_text(self):
         websocket = AsyncMock()
-        websocket.receive_json.side_effect = WebSocketDisconnect()
-
-        client = MagicMock()
-        client_cm = AsyncMock()
-        client_cm.__aenter__.return_value = client
-        client_cm.__aexit__.return_value = None
-
-        with patch("main.httpx.AsyncClient", return_value=client_cm):
-            with self.assertRaises(WebSocketDisconnect):
-                await main.tts_proxy(websocket)
-
+        websocket.receive_json.return_value = {"text": ""}
+        
+        await main.tts_proxy(websocket)
+        
         websocket.accept.assert_awaited_once()
-        client.stream.assert_not_called()
-        websocket.send_bytes.assert_not_called()
+        websocket.close.assert_awaited_once_with(code=1003, reason="Kein Text übergeben")
 
-    async def test_missing_text_field_raises_key_error(self):
+    async def test_error_handling_closes_websocket(self):
         websocket = AsyncMock()
-        websocket.receive_json.return_value = {"message": "missing text key"}
+        websocket.receive_json.side_effect = Exception("Test Error")
+        websocket.client_state.name = "CONNECTED"
+        
+        await main.tts_proxy(websocket)
+        
+        websocket.close.assert_awaited_once_with(code=1011, reason="Test Error")
 
-        client = MagicMock()
-        client_cm = AsyncMock()
-        client_cm.__aenter__.return_value = client
-        client_cm.__aexit__.return_value = None
+class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
+    @patch("main.httpx.AsyncClient")
+    async def test_health_success(self, mock_client_class):
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.return_value = MagicMock(status_code=200, json=lambda: {"credit": 100})
+        mock_client_class.return_value = mock_client
 
-        with patch("main.httpx.AsyncClient", return_value=client_cm):
-            with self.assertRaises(KeyError):
-                await main.tts_proxy(websocket)
+        response = await main.health()
+        self.assertEqual(response, {"status": "ok", "credits": {"credit": 100}})
 
-        websocket.accept.assert_awaited_once()
-        client.stream.assert_not_called()
+    @patch("main.httpx.AsyncClient")
+    async def test_health_timeout(self, mock_client_class):
+        import httpx
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.side_effect = httpx.TimeoutException("Timeout")
+        mock_client_class.return_value = mock_client
+
+        response = await main.health()
+        self.assertEqual(response, {"status": "unavailable", "message": "Fish Audio API Timeout"})
