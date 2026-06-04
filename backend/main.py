@@ -1,7 +1,8 @@
 # backend/main.py
 import os
 import httpx
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, Request
+import requests
 
 app = FastAPI()
 VLLM_URL = os.getenv("VLLM_URL", "http://localhost:8000")
@@ -27,3 +28,13 @@ async def tts_proxy(websocket: WebSocket):
 
         async for chunk in response.aiter_bytes():
           await websocket.send_bytes(chunk)
+@app.get("/health")
+async def health():
+    url = "https://api.fish.audio/wallet/self/api-credit"
+
+    headers = {"Authorization": "Bearer <token>"}
+
+    response = requests.get(url, headers=headers)
+
+    return response.text
+
