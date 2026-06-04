@@ -1,0 +1,22 @@
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: myecho-backend:latest
+    container_name: myecho-backend
+    restart: unless-stopped
+    ports:
+      - "4444:3333"
+    environment:
+      TTS_PROVIDER_URL: ${TTS_PROVIDER_URL}
+      TTS_API_KEY: ${TTS_API_KEY}
+      TTS_MODEL: ${TTS_MODEL:-default}
+      TTS_VOICE: ${TTS_VOICE:-default}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3333/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
