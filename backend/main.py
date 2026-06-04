@@ -1,40 +1,58 @@
-# backend/main.py
 import os
+import base64
+import msgpack
 import httpx
-from fastapi import FastAPI, WebSocket, Request
-import requests
+import websockets
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 app = FastAPI()
-VLLM_URL = os.getenv("VLLM_URL", "http://localhost:8000")
+
+FISH_API_KEY = os.getenv("FISH_API_KEY", "")
+WS_URL = "wss://api.fish.audio/v1/tts/live"
+AUDIO_MODEL = os.getenv("FISH_AUDIO_MODEL", "s1")
+AUDIO_REFERENCE_ID = os.getenv("FISH_AUDIO_REFERENCE_ID", "")
+
 
 @app.websocket("/ws/tts")
 async def tts_proxy(websocket: WebSocket):
-  await websocket.accept()
+    await websocket.accept()
 
-  # Nutze einen persistenten HTTP-Client für die Verbindung zu vLLM
-  async with httpx.AsyncClient(timeout=None) as client:
-    while True:
-      data = await websocket.receive_json()
+    try:
+        data = await websocket.receive_json()
+        text = data.get("text", "").strip()
 
-      async with client.stream(
-          "POST",
-          f"{VLLM_URL}/v1/audio/speech",
-          json={
-            "model": "qwen3-tts",
-            "input": data["text"],
-            "voice": "custom"
-          }
-      ) as response:
+        headers = {"Authorization": f"Bearer {FISH_API_KEY}"}
 
-        async for chunk in response.aiter_bytes():
-          await websocket.send_bytes(chunk)
+        if not text:
+            await websocket.close(code=1003, reason="Kein Text übergeben")
+            return
+        async with websockets.connect(WS_URL, additional_headers=headers) as ws:
+            await ws.send(msgpack.packb({
+                "event": "start",
+                "request": {
+                    "text": "",
+                    "format": "mp3",
+                    "latency": "normal",
+                    "reference_id": "daaad6c2df01439cae59d4f8e3a08284",
+                    "prosody": {
+                        "speed": 0.85,   # 1.0 = normal, 0.5–2.0 möglich
+                        "volume": 2      # 0 = normal
+                    }
+                }
+            }))
 @app.get("/health")
 async def health():
     url = "https://api.fish.audio/wallet/self/api-credit"
+    headers = {"Authorization": f"Bearer {FISH_API_KEY}"}
 
-    headers = {"Authorization": "Bearer <token>"}
-
-    response = requests.get(url, headers=headers)
-
-    return response.text
-
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        try:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return {"status": "ok", "credits": response.json()}
+        except httpx.TimeoutException:
+            return {"status": "unavailable", "message": "Fish Audio API Timeout"}
+        except httpx.HTTPStatusError as e:
+            return {"status": "error", "message": f"HTTP {e.response.status_code}"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
