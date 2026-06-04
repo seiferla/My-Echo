@@ -10,7 +10,7 @@ import {
     Platform,
     Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Send, X, Save } from 'lucide-react-native';
 import { Message } from './Message';
 
@@ -37,6 +37,8 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     const [lastSentIndex, setLastSentIndex] = useState<number | null>(null);
     const [isComposing, setIsComposing] = useState(false);
     const scrollViewRef = useRef<ScrollView>(null);
+    const composeScrollRef = useRef<ScrollView>(null);
+    const insets = useSafeAreaInsets();
 
     const scrollToBottom = () => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -75,7 +77,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
 
         const updatedMessages = [...chat.messages, userMessage];
         onUpdateChat(updatedMessages);
-        setLastSentIndex(null); // Set to null to avoid autoPlay
+        setLastSentIndex(null);
         setInput('');
         setIsComposing(false);
     };
@@ -92,7 +94,8 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                 animationType="slide"
                 presentationStyle="fullScreen"
             >
-                <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom', 'left', 'right']}>
+                {/* Nur top/left/right: kein Bottom-Padding, damit das TextInput die volle Höhe nutzt */}
+                <SafeAreaView style={styles.modalContainer} edges={['top', 'left', 'right']}>
                     <View style={styles.modalHeader}>
                         <TouchableOpacity onPress={handleClose} style={styles.modalButton}>
                             <X size={32} color="#4b5563" />
@@ -114,16 +117,28 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                             </TouchableOpacity>
                         </View>
                     </View>
-                    <TextInput
-                        style={styles.modalInput}
-                        value={input}
-                        onChangeText={setInput}
-                        placeholder="Nachricht eingeben..."
-                        placeholderTextColor="#9ca3af"
-                        multiline
-                        autoFocus
-                        textAlignVertical="top"
-                    />
+
+                    {/* ScrollView scrollt automatisch zum Cursor, TextInput wächst mit dem Inhalt */}
+                    <ScrollView
+                        ref={composeScrollRef}
+                        style={styles.composeScroll}
+                        keyboardShouldPersistTaps="handled"
+                        onContentSizeChange={() =>
+                            composeScrollRef.current?.scrollToEnd({ animated: false })
+                        }
+                    >
+                        <TextInput
+                            style={styles.modalInput}
+                            value={input}
+                            onChangeText={setInput}
+                            placeholder="Nachricht eingeben..."
+                            placeholderTextColor="#9ca3af"
+                            multiline
+                            autoFocus
+                            textAlignVertical="top"
+                            scrollEnabled={false}
+                        />
+                    </ScrollView>
                 </SafeAreaView>
             </Modal>
 
@@ -164,13 +179,13 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                 )}
             </ScrollView>
 
-            {/* Bottom input bar */}
+            {/* Bottom input bar: paddingBottom direkt im Container, kein externer SafeAreaView-Wrapper */}
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
-                <SafeAreaView style={styles.inputArea} edges={['bottom', 'left', 'right']}>
-                    <View style={styles.inputContainer}>
+                <View style={styles.inputArea}>
+                    <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10 }]}>
                         <TouchableOpacity
                             onPress={() => setIsComposing(true)}
                             style={styles.inputFake}
@@ -195,7 +210,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                             <Send size={24} color="white" />
                         </TouchableOpacity>
                     </View>
-                </SafeAreaView>
+                </View>
             </KeyboardAvoidingView>
         </View>
     );
@@ -230,8 +245,11 @@ const styles = StyleSheet.create({
     disabledButton: {
         opacity: 0.4,
     },
-    modalInput: {
+    composeScroll: {
         flex: 1,
+    },
+    modalInput: {
+        minHeight: 200,
         padding: 20,
         fontSize: 32,
         color: '#111827',
@@ -274,7 +292,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 15,
-        paddingVertical: 10,
+        paddingTop: 10,
         gap: 12,
     },
     inputFake: {

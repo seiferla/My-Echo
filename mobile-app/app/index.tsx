@@ -9,7 +9,7 @@ import {
     Animated,
     TouchableWithoutFeedback
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Menu, PenSquare } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Sidebar } from '../components/Sidebar';
@@ -33,6 +33,7 @@ interface Chat {
 
 export default function ChatScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [currentChatId, setCurrentChatId] = useState('1');
     const [chats, setChats] = useState<Chat[]>([
@@ -135,9 +136,9 @@ export default function ChatScreen() {
     const currentChat = chats.find(chat => chat.id === currentChatId);
 
     return (
-        <SafeAreaView style={styles.container}>
+        <View style={styles.container}>
             {/* Custom Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
                 <TouchableOpacity onPress={toggleSidebar} style={styles.headerIcon}>
                     <Menu size={24} color="#374151" />
                 </TouchableOpacity>
@@ -182,7 +183,7 @@ export default function ChatScreen() {
                     </Animated.View>
                 </View>
             </Modal>
-        </SafeAreaView>
+        </View>
     );
 }
 
@@ -195,7 +196,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingBottom: 12,
         borderBottomWidth: 1,
         borderBottomColor: '#e5e7eb',
         backgroundColor: '#ffffff',
