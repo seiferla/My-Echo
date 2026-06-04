@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { BACKEND_WS_URL } from './config';
