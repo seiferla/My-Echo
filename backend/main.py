@@ -7,10 +7,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 app = FastAPI()
 
-FISH_API_KEY = os.getenv("FISH_API_KEY", "")
+FISH_API_KEY = os.getenv("TTS_API_KEY", "")
 WS_URL = "wss://api.fish.audio/v1/tts/live"
-AUDIO_MODEL = os.getenv("FISH_AUDIO_MODEL", "s1")
-AUDIO_REFERENCE_ID = os.getenv("FISH_AUDIO_REFERENCE_ID", "")
+AUDIO_MODEL = os.getenv("TTS_MODEL", "s2-pro")
+AUDIO_REFERENCE_ID = os.getenv("TTS_VOICE", "")
 
 
 @app.websocket("/ws/tts")
@@ -21,7 +21,10 @@ async def tts_proxy(websocket: WebSocket):
         data = await websocket.receive_json()
         text = data.get("text", "").strip()
 
-        headers = {"Authorization": f"Bearer {FISH_API_KEY}"}
+        headers = {
+            "Authorization": f"Bearer {FISH_API_KEY}",
+            "model": AUDIO_MODEL,
+        }
 
         if not text:
             await websocket.close(code=1003, reason="Kein Text übergeben")
@@ -78,7 +81,7 @@ async def tts_proxy(websocket: WebSocket):
 @app.get("/health")
 async def health():
     url = "https://api.fish.audio/wallet/self/api-credit"
-    headers = {"Authorization": f"Bearer {FISH_API_KEY}"}
+    headers = {"Authorization": f"Bearer {FISH_API_KEY}", "model": AUDIO_MODEL}
 
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:
