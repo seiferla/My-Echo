@@ -29,7 +29,15 @@
       "expo-router",
       "expo-secure-store",
       "expo-asset",
-      "./plugins/withReleaseSigning"
+      "./plugins/withReleaseSigning",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "scheme": "myecho",
     "extra": {
