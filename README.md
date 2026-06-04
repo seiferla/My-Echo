@@ -2,178 +2,147 @@
 
 # myEcho
 
-**A chat-style note-taking app with built-in text-to-speech.**
+## *"Giving a voice back to those who lost theirs."*
 
-Capture short messages and play them back aloud — backed by a FastAPI proxy to a custom-voice TTS model.
+<br/>
+
+**Assistive communication app for people with voice disorders.**
+
+Type what you want to say — myEcho speaks it back in a natural AI voice.
+
+<br/>
 
 ![Expo](https://img.shields.io/badge/Expo-56-000020?logo=expo&logoColor=white)
 ![React Native](https://img.shields.io/badge/React%20Native-0.85-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.136-009688?logo=fastapi&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 
 </div>
 
 ---
 
-## Table of Contents
-
-- [About](#about)
-- [Motivation](#motivation)
-- [Overview](#overview)
-- [Project Structure](#project-structure)
-- [Quick Start](#quick-start)
-- [Mobile App](#mobile-app)
-- [Backend](#backend)
-- [Docker Compose](#docker-compose)
-- [Status](#status)
-
----
-
 ## About
 
-**MyEcho is a project designed to assist individuals with voice disorders in articulating their thoughts, facilitating easier and more effective communication.**
+**myEcho is built for people who can no longer use their own voice.**
 
-The app gives users a calm, chat-style interface to type what they want to say and have it spoken back in a natural voice — turning written words into a reliable, repeatable spoken output for everyday conversations.
-
----
-
-## Motivation
-
-
-This project began with a simple goal: to build an accessible application for people who suffer from voice disorders. Speaking can be exhausting, painful, or impossible for many — and existing solutions are to complicated for people. 
-
-**myEcho** is meant to be the opposite: a lightweight, friendly tool that helps users communicate without friction, whether at home, with family, or out in the world.
-
-I try to give them their voice back !!!
+Speaking can be exhausting, painful, or impossible — and existing solutions are often too complicated. myEcho is the opposite: a calm, simple interface where you type what you want to say and the app speaks it back in a natural voice. No friction. No complexity.
 
 ---
 
-## Overview
+## How It Works
 
-**myEcho** is a small two-part project:
+```
+Mobile App  ──WebSocket──►  Backend (Pi)  ──WebSocket──►  Fish Audio API
+            ◄──────────────               ◄────────────── (AI voice chunks)
+              Audio streamed back
+```
 
-| Part            | Tech                                            | Purpose                                           |
-| --------------- | ----------------------------------------------- | ------------------------------------------------- |
-| **Mobile app**  | Expo · React Native · TypeScript · NativeWind   | ChatGPT-style UI for capturing and replaying notes |
-| **Backend**     | FastAPI · httpx · WebSockets                    | Streaming TTS proxy in front of a vLLM server     |
+1. User types a message and taps Send
+2. App opens a WebSocket to the self-hosted backend
+3. Backend streams the text to Fish Audio's TTS API
+4. Audio chunks return in real time and play on the device
+5. If the backend is unreachable, the app falls back to local speech synthesis automatically
 
 ---
 
 ## Project Structure
 
-```text
+```
 My-Echo/
-├── backend/              FastAPI WebSocket TTS proxy
-│   ├── main.py
+├── backend/
+│   ├── main.py                 FastAPI WebSocket proxy + health endpoint
+│   ├── providers/
+│   │   ├── base.py             Abstract TTS provider interface
+│   │   └── fish_audio.py       Fish Audio implementation
 │   ├── requirements.txt
 │   └── Dockerfile
-├── mobile-app/           Expo / React Native client
-│   ├── app/              expo-router screens
-│   ├── components/       Sidebar, ChatArea, Message
-│   ├── utils/            storage helper
-│   └── package.json
-└── docker-compose.yml
+├── mobile-app/
+│   ├── app/                    expo-router screens
+│   ├── components/             Sidebar, ChatArea, Message
+│   ├── context/                CloudStatusContext (health check)
+│   └── utils/                  storage, tts, config, stats
+└── .github/workflows/
+    └── android-release.yml     Signed APK/AAB build + GitHub Release
 ```
-
----
-
-## Quick Start
-
-Spin up both services with Docker Compose:
-
-```bash
-docker compose up --build
-```
-
-Or run them individually — see [Mobile App](#mobile-app) and [Backend](#backend) below.
 
 ---
 
 ## Mobile App
 
-An Expo app written in TypeScript, using `expo-router`, NativeWind/Tailwind, and `lucide-react-native` icons.
-
 ### Features
 
-- **Chat history sidebar** — create, pin, rename, and delete chats.
-- **Daily auto-chat** — a new "Neuer Chat" is created automatically on a new day.
-- **Two send actions** — *Send* saves and auto-plays the message; *Save* stores it silently.
-- **Per-message playback** — every bubble has a play/pause button powered by `expo-speech` (German `de-DE`).
-- **Inline editing** — user messages can be edited in place.
-- **Local persistence** — chats are stored in `expo-secure-store` under the key `myEchoChats`.
-
-### Key Files
-
-| File                          | Responsibility                                          |
-| ----------------------------- | ------------------------------------------------------- |
-| `app/index.tsx`               | Main screen, chat state, persistence                    |
-| `components/ChatArea.tsx`     | Message list and fullscreen compose modal               |
-| `components/Message.tsx`      | Message bubble, TTS playback, inline editing            |
-| `components/Sidebar.tsx`      | Chat list and management                                |
-| `utils/storage.ts`            | `expo-secure-store` wrapper                             |
-
-> **Note:** The UI is currently in German.
+- **Cloud TTS** — messages are spoken in a natural AI voice via Fish Audio
+- **Automatic fallback** — switches to local speech synthesis when the backend is unavailable
+- **Status indicator** — green dot in the header shows whether the cloud connection is active
+- **Chat history sidebar** — create, pin, rename, and delete chats
+- **Daily auto-chat** — a new chat is created automatically each day
+- **Two send actions** — *Send* saves and auto-plays the message; *Save* stores it silently
+- **Per-message playback** — every bubble has a play/pause button
+- **Inline editing** — user messages can be edited in place
+- **Usage statistics** — tracks characters spoken and TTS response times
+- **Local persistence** — chats stored in `expo-secure-store`
 
 ### Run Locally
 
 ```bash
 cd mobile-app
 npm install
-
-npm start          # Expo dev server
-npm run android    # build & run on Android
-npm run ios        # build & run on iOS
-npm run web        # open in browser
+npm start
 ```
 
 ---
 
 ## Backend
 
-A small FastAPI service that proxies a streaming TTS endpoint to a [vLLM](https://github.com/vllm-project/vllm) server running the `qwen3-tts` model with a `custom` voice.
+A lightweight FastAPI service that proxies streaming TTS requests to Fish Audio. Self-hosted on a Raspberry Pi, accessible via WireGuard VPN.
 
-### Endpoint
+### Endpoints
 
-| Method      | Path        | Payload                  | Response                          |
-| ----------- | ----------- | ------------------------ | --------------------------------- |
-| `WebSocket` | `/ws/tts`   | `{ "text": "..." }` JSON | Streamed audio bytes from vLLM    |
+| Method      | Path       | Description                                      |
+|-------------|------------|--------------------------------------------------|
+| `WebSocket` | `/ws/tts`  | Receives `{"text": "..."}`, streams MP3 chunks back |
+| `GET`       | `/health`  | Returns provider status and API credit info      |
 
 ### Configuration
 
-| Variable    | Default                  | Purpose                            |
-| ----------- | ------------------------ | ---------------------------------- |
-| `VLLM_URL`  | `http://localhost:8000`  | Base URL of the upstream vLLM server |
+| Variable                 | Default      | Purpose                        |
+|--------------------------|--------------|--------------------------------|
+| `TTS_PROVIDER`           | `fish_audio` | Active TTS provider            |
+| `TTS_API_KEY`            | —            | Provider API key               |
+| `TTS_MODEL`              | `s2-pro`     | Model name                     |
+| `TTS_VOICE`              | —            | Voice / reference ID           |
+| `TTS_SPEED`              | `0.85`       | Playback speed                 |
+| `TTS_VOLUME`             | `2`          | Volume boost                   |
 
-### Run Locally
+### Adding a New Provider
 
-```bash
-cd backend
-pip install -r requirements.txt
+1. Create `backend/providers/<name>.py`, extend `TTSProvider`, implement `synthesize()`
+2. Register it in `backend/providers/__init__.py`
+3. Set `TTS_PROVIDER=<name>` in your environment
 
-VLLM_URL=http://localhost:8000 \
-  uvicorn main:app --host 0.0.0.0 --port 8080
-```
+### Deploy (Raspberry Pi via Portainer)
+
+1. In Portainer → **Stacks → Add stack → Repository**
+2. Point to this repo, set Compose path to `backend/docker-compose.yml`
+3. Add the environment variables above
+4. Deploy — the container exposes port `4444`
 
 ---
 
-## Docker Compose
+## CI/CD
+
+GitHub Actions builds a signed Android APK or AAB on every version tag:
 
 ```bash
-docker compose up --build
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
-**Exposed ports**
-
-| Service     | Host port      | Container port | Notes                  |
-| ----------- | -------------- | -------------- | ---------------------- |
-| Mobile app  | `8082`         | `8081`         | Metro bundler          |
-| Mobile app  | `19000–19002`  | `19000–19002`  | Expo dev tooling       |
-| Backend     | `8081`         | `8080`         | FastAPI                |
+The workflow runs a TypeScript check, builds the app with Gradle, and attaches the APK to a GitHub Release automatically.
 
 ---
 
 ## Status
 
-The mobile app currently uses the device's **built-in TTS** via `expo-speech`.
-The backend `/ws/tts` proxy is in place but **not yet wired up** to the client — connecting the app to the custom voice model is the next step.
+The app is in active development, built for personal use.
