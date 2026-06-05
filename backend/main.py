@@ -40,7 +40,7 @@ def _start_payload() -> bytes:
             "reference_id": AUDIO_REFERENCE_ID,
             "prosody": {
                 "speed": 0.85,
-                "volume": 2,
+                "volume": 0,
             }
         }
     })
