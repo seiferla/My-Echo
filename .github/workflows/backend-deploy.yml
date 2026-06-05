@@ -55,6 +55,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=backend-${{ hashFiles('backend/requirements.txt') }}
-          cache-to: type=gha,mode=max,scope=backend-${{ hashFiles('backend/requirements.txt') }}
+          no-cache: true
           platforms: linux/arm64  # Raspberry Pi
