@@ -118,6 +118,11 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                         </View>
                     </View>
 
+                    {/* KeyboardAvoidingView schiebt den Inhalt nach oben wenn die Tastatur erscheint */}
+                    <KeyboardAvoidingView
+                        style={{ flex: 1 }}
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    >
                     {/* ScrollView scrollt automatisch zum Cursor, TextInput wächst mit dem Inhalt */}
                     <ScrollView
                         ref={composeScrollRef}
@@ -139,6 +144,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                             scrollEnabled={false}
                         />
                     </ScrollView>
+                    </KeyboardAvoidingView>
                 </SafeAreaView>
             </Modal>
 
