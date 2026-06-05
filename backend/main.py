@@ -1,4 +1,6 @@
 import os
+import time
+import asyncio
 import base64
 import msgpack
 import httpx
@@ -13,6 +15,134 @@ WS_URL = "wss://api.fish.audio/v1/tts/live"
 AUDIO_MODEL = os.getenv("TTS_MODEL", "s2-pro")
 AUDIO_REFERENCE_ID = os.getenv("TTS_VOICE", "")
 
+# --- Pre-Warming State -------------------------------------------------------
+_warm = {"ws": None, "ts": 0.0}
+_warm_lock = asyncio.Lock()
+WARM_TTL_SECONDS = 25.0
+
+
+def _fish_headers() -> dict:
+    return {
+        "Authorization": f"Bearer {FISH_API_KEY}",
+        "model": AUDIO_MODEL,
+    }
+
+
+def _start_payload() -> bytes:
+    return msgpack.packb({
+        "event": "start",
+        "request": {
+            "text": "",
+            "format": "mp3",
+            "latency": "normal",
+            "reference_id": AUDIO_REFERENCE_ID,
+            "prosody": {
+                "speed": 0.85,
+                "volume": 2,
+            }
+        }
+    })
+
+
+async def _open_fish_connection():
+    """Öffnet eine Fish-Audio-Verbindung und sendet das start-Event."""
+    ws = await websockets.connect(WS_URL, additional_headers=_fish_headers())
+    await ws.send(_start_payload())
+    return ws
+
+
+async def _take_warm_connection():
+    """
+    Gibt eine vorgewärmte Verbindung zurück (und entfernt sie aus dem State),
+    falls eine frische genug existiert. Sonst None.
+    """
+    async with _warm_lock:
+        ws = _warm["ws"]
+        age = time.monotonic() - _warm["ts"]
+        _warm["ws"] = None
+        if ws is not None and age < WARM_TTL_SECONDS:
+            return ws
+        # zu alt: aufräumen
+        if ws is not None:
+            try:
+                await ws.close()
+            except Exception:
+                pass
+        return None
+
+
+@app.get("/warmup")
+async def warmup():
+    """
+    Öffnet vorab eine Fish-Audio-Verbindung und sendet das start-Event.
+    Vom Frontend aufgerufen sobald der User das Eingabefeld öffnet —
+    spart beim späteren Senden den Handshake + start-Roundtrip.
+    """
+    async with _warm_lock:
+        # bestehende warme Verbindung schließen falls vorhanden
+        if _warm["ws"] is not None:
+            try:
+                await _warm["ws"].close()
+            except Exception:
+                pass
+            _warm["ws"] = None
+        try:
+            _warm["ws"] = await _open_fish_connection()
+            _warm["ts"] = time.monotonic()
+            return {"status": "warm"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+
+@app.get("/stream/tts")
+async def stream_tts(text: str):
+    async def generate():
+        # 1. Vorgewärmte Verbindung nutzen, sonst frisch öffnen
+        ws = await _take_warm_connection()
+        opened_fresh = False
+        if ws is None:
+            ws = await _open_fish_connection()
+            opened_fresh = True
+
+        try:
+            # 2. Text senden (start ist bereits gesendet — warm oder fresh)
+            try:
+                await ws.send(msgpack.packb({"event": "text", "text": text}))
+                await ws.send(msgpack.packb({"event": "flush"}))
+                await ws.send(msgpack.packb({"event": "stop"}))
+            except Exception:
+                # Warme Verbindung war doch tot → einmal frisch neu versuchen
+                if not opened_fresh:
+                    try:
+                        await ws.close()
+                    except Exception:
+                        pass
+                    ws = await _open_fish_connection()
+                    await ws.send(msgpack.packb({"event": "text", "text": text}))
+                    await ws.send(msgpack.packb({"event": "flush"}))
+                    await ws.send(msgpack.packb({"event": "stop"}))
+                else:
+                    raise
+
+            # 3. Audio-Chunks streamen
+            async for message in ws:
+                msg = msgpack.unpackb(message)
+                if msg.get("event") == "audio":
+                    yield msg["audio"]
+                elif msg.get("event") == "finish":
+                    break
+        finally:
+            try:
+                await ws.close()
+            except Exception:
+                pass
+
+    return StreamingResponse(
+        generate(),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-cache"},
+    )
+
 
 @app.websocket("/ws/tts")
 async def tts_proxy(websocket: WebSocket):
@@ -22,46 +152,22 @@ async def tts_proxy(websocket: WebSocket):
         data = await websocket.receive_json()
         text = data.get("text", "").strip()
 
-        headers = {
-            "Authorization": f"Bearer {FISH_API_KEY}",
-            "model": AUDIO_MODEL,
-        }
-
         if not text:
             await websocket.close(code=1003, reason="Kein Text übergeben")
             return
-        async with websockets.connect(WS_URL, additional_headers=headers) as ws:
-            # 1. Start-Event: konfiguriert Format, Stimme und Prosodie
-            await ws.send(msgpack.packb({
-                "event": "start",
-                "request": {
-                    "text": "",
-                    "format": "mp3",
-                    "latency": "normal",
-                    "reference_id": AUDIO_REFERENCE_ID,
-                    "prosody": {
-                        "speed": 0.85,
-                        "volume": 2,
-                    }
-                }
-            }))
 
-            await ws.send(msgpack.packb({
-                "event": "text",
-                "text": text,
-            }))
-
+        async with websockets.connect(WS_URL, additional_headers=_fish_headers()) as ws:
+            await ws.send(_start_payload())
+            await ws.send(msgpack.packb({"event": "text", "text": text}))
             await ws.send(msgpack.packb({"event": "flush"}))
             await ws.send(msgpack.packb({"event": "stop"}))
 
             async for message in ws:
                 msg = msgpack.unpackb(message)
                 event = msg.get("event")
-
                 if event == "audio":
                     audio_b64 = base64.b64encode(msg["audio"]).decode()
                     await websocket.send_text(audio_b64)
-
                 elif event == "finish":
                     break
 
@@ -79,44 +185,6 @@ async def tts_proxy(websocket: WebSocket):
         except Exception:
             pass
 
-@app.get("/stream/tts")
-async def stream_tts(text: str):
-    headers = {
-        "Authorization": f"Bearer {FISH_API_KEY}",
-        "model": AUDIO_MODEL,
-    }
-
-    async def generate():
-        async with websockets.connect(WS_URL, additional_headers=headers) as ws:
-            await ws.send(msgpack.packb({
-                "event": "start",
-                "request": {
-                    "text": "",
-                    "format": "mp3",
-                    "latency": "normal",
-                    "reference_id": AUDIO_REFERENCE_ID,
-                    "prosody": {
-                        "speed": 0.85,
-                        "volume": 2,
-                    }
-                }
-            }))
-            await ws.send(msgpack.packb({"event": "text", "text": text}))
-            await ws.send(msgpack.packb({"event": "flush"}))
-            await ws.send(msgpack.packb({"event": "stop"}))
-
-            async for message in ws:
-                msg = msgpack.unpackb(message)
-                if msg.get("event") == "audio":
-                    yield msg["audio"]
-                elif msg.get("event") == "finish":
-                    break
-
-    return StreamingResponse(
-        generate(),
-        media_type="audio/mpeg",
-        headers={"Cache-Control": "no-cache"},
-    )
 
 @app.get("/health")
 async def health():

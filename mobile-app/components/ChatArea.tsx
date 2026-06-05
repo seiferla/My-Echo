@@ -13,6 +13,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Send, X, Save } from 'lucide-react-native';
 import { Message } from './Message';
+import { BACKEND_WARMUP_URL } from '../utils/config';
 
 interface ChatMessage {
     role: 'user' | 'assistant';
@@ -42,6 +43,13 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
 
     const scrollToBottom = () => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
+    };
+
+    // Öffnet das Eingabefeld und wärmt parallel die Backend-Verbindung vor,
+    // damit der TTS-Request beim Senden schneller startet (fire-and-forget).
+    const openCompose = () => {
+        fetch(BACKEND_WARMUP_URL).catch(() => {});
+        setIsComposing(true);
     };
 
     useEffect(() => {
@@ -193,7 +201,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                 <View style={styles.inputArea}>
                     <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10 }]}>
                         <TouchableOpacity
-                            onPress={() => setIsComposing(true)}
+                            onPress={openCompose}
                             style={styles.inputFake}
                         >
                             <Text
@@ -204,13 +212,13 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                             </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            onPress={() => input.trim() ? handleSave() : setIsComposing(true)}
+                            onPress={() => input.trim() ? handleSave() : openCompose()}
                             style={styles.circleSaveButton}
                         >
                             <Save size={24} color="white" />
                         </TouchableOpacity>
                         <TouchableOpacity
-                            onPress={() => input.trim() ? handleSend() : setIsComposing(true)}
+                            onPress={() => input.trim() ? handleSend() : openCompose()}
                             style={styles.circleSendButton}
                         >
                             <Send size={24} color="white" />
