@@ -7,8 +7,10 @@ import httpx
 import websockets
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI()
+Instrumentator().instrument(app).expose(app)
 
 FISH_API_KEY = os.getenv("TTS_API_KEY", "")
 WS_URL = "wss://api.fish.audio/v1/tts/live"

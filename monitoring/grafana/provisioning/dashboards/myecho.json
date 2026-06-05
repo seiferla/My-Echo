@@ -1,0 +1,179 @@
+{
+  "title": "myEcho Backend",
+  "uid": "myecho-backend",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "TTS Requests gesamt",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "area", "textMode": "auto" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "blue", "value": null }] },
+          "unit": "short"
+        }
+      },
+      "targets": [{
+        "expr": "round(sum(increase(http_requests_total{handler=~\"/stream/tts|/ws/tts\"}[24h])))",
+        "legendFormat": "TTS Requests (24h)"
+      }]
+    },
+    {
+      "id": 2,
+      "title": "Request Rate (req/min)",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [{ "color": "green", "value": null }] },
+          "unit": "reqpm",
+          "decimals": 1
+        }
+      },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{handler=~\"/stream/tts|/ws/tts\"}[5m])) * 60",
+        "legendFormat": "req/min"
+      }]
+    },
+    {
+      "id": 3,
+      "title": "Latenz p50",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "options": { "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 1.5 }
+            ]
+          },
+          "unit": "s",
+          "decimals": 2
+        }
+      },
+      "targets": [{
+        "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{handler=~\"/stream/tts|/ws/tts\"}[5m])) by (le))",
+        "legendFormat": "p50"
+      }]
+    },
+    {
+      "id": 4,
+      "title": "Latenz p95",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "options": { "colorMode": "background" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1.0 },
+              { "color": "red", "value": 3.0 }
+            ]
+          },
+          "unit": "s",
+          "decimals": 2
+        }
+      },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{handler=~\"/stream/tts|/ws/tts\"}[5m])) by (le))",
+        "legendFormat": "p95"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "Request Rate über Zeit",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } }
+      },
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{handler=\"/stream/tts\",status=~\"2..\"}[5m])",
+          "legendFormat": "TTS Stream ✓"
+        },
+        {
+          "expr": "rate(http_requests_total{handler=\"/warmup\",status=~\"2..\"}[5m])",
+          "legendFormat": "Warmup ✓"
+        },
+        {
+          "expr": "rate(http_requests_total{handler=~\"/stream/tts|/ws/tts\",status=~\"4..|5..\"}[5m])",
+          "legendFormat": "Errors ✗"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Latenz über Zeit (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 5 } }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{handler=~\"/stream/tts|/ws/tts\"}[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{handler=~\"/stream/tts|/ws/tts\"}[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{handler=~\"/stream/tts|/ws/tts\"}[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Fehlerrate",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "color": { "fixedColor": "red", "mode": "fixed" }
+        }
+      },
+      "targets": [{
+        "expr": "sum(rate(http_requests_total{handler=~\"/stream/tts|/ws/tts\",status=~\"4..|5..\"}[5m])) / sum(rate(http_requests_total{handler=~\"/stream/tts|/ws/tts\"}[5m]))",
+        "legendFormat": "Fehlerrate"
+      }]
+    },
+    {
+      "id": 8,
+      "title": "Warmup Hit Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 6 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } }
+      },
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{handler=\"/warmup\",status=~\"2..\"}[5m])",
+          "legendFormat": "Warmup Calls"
+        },
+        {
+          "expr": "rate(http_requests_total{handler=\"/health\",status=~\"2..\"}[5m])",
+          "legendFormat": "Health Checks"
+        }
+      ]
+    }
+  ]
+}
