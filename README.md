@@ -33,16 +33,17 @@ Speaking can be exhausting, painful, or impossible — and existing solutions ar
 ## How It Works
 
 ```
-Mobile App  ──WebSocket──►  Backend (Pi)  ──WebSocket──►  Fish Audio API
-            ◄──────────────               ◄────────────── (AI voice chunks)
-              Audio streamed back
+Mobile App  ──HTTP Stream──►  Backend (Pi)  ──WebSocket──►  Fish Audio API
+            ◄───────────────               ◄────────────── (AI voice chunks)
+              MP3 streamed back
 ```
 
-1. User types a message and taps Send
-2. App opens a WebSocket to the self-hosted backend
-3. Backend streams the text to Fish Audio's TTS API
-4. Audio chunks return in real time and play on the device
-5. If the backend is unreachable, the app falls back to local speech synthesis automatically
+1. User opens the compose field → backend pre-warms the Fish Audio connection
+2. User types and taps Send
+3. App requests audio via HTTP streaming from the self-hosted backend
+4. Backend forwards text to Fish Audio and streams MP3 chunks back in real time
+5. Playback starts as soon as enough data is buffered
+6. If the backend is unreachable, the app falls back to local speech synthesis automatically
 
 ---
 
@@ -51,19 +52,21 @@ Mobile App  ──WebSocket──►  Backend (Pi)  ──WebSocket──►  Fi
 ```
 My-Echo/
 ├── backend/
-│   ├── main.py                 FastAPI WebSocket proxy + health endpoint
-│   ├── providers/
-│   │   ├── base.py             Abstract TTS provider interface
-│   │   └── fish_audio.py       Fish Audio implementation
+│   ├── main.py                 FastAPI — HTTP streaming + WebSocket proxy + warmup + health
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── mobile-app/
 │   ├── app/                    expo-router screens
 │   ├── components/             Sidebar, ChatArea, Message
-│   ├── context/                CloudStatusContext (health check)
+│   ├── context/                CloudStatusContext (health check + green dot)
 │   └── utils/                  storage, tts, config, stats
+├── monitoring/
+│   ├── docker-compose.yml      Prometheus + Grafana stack
+│   ├── prometheus/             Scrape config
+│   └── grafana/                Dashboard + datasource provisioning
 └── .github/workflows/
-    └── android-release.yml     Signed APK/AAB build + GitHub Release
+    ├── android-release.yml     Signed APK/AAB build + GitHub Release
+    └── backend-deploy.yml      Docker image build + push to GHCR
 ```
 
 ---
@@ -73,6 +76,8 @@ My-Echo/
 ### Features
 
 - **Cloud TTS** — messages are spoken in a natural AI voice via Fish Audio
+- **HTTP streaming** — playback starts immediately, no waiting for full audio
+- **Pre-warming** — backend prepares the Fish Audio connection while the user is typing
 - **Automatic fallback** — switches to local speech synthesis when the backend is unavailable
 - **Status indicator** — green dot in the header shows whether the cloud connection is active
 - **Chat history sidebar** — create, pin, rename, and delete chats
@@ -95,51 +100,63 @@ npm start
 
 ## Backend
 
-A lightweight FastAPI service that proxies streaming TTS requests to Fish Audio. Self-hosted on a Raspberry Pi, accessible via WireGuard VPN.
+A lightweight FastAPI service that proxies streaming TTS requests to Fish Audio. Self-hosted on a Raspberry Pi, accessible via WireGuard VPN. Distributed as a Docker image via GHCR.
 
 ### Endpoints
 
-| Method      | Path       | Description                                      |
-|-------------|------------|--------------------------------------------------|
-| `WebSocket` | `/ws/tts`  | Receives `{"text": "..."}`, streams MP3 chunks back |
-| `GET`       | `/health`  | Returns provider status and API credit info      |
+| Method  | Path          | Description                                           |
+|---------|---------------|-------------------------------------------------------|
+| `GET`   | `/stream/tts` | Streams MP3 audio for `?text=...` via chunked HTTP    |
+| `GET`   | `/warmup`     | Pre-warms Fish Audio connection before user sends     |
+| `GET`   | `/health`     | Returns provider status and API credit info           |
+| `GET`   | `/metrics`    | Prometheus metrics endpoint                           |
+| `WS`    | `/ws/tts`     | Legacy WebSocket TTS proxy                            |
 
 ### Configuration
 
-| Variable                 | Default      | Purpose                        |
-|--------------------------|--------------|--------------------------------|
-| `TTS_PROVIDER`           | `fish_audio` | Active TTS provider            |
-| `TTS_API_KEY`            | —            | Provider API key               |
-| `TTS_MODEL`              | `s2-pro`     | Model name                     |
-| `TTS_VOICE`              | —            | Voice / reference ID           |
-| `TTS_SPEED`              | `0.85`       | Playback speed                 |
-| `TTS_VOLUME`             | `2`          | Volume boost                   |
-
-### Adding a New Provider
-
-1. Create `backend/providers/<name>.py`, extend `TTSProvider`, implement `synthesize()`
-2. Register it in `backend/providers/__init__.py`
-3. Set `TTS_PROVIDER=<name>` in your environment
+| Variable      | Default      | Purpose              |
+|---------------|--------------|----------------------|
+| `TTS_API_KEY` | —            | Fish Audio API key   |
+| `TTS_MODEL`   | `s2-pro`     | Model name           |
+| `TTS_VOICE`   | —            | Voice / reference ID |
 
 ### Deploy (Raspberry Pi via Portainer)
 
-1. In Portainer → **Stacks → Add stack → Repository**
-2. Point to this repo, set Compose path to `backend/docker-compose.yml`
-3. Add the environment variables above
-4. Deploy — the container exposes port `4444`
+1. Portainer → **Stacks → Add stack → Web editor**
+2. Paste content of `backend/docker-compose.yml`
+3. Add environment variables above
+4. Deploy — container exposes port `4444`
+
+Updates: push to `main` → GitHub Actions builds new image → Portainer **Pull and redeploy**
+
+---
+
+## Monitoring
+
+Prometheus + Grafana dashboard self-hosted on the Pi.
+
+```
+http://192.168.178.21:3001
+```
+
+Shows request rate, latency (p50/p95/p99), error rate and warmup hit rate.
+Setup instructions: [`monitoring/SETUP.md`](monitoring/SETUP.md)
 
 ---
 
 ## CI/CD
 
-GitHub Actions builds a signed Android APK or AAB on every version tag:
+| Workflow | Trigger | Result |
+|---|---|---|
+| `android-release.yml` | Push tag `v*.*.*` | Signed APK attached to GitHub Release |
+| `backend-deploy.yml` | Push to `backend/` on `main` | Docker image pushed to GHCR |
 
 ```bash
-git tag v1.1.0
-git push origin v1.1.0
-```
+# Mobile release
+git tag v1.2.0 && git push origin v1.2.0
 
-The workflow runs a TypeScript check, builds the app with Gradle, and attaches the APK to a GitHub Release automatically.
+# Backend deploys automatically on every push to backend/
+```
 
 ---
 
