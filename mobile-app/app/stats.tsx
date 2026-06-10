@@ -5,6 +5,7 @@ import {
     ScrollView,
     StyleSheet,
     TouchableOpacity,
+    Alert,
     Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,6 +29,7 @@ import {
     TtsStats,
     TtsSummary,
 } from '../utils/stats';
+import { getCacheStats, clearCache, CacheStats } from '../utils/ttsCache';
 
 const screenWidth = Dimensions.get('window').width;
 const chartWidth = Math.min(screenWidth - 32, 560);
@@ -69,6 +71,7 @@ export default function StatsScreen() {
     const router = useRouter();
     const [chats, setChats] = useState<Chat[]>([]);
     const [ttsStats, setTtsStats] = useState<TtsStats>({});
+    const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
     const [loading, setLoading] = useState(true);
 
     const [mode, setMode] = useState<Mode>('range');
@@ -77,12 +80,36 @@ export default function StatsScreen() {
 
     useEffect(() => {
         (async () => {
-            const [c, t] = await Promise.all([loadChats(), loadTtsStats()]);
+            const [c, t, cs] = await Promise.all([
+                loadChats(),
+                loadTtsStats(),
+                getCacheStats().catch(() => null),
+            ]);
             setChats(c);
             setTtsStats(t);
+            setCacheStats(cs);
             setLoading(false);
         })();
     }, []);
+
+    async function handleClearCache() {
+        Alert.alert(
+            'Cache leeren',
+            'Alle zwischengespeicherten Audio-Dateien werden gelöscht. Beim nächsten Abspielen wird das Audio neu geladen.',
+            [
+                { text: 'Abbrechen', style: 'cancel' },
+                {
+                    text: 'Leeren',
+                    style: 'destructive',
+                    onPress: async () => {
+                        await clearCache();
+                        const cs = await getCacheStats();
+                        setCacheStats(cs);
+                    },
+                },
+            ]
+        );
+    }
 
     const allMsgs: FlatMessage[] = useMemo(() => flattenMessages(chats), [chats]);
 
@@ -314,11 +341,23 @@ export default function StatsScreen() {
                             </ChartCard>
                         )}
 
-                        <Text style={styles.note}>
-                            Hinweis: Die Sprachausgabe läuft aktuell direkt auf dem Gerät (expo-speech) –
-                            es entstehen keine API-Kosten. Sobald die App auf das Cloud-TTS-Backend
-                            umgestellt ist, zeigen diese Werte echte Requests, Zeichen und Latenz.
-                        </Text>
+                        {/* ---- Cache ---- */}
+                        <Text style={styles.sectionTitle}>Audio-Cache</Text>
+                        {cacheStats && (
+                            <>
+                                <View style={styles.cardRow}>
+                                    <StatCard label="Einträge" value={cacheStats.entries} />
+                                    <StatCard label="Größe (MB)" value={cacheStats.totalSizeMB} />
+                                </View>
+                                <View style={styles.cardRow}>
+                                    <StatCard label="Treffer (gesamt)" value={cacheStats.hits} />
+                                    <StatCard label="Trefferquote" value={`${cacheStats.hitRatePct} %`} />
+                                </View>
+                                <TouchableOpacity style={styles.clearBtn} onPress={handleClearCache}>
+                                    <Text style={styles.clearBtnText}>Cache leeren</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
 
                         <View style={{ height: 40 }} />
                     </>
@@ -481,4 +520,17 @@ const styles = StyleSheet.create({
     empty: { alignItems: 'center', paddingTop: 80, gap: 12 },
     emptyTitle: { fontSize: 20, fontWeight: '700', color: '#475569' },
     emptySubtitle: { fontSize: 15, color: '#94a3b8', textAlign: 'center', paddingHorizontal: 30 },
+
+    clearBtn: {
+        width: '100%',
+        maxWidth: 560,
+        backgroundColor: '#fff1f2',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#fecdd3',
+        paddingVertical: 14,
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    clearBtnText: { fontSize: 15, fontWeight: '600', color: '#e11d48' },
 });
