@@ -36,14 +36,17 @@ Speaking can be exhausting, painful, or impossible — and existing solutions ar
 Mobile App  ──HTTP Stream──►  Backend (Pi)  ──WebSocket──►  Fish Audio API
             ◄───────────────               ◄────────────── (AI voice chunks)
               MP3 streamed back
+        ▲
+        └── on-device audio cache (LRU, 100 MB cap)
 ```
 
 1. User opens the compose field → backend pre-warms the Fish Audio connection
 2. User types and taps Send
-3. App requests audio via HTTP streaming from the self-hosted backend
-4. Backend forwards text to Fish Audio and streams MP3 chunks back in real time
-5. Playback starts as soon as enough data is buffered
-6. If the backend is unreachable, the app falls back to local speech synthesis automatically
+3. App checks the on-device audio cache → cache hit plays instantly from local file
+4. Cache miss: app requests audio via HTTP streaming from the self-hosted backend
+5. Backend forwards text to Fish Audio and streams MP3 chunks back in real time
+6. The MP3 is stored in the device cache so the next playback of the same phrase is instant
+7. If the backend is unreachable, the app falls back to local speech synthesis automatically
 
 ---
 
@@ -59,7 +62,7 @@ My-Echo/
 │   ├── app/                    expo-router screens
 │   ├── components/             Sidebar, ChatArea, Message
 │   ├── context/                CloudStatusContext (health check + green dot)
-│   └── utils/                  storage, tts, config, stats
+│   └── utils/                  storage, tts, ttsCache, config, stats
 ├── monitoring/
 │   ├── docker-compose.yml      Prometheus + Grafana stack
 │   ├── prometheus/             Scrape config
@@ -77,6 +80,7 @@ My-Echo/
 
 - **Cloud TTS** — messages are spoken in a natural AI voice via Fish Audio
 - **HTTP streaming** — playback starts immediately, no waiting for full audio
+- **On-device audio cache** — repeated phrases play instantly from a local LRU cache (100 MB cap, evicts down to 80 MB); hit rate and size are visible on the stats screen
 - **Pre-warming** — backend prepares the Fish Audio connection while the user is typing
 - **Automatic fallback** — switches to local speech synthesis when the backend is unavailable
 - **Status indicator** — green dot in the header shows whether the cloud connection is active
