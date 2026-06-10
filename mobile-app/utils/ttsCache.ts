@@ -195,12 +195,16 @@ export async function downloadAndCache(
 
         const size = dest.size;
         const now = Date.now();
+        const prev = _index!.entries[hash];
+        if (prev) {
+            _index!.totalSize = Math.max(0, _index!.totalSize - prev.size);
+        }
         _index!.entries[hash] = {
             hash,
             size,
-            createdAt: now,
+            createdAt: prev ? prev.createdAt : now,
             lastAccessedAt: now,
-            accessCount: 1,
+            accessCount: prev ? prev.accessCount + 1 : 1,
         };
         _index!.totalSize += size;
         schedulePersist();
