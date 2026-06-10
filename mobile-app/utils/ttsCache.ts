@@ -44,6 +44,9 @@ let _index: CacheIndex | null = null;
 let _initPromise: Promise<void> | null = null;
 let _persistTimer: ReturnType<typeof setTimeout> | null = null;
 const _inFlight = new Map<string, Promise<string>>();
+// Bumped by clearCache so in-flight downloads can detect they were invalidated
+// and discard their result instead of writing into the freshly cleared index.
+let _generation = 0;
 
 // --- Hashing (64-bit FNV-1a, pure JS) ---
 
@@ -187,11 +190,26 @@ export async function downloadAndCache(
     const inflight = _inFlight.get(hash);
     if (inflight) return inflight;
 
+    const startGen = _generation;
     const promise = (async () => {
         const dest = cacheFile(hash);
 
-        // File.downloadFileAsync throws UnableToDownload for non-2xx responses
-        await File.downloadFileAsync(url, dest, { idempotent: true });
+        // File.downloadFileAsync throws UnableToDownload for non-2xx responses.
+        // On failure, remove any partial bytes so they don't leak as untracked disk usage.
+        try {
+            await File.downloadFileAsync(url, dest, { idempotent: true });
+        } catch (e) {
+            try { dest.delete(); } catch {}
+            throw e;
+        }
+
+        // If clearCache ran while we were downloading, our bytes belong to a
+        // generation that no longer exists — drop the file and fail loudly so
+        // the caller falls back instead of pointing at a phantom cache entry.
+        if (startGen !== _generation) {
+            try { dest.delete(); } catch {}
+            throw new Error('Cache cleared during download');
+        }
 
         const size = dest.size;
         const now = Date.now();
@@ -242,6 +260,10 @@ export async function clearCache(): Promise<void> {
     }
     _index = emptyIndex();
     _initPromise = null;
+    _inFlight.clear();
+    // Invalidate any download IIFEs that started before this clear — they
+    // check _generation after the network finishes and discard their result.
+    _generation += 1;
     persistNow();
     console.log(`${TAG} Cache cleared`);
 }
