@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { BarChart, PieChart } from 'react-native-chart-kit';
 import {
     Chat,
@@ -91,6 +91,16 @@ export default function StatsScreen() {
             setLoading(false);
         })();
     }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            let cancelled = false;
+            getCacheStats()
+                .then((cs) => { if (!cancelled) setCacheStats(cs); })
+                .catch(() => { /* keep previous value */ });
+            return () => { cancelled = true; };
+        }, [])
+    );
 
     async function handleClearCache() {
         Alert.alert(
