@@ -18,7 +18,7 @@ interface MessageProps {
 
 export function Message({ message, isTyping, onStartEdit, autoPlay }: MessageProps) {
     const isUser = message.role === 'user';
-    const { isAvailable } = useCloudStatus();
+    const { isAvailable, voice, model } = useCloudStatus();
     const [isPlaying, setIsPlaying] = useState(false);
     const speakStartRef = useRef<number | null>(null);
 
@@ -50,7 +50,7 @@ export function Message({ message, isTyping, onStartEdit, autoPlay }: MessagePro
         speakStartRef.current = Date.now();
 
         try {
-            await speak(message.content, isAvailable);
+            await speak(message.content, isAvailable, voice, model);
             logSpeak();
         } catch {
             speakStartRef.current = null;

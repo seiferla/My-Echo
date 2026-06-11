@@ -193,14 +193,18 @@ async def health():
     url = "https://api.fish.audio/wallet/self/api-credit"
     headers = {"Authorization": f"Bearer {FISH_API_KEY}", "model": AUDIO_MODEL}
 
+    # voice + model: damit das Frontend sie in den Cache-Key einbauen kann
+    # und beim Wechsel automatisch neu generiert
+    base = {"voice": AUDIO_REFERENCE_ID, "model": AUDIO_MODEL}
+
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return {"status": "ok", "credits": response.json()}
+            return {**base, "status": "ok", "credits": response.json()}
         except httpx.TimeoutException:
-            return {"status": "unavailable", "message": "Fish Audio API Timeout"}
+            return {**base, "status": "unavailable", "message": "Fish Audio API Timeout"}
         except httpx.HTTPStatusError as e:
-            return {"status": "error", "message": f"HTTP {e.response.status_code}"}
+            return {**base, "status": "error", "message": f"HTTP {e.response.status_code}"}
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {**base, "status": "error", "message": str(e)}

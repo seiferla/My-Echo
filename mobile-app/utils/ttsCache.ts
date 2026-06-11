@@ -61,8 +61,16 @@ function hash64(str: string): string {
     return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
 }
 
-function cacheKey(text: string, voiceId = 'default', format = 'mp3'): string {
-    return hash64(`${text}|${voiceId}|${format}`);
+// Cache-Key bindet text, voice, model und format zusammen — ein Wechsel
+// von Stimme oder Modell im Backend macht alte Einträge automatisch
+// unauffindbar (sie werden später durch LRU evictet).
+function cacheKey(
+    text: string,
+    voiceId = 'default',
+    model = 'default',
+    format = 'mp3'
+): string {
+    return hash64(`${text}|${voiceId}|${model}|${format}`);
 }
 
 function cacheFile(hash: string): File {
@@ -146,10 +154,11 @@ function evictSync(): void {
 export async function getCachedUri(
     text: string,
     voiceId?: string,
+    model?: string,
     format?: string
 ): Promise<string | null> {
     await ensureInit();
-    const hash = cacheKey(text, voiceId, format);
+    const hash = cacheKey(text, voiceId, model, format);
     const entry = _index!.entries[hash];
 
     if (!entry) {
@@ -159,8 +168,11 @@ export async function getCachedUri(
     }
 
     const file = cacheFile(hash);
-    if (!file.exists) {
-        // Orphaned index entry — clean up
+    // 0-Byte-Dateien (z.B. nach Abbruch zwischen create und write) wie Miss behandeln
+    if (!file.exists || file.size === 0) {
+        if (file.exists) {
+            try { file.delete(); } catch {}
+        }
         _index!.totalSize = Math.max(0, _index!.totalSize - entry.size);
         delete _index!.entries[hash];
         _index!.misses += 1;
@@ -181,10 +193,11 @@ export async function downloadAndCache(
     text: string,
     url: string,
     voiceId?: string,
+    model?: string,
     format?: string
 ): Promise<string> {
     await ensureInit();
-    const hash = cacheKey(text, voiceId, format);
+    const hash = cacheKey(text, voiceId, model, format);
 
     // Deduplicate concurrent requests for the same hash
     const inflight = _inFlight.get(hash);

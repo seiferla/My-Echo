@@ -6,16 +6,26 @@ const CHECK_INTERVAL_MS = 30_000; // alle 30 Sekunden
 
 interface CloudStatusContextType {
     isAvailable: boolean;
+    voice: string;
+    model: string;
 }
 
-const CloudStatusContext = createContext<CloudStatusContextType>({ isAvailable: false });
+const CloudStatusContext = createContext<CloudStatusContextType>({
+    isAvailable: false,
+    voice: '',
+    model: '',
+});
 
 /**
  * Pollt den /health-Endpunkt des Backends und stellt den Status
- * per Context bereit. In _layout.tsx einbinden.
+ * sowie voice + model per Context bereit. voice/model fließen in den
+ * Cache-Key ein, damit ein Voice-Wechsel im Backend keine alten Audios mehr
+ * abspielt. In _layout.tsx einbinden.
  */
 export function CloudStatusProvider({ children }: { children: React.ReactNode }) {
     const [isAvailable, setIsAvailable] = useState(false);
+    const [voice, setVoice] = useState('');
+    const [model, setModel] = useState('');
 
     useEffect(() => {
         const check = async () => {
@@ -36,8 +46,13 @@ export function CloudStatusProvider({ children }: { children: React.ReactNode })
                 if (data.message) {
                     console.warn(`${TAG} Message: ${data.message}`);
                 }
+                // Voice + Model bei jeder Antwort aktualisieren (auch bei status != ok),
+                // damit der Cache-Key konsistent bleibt sobald das Backend kurz weg war.
+                if (typeof data.voice === 'string') setVoice(data.voice);
+                if (typeof data.model === 'string') setModel(data.model);
+
                 setIsAvailable(ok);
-                console.log(`${TAG} Cloud available: ${ok}`);
+                console.log(`${TAG} Cloud available: ${ok} (voice=${data.voice ?? '?'}, model=${data.model ?? '?'})`);
             } catch (error: any) {
                 console.warn(`${TAG} Health check failed: ${error?.message ?? error}`);
                 setIsAvailable(false);
@@ -50,7 +65,7 @@ export function CloudStatusProvider({ children }: { children: React.ReactNode })
     }, []);
 
     return (
-        <CloudStatusContext.Provider value={{ isAvailable }}>
+        <CloudStatusContext.Provider value={{ isAvailable, voice, model }}>
             {children}
         </CloudStatusContext.Provider>
     );
