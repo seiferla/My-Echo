@@ -1,9 +1,52 @@
+import time
 import unittest
 import base64
 import msgpack
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import main
+from fastapi.websockets import WebSocketDisconnect
+
+
+class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
+    """Tests für _open_fish_connection und _take_warm_connection (51-53, 61-73)."""
+
+    async def test_open_fish_connection_connects_and_sends_start(self):
+        mock_ws = AsyncMock()
+        with patch("main.websockets.connect", AsyncMock(return_value=mock_ws)), \
+             patch("main.FISH_API_KEY", "test_key"), \
+             patch("main.AUDIO_REFERENCE_ID", "ref"):
+            result = await main._open_fish_connection()
+
+        self.assertIs(result, mock_ws)
+        mock_ws.send.assert_awaited_once()
+
+    async def test_take_warm_connection_returns_fresh_connection(self):
+        fresh_ws = AsyncMock()
+        main._warm["ws"] = fresh_ws
+        main._warm["ts"] = time.monotonic()
+
+        result = await main._take_warm_connection()
+
+        self.assertIs(result, fresh_ws)
+        self.assertIsNone(main._warm["ws"])
+
+    async def test_take_warm_connection_closes_expired_and_returns_none(self):
+        expired_ws = AsyncMock()
+        main._warm["ws"] = expired_ws
+        main._warm["ts"] = time.monotonic() - (main.WARM_TTL_SECONDS + 1)
+
+        result = await main._take_warm_connection()
+
+        self.assertIsNone(result)
+        expired_ws.close.assert_awaited_once()
+
+    async def test_take_warm_connection_returns_none_when_empty(self):
+        main._warm["ws"] = None
+
+        result = await main._take_warm_connection()
+
+        self.assertIsNone(result)
 
 
 class TestTtsProxyWebSocket(unittest.IsolatedAsyncioTestCase):
@@ -32,7 +75,6 @@ class TestTtsProxyWebSocket(unittest.IsolatedAsyncioTestCase):
             await main.tts_proxy(websocket)
 
         websocket.accept.assert_awaited_once()
-        # start + text + flush + stop
         self.assertEqual(mock_ws_connection.send.await_count, 4)
         websocket.send_text.assert_awaited_once()
         sent = websocket.send_text.call_args[0][0]
@@ -45,11 +87,19 @@ class TestTtsProxyWebSocket(unittest.IsolatedAsyncioTestCase):
         await main.tts_proxy(websocket)
 
         websocket.accept.assert_awaited_once()
-        # once in the "if not text" branch, once in finally
         self.assertEqual(websocket.close.await_count, 2)
         websocket.close.assert_any_await(code=1003, reason="Kein Text übergeben")
 
-    async def test_error_handling_closes_websocket(self):
+    async def test_websocket_disconnect_is_silenced(self):
+        """Line 177: WebSocketDisconnect wird still ignoriert."""
+        websocket = AsyncMock()
+        websocket.receive_json.side_effect = WebSocketDisconnect(code=1001)
+
+        await main.tts_proxy(websocket)
+
+        websocket.send_json.assert_not_awaited()
+
+    async def test_error_sends_json_and_closes(self):
         websocket = AsyncMock()
         websocket.receive_json.side_effect = Exception("Test Error")
 
@@ -58,12 +108,30 @@ class TestTtsProxyWebSocket(unittest.IsolatedAsyncioTestCase):
         websocket.send_json.assert_awaited_once_with({"error": "Test Error"})
         websocket.close.assert_awaited_once()
 
+    async def test_send_json_exception_is_silenced(self):
+        """Lines 182-183: send_json wirft — Exception wird ignoriert, close läuft durch."""
+        websocket = AsyncMock()
+        websocket.receive_json.side_effect = Exception("Trigger error path")
+        websocket.send_json.side_effect = Exception("send_json also failed")
+
+        await main.tts_proxy(websocket)
+
+        websocket.close.assert_awaited_once()
+
+    async def test_close_exception_in_finally_is_silenced(self):
+        """Lines 187-188: close() wirft in finally — Exception wird ignoriert."""
+        websocket = AsyncMock()
+        websocket.receive_json.side_effect = Exception("error")
+        websocket.close.side_effect = Exception("close failed")
+
+        # Darf keinen Exception nach außen werfen
+        await main.tts_proxy(websocket)
+
 
 class TestStreamTts(unittest.IsolatedAsyncioTestCase):
     """Tests für den HTTP-Streaming-Endpunkt /stream/tts."""
 
     def _make_ws_mock(self, chunks=None):
-        """Baut einen WebSocket-Mock der Audio-Chunks + finish liefert."""
         chunks = chunks or [b"chunk1", b"chunk2"]
         mock_ws = AsyncMock()
         messages = [msgpack.packb({"event": "audio", "audio": c}) for c in chunks]
@@ -73,20 +141,16 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
 
     async def test_uses_warm_connection_when_available(self):
         warm_ws = self._make_ws_mock()
-        warm_ws.closed = False
 
         with patch.object(main, "_take_warm_connection", AsyncMock(return_value=warm_ws)):
             response = await main.stream_tts("Hallo Welt")
-            # Generator is lazy — must consume inside the patch context
             collected = b"".join([c async for c in response.body_iterator])
 
         self.assertEqual(collected, b"chunk1chunk2")
-        # text + flush + stop gesendet (kein start, da warm)
         self.assertEqual(warm_ws.send.await_count, 3)
 
     async def test_opens_fresh_connection_when_no_warm(self):
         fresh_ws = self._make_ws_mock()
-        fresh_ws.closed = False
 
         with patch.object(main, "_take_warm_connection", AsyncMock(return_value=None)), \
              patch.object(main, "_open_fish_connection", AsyncMock(return_value=fresh_ws)):
@@ -94,19 +158,55 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
             collected = b"".join([c async for c in response.body_iterator])
 
         self.assertEqual(collected, b"chunk1chunk2")
-        # start bereits in _open_fish_connection, dann text + flush + stop
         self.assertEqual(fresh_ws.send.await_count, 3)
 
     async def test_retries_with_fresh_connection_when_warm_is_dead(self):
         dead_ws = AsyncMock()
         dead_ws.send.side_effect = Exception("Connection closed")
-        dead_ws.close = AsyncMock()
 
         fresh_ws = self._make_ws_mock()
 
         with patch.object(main, "_take_warm_connection", AsyncMock(return_value=dead_ws)), \
              patch.object(main, "_open_fish_connection", AsyncMock(return_value=fresh_ws)):
             response = await main.stream_tts("Retry test")
+            collected = b"".join([c async for c in response.body_iterator])
+
+        self.assertEqual(collected, b"chunk1chunk2")
+
+    async def test_close_exception_during_retry_is_silenced(self):
+        """Lines 120-121: ws.close() wirft während Retry-Cleanup — wird ignoriert."""
+        dead_ws = AsyncMock()
+        dead_ws.send.side_effect = Exception("dead")
+        dead_ws.close.side_effect = Exception("close also failed")
+
+        fresh_ws = self._make_ws_mock()
+
+        with patch.object(main, "_take_warm_connection", AsyncMock(return_value=dead_ws)), \
+             patch.object(main, "_open_fish_connection", AsyncMock(return_value=fresh_ws)):
+            response = await main.stream_tts("Close exception test")
+            collected = b"".join([c async for c in response.body_iterator])
+
+        self.assertEqual(collected, b"chunk1chunk2")
+
+    async def test_raises_when_fresh_connection_send_fails(self):
+        """Line 127: opened_fresh=True und send schlägt fehl → Exception propagiert."""
+        failing_ws = AsyncMock()
+        failing_ws.send.side_effect = Exception("Network error")
+
+        with patch.object(main, "_take_warm_connection", AsyncMock(return_value=None)), \
+             patch.object(main, "_open_fish_connection", AsyncMock(return_value=failing_ws)):
+            response = await main.stream_tts("fail")
+            with self.assertRaises(Exception):
+                async for _ in response.body_iterator:
+                    pass
+
+    async def test_close_exception_in_finally_is_silenced(self):
+        """Lines 139-140: ws.close() wirft in finally — Exception wird ignoriert."""
+        ws = self._make_ws_mock()
+        ws.close.side_effect = Exception("close failed")
+
+        with patch.object(main, "_take_warm_connection", AsyncMock(return_value=ws)):
+            response = await main.stream_tts("finally test")
             collected = b"".join([c async for c in response.body_iterator])
 
         self.assertEqual(collected, b"chunk1chunk2")
@@ -143,6 +243,18 @@ class TestWarmup(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, {"status": "warm"})
         old_ws.close.assert_awaited_once()
         self.assertIs(main._warm["ws"], new_ws)
+
+    async def test_warmup_close_exception_is_silenced(self):
+        """Lines 88-89: close() wirft beim Ersetzen — Exception wird ignoriert."""
+        old_ws = AsyncMock()
+        old_ws.close.side_effect = Exception("close failed")
+        new_ws = AsyncMock()
+        main._warm["ws"] = old_ws
+
+        with patch.object(main, "_open_fish_connection", AsyncMock(return_value=new_ws)):
+            result = await main.warmup()
+
+        self.assertEqual(result, {"status": "warm"})
 
     async def test_warmup_returns_error_on_exception(self):
         with patch.object(main, "_open_fish_connection", AsyncMock(side_effect=Exception("Verbindungsfehler"))):
@@ -208,3 +320,16 @@ class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response["status"], "error")
         self.assertIn("401", response["message"])
+
+    @patch("main.httpx.AsyncClient")
+    async def test_health_generic_exception_returns_error(self, mock_client_class):
+        """Lines 209-210: unerwartete Exception wird als error zurückgegeben."""
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.get.side_effect = Exception("Unexpected error")
+        mock_client_class.return_value = mock_client
+
+        response = await main.health()
+
+        self.assertEqual(response["status"], "error")
+        self.assertIn("Unexpected error", response["message"])
