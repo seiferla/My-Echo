@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
-import { Bot, Volume2, Pause, Pencil, Check, X } from 'lucide-react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Bot, Volume2, Pause, Pencil } from 'lucide-react-native';
 import { speak, stopSpeaking } from '../utils/tts';
 import { useCloudStatus } from '../context/CloudStatusContext';
 import { recordTtsRequest } from '../utils/ttsLog';
@@ -11,16 +11,15 @@ interface MessageProps {
         content: string;
     };
     isTyping?: boolean;
-    onEdit?: (newContent: string) => void;
+    // Editing happens in a fullscreen modal owned by ChatArea — see handleStartEdit there.
+    onStartEdit?: () => void;
     autoPlay?: boolean;
 }
 
-export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
+export function Message({ message, isTyping, onStartEdit, autoPlay }: MessageProps) {
     const isUser = message.role === 'user';
     const { isAvailable } = useCloudStatus();
     const [isPlaying, setIsPlaying] = useState(false);
-    const [isEditing, setIsEditing] = useState(false);
-    const [editText, setEditText] = useState(message.content);
     const speakStartRef = useRef<number | null>(null);
 
     // Protokolliert eine abgeschlossene Sprachausgabe genau einmal.
@@ -60,13 +59,6 @@ export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
         }
     };
 
-    const handleEditSave = () => {
-        if (editText.trim() && onEdit) {
-            onEdit(editText.trim());
-        }
-        setIsEditing(false);
-    };
-
     return (
         <View style={[
             styles.container,
@@ -82,45 +74,23 @@ export function Message({ message, isTyping, onEdit, autoPlay }: MessageProps) {
                 styles.bubble,
                 isUser ? styles.userBubble : styles.assistantBubble
             ]}>
-                {isEditing ? (
-                    <View>
-                        <TextInput
-                            style={styles.input}
-                            value={editText}
-                            onChangeText={setEditText}
-                            multiline
-                            autoFocus
-                        />
-                        <View style={styles.editActions}>
-                            <TouchableOpacity onPress={handleEditSave} style={styles.actionButton}>
-                                <Check size={20} color="green" />
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => setIsEditing(false)} style={styles.actionButton}>
-                                <X size={20} color="red" />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                ) : (
-                    <Text style={[
-                        styles.text,
-                        isUser ? styles.userText : styles.assistantText
-                    ]}>
-                        {message.content}
-                    </Text>
-                )}
+                <Text style={[
+                    styles.text,
+                    isUser ? styles.userText : styles.assistantText
+                ]}>
+                    {message.content}
+                </Text>
 
-                {!isEditing && (
-                    <View style={styles.footerActions}>
-                        <TouchableOpacity onPress={handleSpeak} style={styles.iconButton}>
-                            {isPlaying ? <Pause size={20} color="#000000" /> : <Volume2 size={20} color="#000000" />}
+                <View style={styles.footerActions}>
+                    <TouchableOpacity onPress={handleSpeak} style={styles.iconButton}>
+                        {isPlaying ? <Pause size={20} color="#000000" /> : <Volume2 size={20} color="#000000" />}
+                    </TouchableOpacity>
+                    {isUser && onStartEdit && (
+                        <TouchableOpacity onPress={onStartEdit} style={styles.iconButton}>
+                            <Pencil size={20} color="#000000" />
                         </TouchableOpacity>
-                        {isUser && (
-                            <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.iconButton}>
-                                <Pencil size={20} color="#000000" />
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                )}
+                    )}
+                </View>
             </View>
         </View>
     );
@@ -171,24 +141,10 @@ const styles = StyleSheet.create({
     assistantText: {
         color: '#1e293b',
     },
-    input: {
-        fontSize: 18,
-        color: '#ffffff',
-        minWidth: 200,
-    },
-    editActions: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        marginTop: 10,
-    },
     footerActions: {
         flexDirection: 'row',
         marginTop: 8,
         opacity: 0.6,
-    },
-    actionButton: {
-        marginLeft: 15,
-        padding: 5,
     },
     iconButton: {
         marginRight: 15,

@@ -11,7 +11,7 @@ import {
     Modal,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, X, Save } from 'lucide-react-native';
+import { Send, X, Save, Check } from 'lucide-react-native';
 import { Message } from './Message';
 import { BACKEND_WARMUP_URL } from '../utils/config';
 
@@ -37,9 +37,17 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     const [isTyping] = useState(false);
     const [lastSentIndex, setLastSentIndex] = useState<number | null>(null);
     const [isComposing, setIsComposing] = useState(false);
+    // Wenn editingIndex !== null, zeigt der Modal den Edit-Modus (Check + X statt Save + Send).
+    const [editingIndex, setEditingIndex] = useState<number | null>(null);
+    const [editInput, setEditInput] = useState('');
     const scrollViewRef = useRef<ScrollView>(null);
     const composeScrollRef = useRef<ScrollView>(null);
     const insets = useSafeAreaInsets();
+
+    const isEditMode = editingIndex !== null;
+    const isModalOpen = isComposing || isEditMode;
+    const modalValue = isEditMode ? editInput : input;
+    const setModalValue = isEditMode ? setEditInput : setInput;
 
     const scrollToBottom = () => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -94,35 +102,78 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
         setIsComposing(false);
     };
 
+    // Edit-Flow ---------------------------------------------------------------
+    const handleStartEdit = (index: number, content: string) => {
+        setEditingIndex(index);
+        setEditInput(content);
+    };
+
+    const handleSaveEdit = () => {
+        if (!editInput.trim() || !chat || editingIndex === null) return;
+        const updated = chat.messages.map((m, i) =>
+            i === editingIndex
+                ? { ...m, content: editInput.trim(), editCount: (m.editCount ?? 0) + 1 }
+                : m
+        );
+        onUpdateChat(updated);
+        setEditingIndex(null);
+        setEditInput('');
+    };
+
+    const handleCancelEdit = () => {
+        setEditingIndex(null);
+        setEditInput('');
+    };
+
+    // Closes whatever modal is currently open (compose or edit).
+    const handleCloseModal = () => {
+        if (isEditMode) handleCancelEdit();
+        else handleClose();
+    };
+
     return (
         <View style={styles.container}>
-            {/* Fullscreen compose overlay (Modal) */}
+            {/* Fullscreen modal — used for composing new messages AND editing existing ones */}
             <Modal
-                visible={isComposing}
+                visible={isModalOpen}
                 animationType="slide"
                 presentationStyle="fullScreen"
             >
                 {/* Nur top/left/right: kein Bottom-Padding, damit das TextInput die volle Höhe nutzt */}
                 <SafeAreaView style={styles.modalContainer} edges={['top', 'left', 'right']}>
                     <View style={styles.modalHeader}>
-                        <TouchableOpacity onPress={handleClose} style={styles.modalButton}>
+                        <TouchableOpacity onPress={handleCloseModal} style={styles.modalButton}>
                             <X size={32} color="#4b5563" />
                         </TouchableOpacity>
                         <View style={{ flexDirection: 'row', gap: 10 }}>
-                            <TouchableOpacity
-                                onPress={handleSave}
-                                disabled={!input.trim()}
-                                style={[styles.modalButton, styles.saveButton, !input.trim() && styles.disabledButton]}
-                            >
-                                <Save size={32} color="white" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={handleSend}
-                                disabled={!input.trim()}
-                                style={[styles.modalButton, styles.sendButton, !input.trim() && styles.disabledButton]}
-                            >
-                                <Send size={32} color="white" />
-                            </TouchableOpacity>
+                            {isEditMode ? (
+                                // Edit-Modus: nur Check (Speichern)
+                                <TouchableOpacity
+                                    onPress={handleSaveEdit}
+                                    disabled={!editInput.trim()}
+                                    style={[styles.modalButton, styles.saveButton, !editInput.trim() && styles.disabledButton]}
+                                >
+                                    <Check size={32} color="white" />
+                                </TouchableOpacity>
+                            ) : (
+                                // Compose-Modus: Save (stumm) + Send (mit TTS)
+                                <>
+                                    <TouchableOpacity
+                                        onPress={handleSave}
+                                        disabled={!input.trim()}
+                                        style={[styles.modalButton, styles.saveButton, !input.trim() && styles.disabledButton]}
+                                    >
+                                        <Save size={32} color="white" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={handleSend}
+                                        disabled={!input.trim()}
+                                        style={[styles.modalButton, styles.sendButton, !input.trim() && styles.disabledButton]}
+                                    >
+                                        <Send size={32} color="white" />
+                                    </TouchableOpacity>
+                                </>
+                            )}
                         </View>
                     </View>
 
@@ -142,9 +193,9 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                     >
                         <TextInput
                             style={styles.modalInput}
-                            value={input}
-                            onChangeText={setInput}
-                            placeholder="Nachricht eingeben..."
+                            value={modalValue}
+                            onChangeText={setModalValue}
+                            placeholder={isEditMode ? "Nachricht bearbeiten..." : "Nachricht eingeben..."}
                             placeholderTextColor="#9ca3af"
                             multiline
                             autoFocus
@@ -175,16 +226,9 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                                 key={index}
                                 message={message}
                                 autoPlay={index === lastSentIndex && message.role === 'user'}
-                                onEdit={
+                                onStartEdit={
                                     message.role === 'user'
-                                        ? (newContent) => {
-                                            const updated = chat.messages.map((m, i) =>
-                                                i === index
-                                                    ? { ...m, content: newContent, editCount: (m.editCount ?? 0) + 1 }
-                                                    : m
-                                            );
-                                            onUpdateChat(updated);
-                                        }
+                                        ? () => handleStartEdit(index, message.content)
                                         : undefined
                                 }
                             />
