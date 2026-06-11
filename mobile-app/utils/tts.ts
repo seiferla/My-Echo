@@ -87,6 +87,15 @@ async function playLocalAudio(uri: string, session: number): Promise<void> {
                 console.log(`${TAG} Playback started (${Date.now() - t0} ms)`);
             }
 
+            if (status.error) {
+                console.warn(`${TAG} expo-audio error:`, status.error);
+                settle(() => {
+                    try { player.remove(); } catch {}
+                    reject(new Error(`expo-audio: ${status.error}`));
+                });
+                return;
+            }
+
             if (status.didJustFinish) {
                 settle(() => {
                     try { player.remove(); } catch {}
@@ -146,6 +155,9 @@ export async function speak(
     model = '',
 ): Promise<void> {
     stopSpeaking();
+    // Session nach stopSpeaking() merken — wenn sich dieser Wert bis zum
+    // Fallback ändert, hat eine neuere speak()-Instanz bereits übernommen.
+    const session = activeSession;
 
     console.log(`${TAG} speak() — useCloud=${useCloud}`);
 
@@ -164,8 +176,14 @@ export async function speak(
         console.log(`${TAG} Cloud unavailable — using expo-speech directly`);
     }
 
-    // Lokale Sprachausgabe als Fallback. expo-speech hat einen eigenen Session-
-    // unabhängigen Stop-Mechanismus (Speech.stop in stopSpeaking).
+    // Während dem Cloud-Fehlschlag könnte eine neuere speak()-Instanz
+    // stopSpeaking() aufgerufen und ihre eigene Wiedergabe gestartet haben.
+    // In dem Fall Fallback überspringen — sonst Overlap mit der neuen Instanz.
+    if (session !== activeSession) {
+        console.log(`${TAG} Fallback skipped — newer speak() already active`);
+        return;
+    }
+
     return new Promise((resolve) => {
         Speech.speak(text, {
             language: 'de-DE',
