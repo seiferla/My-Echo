@@ -23,8 +23,28 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pytest
 
-      - name: Run backend tests
+      - name: Run backend tests with coverage
         working-directory: backend
-        run: python -m unittest discover -s . -p "test*.py" -v
+        run: |
+          pytest --cov=. --cov-report=term --cov-omit="test_*.py" | tee coverage.txt
+          COVERAGE=$(python3 -c "
+          import re, sys
+          m = re.search(r'TOTAL\s+\d+\s+\d+\s+(\d+)%', open('coverage.txt').read())
+          print(m.group(1) if m else '0')
+          ")
+          echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/main'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: ${{ secrets.GIST_ID }}
+          filename: myecho-coverage.json
+          label: coverage
+          message: ${{ env.COVERAGE }}%
+          valColorRange: ${{ env.COVERAGE }}
+          maxColorRange: 100
+          minColorRange: 0
