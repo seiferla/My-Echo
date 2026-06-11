@@ -28,12 +28,8 @@ jobs:
       - name: Run backend tests with coverage
         working-directory: backend
         run: |
-          pytest --cov=. --cov-report=term --cov-omit="test_*.py" | tee coverage.txt
-          COVERAGE=$(python3 -c "
-          import re, sys
-          m = re.search(r'TOTAL\s+\d+\s+\d+\s+(\d+)%', open('coverage.txt').read())
-          print(m.group(1) if m else '0')
-          ")
+          pytest --cov=main --cov-report=term-missing --cov-report=json
+          COVERAGE=$(python3 -c "import json; d=json.load(open('coverage.json')); print(int(d['totals']['percent_covered_display']))")
           echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
 
       - name: Update coverage badge
