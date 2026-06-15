@@ -16,21 +16,9 @@ import { Sidebar } from '../components/Sidebar';
 import { ChatArea } from '../components/ChatArea';
 import { storage } from '../utils/storage';
 import { useCloudStatus } from '../context/CloudStatusContext';
+import { Chat, ChatMessage } from '../utils/types';
 
 const { width } = Dimensions.get('window');
-
-interface ChatMessage {
-    role: 'user' | 'assistant';
-    content: string;
-}
-
-interface Chat {
-    id: string;
-    title: string;
-    messages: ChatMessage[];
-    timestamp: number;
-    pinned?: boolean;
-}
 
 export default function ChatScreen() {
     const router = useRouter();

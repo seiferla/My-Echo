@@ -14,16 +14,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { Chat } from '../utils/types';
 
 const { width } = Dimensions.get('window');
-
-interface Chat {
-    id: string;
-    title: string;
-    messages: any[];
-    timestamp: number;
-    pinned?: boolean;
-}
 
 interface SidebarProps {
     chats: Chat[];

@@ -14,14 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Send, X, Save, Check } from 'lucide-react-native';
 import { Message } from './Message';
 import { BACKEND_WARMUP_URL } from '../utils/config';
-
-interface ChatMessage {
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp?: number;
-    via?: 'send' | 'save';
-    editCount?: number;
-}
+import { ChatMessage } from '../utils/types';
 
 interface ChatAreaProps {
     chat?: {
