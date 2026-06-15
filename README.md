@@ -15,7 +15,7 @@ Type what you want to say — myEcho speaks it back in a natural AI voice.
 ![Expo](https://img.shields.io/badge/Expo-56-000020?logo=expo&logoColor=white)
 ![React Native](https://img.shields.io/badge/React%20Native-0.85-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.136-009688?logo=fastapi&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.137-009688?logo=fastapi&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![Backend Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/seiferla/6a78432e927c4d553d55828c74b8859d/raw/myecho-coverage.json)
 
@@ -56,21 +56,23 @@ Mobile App  ──HTTP Stream──►  Backend (Pi)  ──WebSocket──►  
 ```
 My-Echo/
 ├── backend/
-│   ├── main.py                 FastAPI — HTTP streaming + WebSocket proxy + warmup + health
+│   ├── main.py                 FastAPI — HTTP streaming + warmup + health
+│   ├── test_main.py            pytest suite (98% coverage)
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── mobile-app/
 │   ├── app/                    expo-router screens
 │   ├── components/             Sidebar, ChatArea, Message
 │   ├── context/                CloudStatusContext (health check + green dot)
-│   └── utils/                  storage, tts, ttsCache, config, stats
+│   └── utils/                  storage, tts, ttsCache, config, types, stats
 ├── monitoring/
 │   ├── docker-compose.yml      Prometheus + Grafana stack
 │   ├── prometheus/             Scrape config
 │   └── grafana/                Dashboard + datasource provisioning
 └── .github/workflows/
     ├── android-release.yml     Signed APK/AAB build + GitHub Release
-    └── backend-deploy.yml      Docker image build + push to GHCR
+    ├── backend-deploy.yml      Docker image build + push to GHCR
+    └── backend-tests.yml       pytest + coverage badge
 ```
 
 ---
@@ -89,7 +91,7 @@ My-Echo/
 - **Daily auto-chat** — a new chat is created automatically each day
 - **Two send actions** — *Send* saves and auto-plays the message; *Save* stores it silently
 - **Per-message playback** — every bubble has a play/pause button
-- **Inline editing** — user messages can be edited in place
+- **Edit in fullscreen** — tap the pencil on any message to edit it in a focused, distraction-free modal
 - **Usage statistics** — tracks characters spoken and TTS response times
 - **Local persistence** — chats stored in `expo-secure-store`
 
@@ -113,9 +115,8 @@ A lightweight FastAPI service that proxies streaming TTS requests to Fish Audio.
 |---------|---------------|-------------------------------------------------------|
 | `GET`   | `/stream/tts` | Streams MP3 audio for `?text=...` via chunked HTTP    |
 | `GET`   | `/warmup`     | Pre-warms Fish Audio connection before user sends     |
-| `GET`   | `/health`     | Returns provider status and API credit info           |
+| `GET`   | `/health`     | Returns provider status, voice/model, and API credits |
 | `GET`   | `/metrics`    | Prometheus metrics endpoint                           |
-| `WS`    | `/ws/tts`     | Legacy WebSocket TTS proxy                            |
 
 ### Configuration
 
@@ -155,10 +156,11 @@ Setup instructions: [`monitoring/SETUP.md`](monitoring/SETUP.md)
 |---|---|---|
 | `android-release.yml` | Push tag `v*.*.*` | Signed APK attached to GitHub Release |
 | `backend-deploy.yml` | Push to `backend/` on `main` | Docker image pushed to GHCR |
+| `backend-tests.yml` | Every push & PR | pytest run + coverage badge update |
 
 ```bash
 # Mobile release
-git tag v1.2.0 && git push origin v1.2.0
+git tag v1.3.1 && git push origin v1.3.1
 
 # Backend deploys automatically on every push to backend/
 ```
