@@ -19,3 +19,8 @@ mobile-app/.idea/
 # misc
 *.hsw
 *~
+
+# secrets
+.env
+.env.local
+.env.*.local
