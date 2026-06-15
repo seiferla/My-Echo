@@ -1,32 +1,44 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-/**
- * Ein Wrapper für den Speicherzugriff, der SecureStore für Native 
- * und (optional) localStorage für Web nutzt.
- */
+const TAG = '[myEcho][Storage]';
+
 export const storage = {
     async setItem(key: string, value: string): Promise<void> {
-        if (Platform.OS === 'web') {
-            localStorage.setItem(key, value);
-        } else {
-            await SecureStore.setItemAsync(key, value);
+        try {
+            if (Platform.OS === 'web') {
+                localStorage.setItem(key, value);
+            } else {
+                await SecureStore.setItemAsync(key, value);
+            }
+        } catch (e) {
+            console.error(`${TAG} setItem failed for key "${key}":`, e);
+            throw e;
         }
     },
 
     async getItem(key: string): Promise<string | null> {
-        if (Platform.OS === 'web') {
-            return localStorage.getItem(key);
-        } else {
-            return await SecureStore.getItemAsync(key);
+        try {
+            if (Platform.OS === 'web') {
+                return localStorage.getItem(key);
+            } else {
+                return await SecureStore.getItemAsync(key);
+            }
+        } catch (e) {
+            console.error(`${TAG} getItem failed for key "${key}":`, e);
+            return null;
         }
     },
 
     async removeItem(key: string): Promise<void> {
-        if (Platform.OS === 'web') {
-            localStorage.removeItem(key);
-        } else {
-            await SecureStore.deleteItemAsync(key);
+        try {
+            if (Platform.OS === 'web') {
+                localStorage.removeItem(key);
+            } else {
+                await SecureStore.deleteItemAsync(key);
+            }
+        } catch (e) {
+            console.error(`${TAG} removeItem failed for key "${key}":`, e);
         }
-    }
+    },
 };
