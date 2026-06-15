@@ -1,11 +1,9 @@
 import time
 import unittest
-import base64
 import msgpack
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import main
-from fastapi.websockets import WebSocketDisconnect
 
 
 class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
@@ -48,84 +46,6 @@ class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result)
 
-
-class TestTtsProxyWebSocket(unittest.IsolatedAsyncioTestCase):
-    """Tests für den Legacy-WebSocket-Endpunkt /ws/tts."""
-
-    async def test_forwards_text_and_streams_audio_chunks(self):
-        websocket = AsyncMock()
-        websocket.receive_json.return_value = {"text": "Hello"}
-        websocket.client_state.name = "CONNECTED"
-
-        mock_ws_connection = AsyncMock()
-        mock_ws_connection.send = AsyncMock()
-        audio_msg = {"event": "audio", "audio": b"audio_chunk"}
-        finish_msg = {"event": "finish"}
-        mock_ws_connection.__aiter__.return_value = [
-            msgpack.packb(audio_msg),
-            msgpack.packb(finish_msg),
-        ]
-
-        mock_connect = MagicMock()
-        mock_connect.__aenter__.return_value = mock_ws_connection
-
-        with patch("main.websockets.connect", return_value=mock_connect), \
-             patch("main.FISH_API_KEY", "test_key"), \
-             patch("main.AUDIO_REFERENCE_ID", "test_ref"):
-            await main.tts_proxy(websocket)
-
-        websocket.accept.assert_awaited_once()
-        self.assertEqual(mock_ws_connection.send.await_count, 4)
-        websocket.send_text.assert_awaited_once()
-        sent = websocket.send_text.call_args[0][0]
-        self.assertEqual(sent, base64.b64encode(b"audio_chunk").decode())
-
-    async def test_close_on_empty_text(self):
-        websocket = AsyncMock()
-        websocket.receive_json.return_value = {"text": ""}
-
-        await main.tts_proxy(websocket)
-
-        websocket.accept.assert_awaited_once()
-        self.assertEqual(websocket.close.await_count, 2)
-        websocket.close.assert_any_await(code=1003, reason="Kein Text übergeben")
-
-    async def test_websocket_disconnect_is_silenced(self):
-        """Line 177: WebSocketDisconnect wird still ignoriert."""
-        websocket = AsyncMock()
-        websocket.receive_json.side_effect = WebSocketDisconnect(code=1001)
-
-        await main.tts_proxy(websocket)
-
-        websocket.send_json.assert_not_awaited()
-
-    async def test_error_sends_json_and_closes(self):
-        websocket = AsyncMock()
-        websocket.receive_json.side_effect = Exception("Test Error")
-
-        await main.tts_proxy(websocket)
-
-        websocket.send_json.assert_awaited_once_with({"error": "Test Error"})
-        websocket.close.assert_awaited_once()
-
-    async def test_send_json_exception_is_silenced(self):
-        """Lines 182-183: send_json wirft — Exception wird ignoriert, close läuft durch."""
-        websocket = AsyncMock()
-        websocket.receive_json.side_effect = Exception("Trigger error path")
-        websocket.send_json.side_effect = Exception("send_json also failed")
-
-        await main.tts_proxy(websocket)
-
-        websocket.close.assert_awaited_once()
-
-    async def test_close_exception_in_finally_is_silenced(self):
-        """Lines 187-188: close() wirft in finally — Exception wird ignoriert."""
-        websocket = AsyncMock()
-        websocket.receive_json.side_effect = Exception("error")
-        websocket.close.side_effect = Exception("close failed")
-
-        # Darf keinen Exception nach außen werfen
-        await main.tts_proxy(websocket)
 
 
 class TestStreamTts(unittest.IsolatedAsyncioTestCase):

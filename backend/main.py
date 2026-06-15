@@ -1,11 +1,10 @@
 import os
 import time
 import asyncio
-import base64
 import msgpack
 import httpx
 import websockets
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -81,7 +80,6 @@ async def warmup():
     spart beim späteren Senden den Handshake + start-Roundtrip.
     """
     async with _warm_lock:
-        # bestehende warme Verbindung schließen falls vorhanden
         if _warm["ws"] is not None:
             try:
                 await _warm["ws"].close()
@@ -146,55 +144,11 @@ async def stream_tts(text: str):
     )
 
 
-@app.websocket("/ws/tts")
-async def tts_proxy(websocket: WebSocket):
-    await websocket.accept()
-
-    try:
-        data = await websocket.receive_json()
-        text = data.get("text", "").strip()
-
-        if not text:
-            await websocket.close(code=1003, reason="Kein Text übergeben")
-            return
-
-        async with websockets.connect(WS_URL, additional_headers=_fish_headers()) as ws:
-            await ws.send(_start_payload())
-            await ws.send(msgpack.packb({"event": "text", "text": text}))
-            await ws.send(msgpack.packb({"event": "flush"}))
-            await ws.send(msgpack.packb({"event": "stop"}))
-
-            async for message in ws:
-                msg = msgpack.unpackb(message)
-                event = msg.get("event")
-                if event == "audio":
-                    audio_b64 = base64.b64encode(msg["audio"]).decode()
-                    await websocket.send_text(audio_b64)
-                elif event == "finish":
-                    break
-
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        print(f"Error in tts_proxy: {e}")
-        try:
-            await websocket.send_json({"error": str(e)})
-        except Exception:
-            pass
-    finally:
-        try:
-            await websocket.close()
-        except Exception:
-            pass
-
-
 @app.get("/health")
 async def health():
     url = "https://api.fish.audio/wallet/self/api-credit"
     headers = {"Authorization": f"Bearer {FISH_API_KEY}", "model": AUDIO_MODEL}
 
-    # voice + model: damit das Frontend sie in den Cache-Key einbauen kann
-    # und beim Wechsel automatisch neu generiert
     base = {"voice": AUDIO_REFERENCE_ID, "model": AUDIO_MODEL}
 
     async with httpx.AsyncClient(timeout=5.0) as client:
