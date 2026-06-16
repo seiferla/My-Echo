@@ -85,6 +85,7 @@ My-Echo/
 - **HTTP streaming** — playback starts immediately, no waiting for full audio
 - **On-device audio cache** — repeated phrases play instantly from a local LRU cache (100 MB cap, evicts down to 80 MB); hit rate and size are visible on the stats screen
 - **Pre-warming** — backend prepares the Fish Audio connection while the user is typing
+- **Background playback** — speech keeps playing when the screen locks or the app goes to the background, so long messages finish uninterrupted
 - **Automatic fallback** — switches to local speech synthesis when the backend is unavailable
 - **Status indicator** — green dot in the header shows whether the cloud connection is active
 - **Chat history sidebar** — create, pin, rename, and delete chats
@@ -146,7 +147,7 @@ http://192.168.178.21:3001
 ```
 
 Shows request rate, latency (p50/p95/p99), error rate and warmup hit rate.
-Setup instructions: [`monitoring/SETUP.md`](monitoring/SETUP.md)
+The full stack lives in [`monitoring/`](monitoring/) — deploy `monitoring/docker-compose.yml` the same way as the backend; the Grafana dashboard and Prometheus datasource are provisioned automatically.
 
 ---
 
