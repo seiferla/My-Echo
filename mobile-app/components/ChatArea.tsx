@@ -14,7 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Send, X, Save, Check } from 'lucide-react-native';
 import { Message } from './Message';
 import { BACKEND_WARMUP_URL } from '../utils/config';
-import { ChatMessage } from '../utils/types';
+import { ChatMessage, newMessageId } from '../utils/types';
 
 interface ChatAreaProps {
     chat?: {
@@ -57,10 +57,17 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
         scrollToBottom();
     }, [chat?.messages]);
 
+    // Beim Chat-Wechsel autoPlay zurücksetzen — sonst würde nach dem Wechsel
+    // die Nachricht an gleicher Position vorgelesen, obwohl sie nicht neu gesendet wurde.
+    useEffect(() => {
+        setLastSentIndex(null);
+    }, [chat?.id]);
+
     const handleSend = () => {
         if (!input.trim() || !chat) return;
 
         const userMessage: ChatMessage = {
+            id: newMessageId(),
             role: 'user',
             content: input,
             timestamp: Date.now(),
@@ -78,6 +85,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
         if (!input.trim() || !chat) return;
 
         const userMessage: ChatMessage = {
+            id: newMessageId(),
             role: 'user',
             content: input,
             timestamp: Date.now(),
@@ -216,7 +224,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                     <View style={styles.messagesWrapper}>
                         {chat?.messages.map((message, index) => (
                             <Message
-                                key={index}
+                                key={message.id}
                                 message={message}
                                 autoPlay={index === lastSentIndex && message.role === 'user'}
                                 onStartEdit={

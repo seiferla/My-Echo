@@ -16,7 +16,7 @@ import { Sidebar } from '../components/Sidebar';
 import { ChatArea } from '../components/ChatArea';
 import { storage } from '../utils/storage';
 import { useCloudStatus } from '../context/CloudStatusContext';
-import { Chat, ChatMessage } from '../utils/types';
+import { Chat, ChatMessage, withMessageIds } from '../utils/types';
 
 const { width } = Dimensions.get('window');
 
@@ -36,12 +36,13 @@ export default function ChatScreen() {
             const savedChats = await storage.getItem('myEchoChats');
             if (savedChats) {
                 try {
-                    const parsed: Chat[] = JSON.parse(savedChats);
-                    
+                    // Backfill für Chats ohne Message-IDs (vor Einführung stabiler keys gespeichert)
+                    const parsed: Chat[] = withMessageIds(JSON.parse(savedChats));
+
                     // Prüfe ob ein neuer Chat für heute erstellt werden muss
                     const today = new Date().setHours(0, 0, 0, 0);
                     const latestChat = parsed[0]; // Chats sind nach timestamp absteigend sortiert (neuere oben)
-                    
+
                     if (latestChat && new Date(latestChat.timestamp).setHours(0, 0, 0, 0) < today) {
                         const newChat: Chat = {
                             id: Date.now().toString(),
