@@ -1,4 +1,4 @@
-import { createAudioPlayer, AudioPlayer } from 'expo-audio';
+import { createAudioPlayer, AudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as Speech from 'expo-speech';
 import { BACKEND_STREAM_URL } from './config';
 import { getCachedUri, downloadAndCache } from './ttsCache';
@@ -6,6 +6,28 @@ import { getCachedUri, downloadAndCache } from './ttsCache';
 const TAG = '[myEcho][TTS]';
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 const PLAY_TIMEOUT_MS = 10_000;
+
+// Konfiguriert die Audio-Session so, dass die Wiedergabe weiterläuft, wenn der
+// Bildschirm gesperrt wird oder die App in den Hintergrund geht. Ohne das
+// pausiert expo-audio beim Sperren — fatal für eine Kommunikations-App, bei der
+// längere Nachrichten zu Ende gesprochen werden müssen.
+// Einmalig beim App-Start aufrufen (siehe app/_layout.tsx).
+let _audioModeConfigured = false;
+export async function configureAudioSession(): Promise<void> {
+    if (_audioModeConfigured) return;
+    _audioModeConfigured = true;
+    try {
+        await setAudioModeAsync({
+            playsInSilentMode: true,       // auch im Lautlos-Modus sprechen
+            shouldPlayInBackground: true,  // weiterspielen bei gesperrtem Screen
+            interruptionMode: 'doNotMix',  // Fokus übernehmen, andere Apps ducken
+        });
+        console.log(`${TAG} Audio session configured for background playback`);
+    } catch (e) {
+        _audioModeConfigured = false;
+        console.warn(`${TAG} Failed to configure audio session:`, e);
+    }
+}
 
 class AbortedError extends Error {
     constructor() { super('Playback aborted'); this.name = 'AbortedError'; }
