@@ -29,16 +29,4 @@ export const storage = {
             return null;
         }
     },
-
-    async removeItem(key: string): Promise<void> {
-        try {
-            if (Platform.OS === 'web') {
-                localStorage.removeItem(key);
-            } else {
-                await SecureStore.deleteItemAsync(key);
-            }
-        } catch (e) {
-            console.error(`${TAG} removeItem failed for key "${key}":`, e);
-        }
-    },
 };
