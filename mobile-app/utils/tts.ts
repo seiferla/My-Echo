@@ -95,10 +95,16 @@ async function playLocalAudio(uri: string, session: number): Promise<void> {
             }
         }, PLAY_TIMEOUT_MS);
 
-        // Wird von stopSpeaking() aufgerufen. Teardown des Players passiert
-        // dort selbst — hier nur die Promise rejecten.
+        // Wird von stopSpeaking() (oder explizit) aufgerufen. Macht das
+        // vollständige Player-Teardown selbst — sonst läuft die Wiedergabe
+        // weiter, weil settle() unten `currentPlayer = null` setzt und der
+        // anschließende stopSpeaking()-Block dadurch leer durchläuft.
         const abort = () => {
-            settle(() => reject(new AbortedError()));
+            settle(() => {
+                try { player.pause(); } catch {}
+                try { player.remove(); } catch {}
+                reject(new AbortedError());
+            });
         };
         currentAbort = abort;
 
