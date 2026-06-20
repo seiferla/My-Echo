@@ -9,9 +9,11 @@ import {
     KeyboardAvoidingView,
     Platform,
     Modal,
+    NativeSyntheticEvent,
+    NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, X, Save, Check } from 'lucide-react-native';
+import { Send, X, Save, Check, ChevronDown } from 'lucide-react-native';
 import { Message } from './Message';
 import { BACKEND_WARMUP_URL } from '../utils/config';
 import { ChatMessage, newMessageId } from '../utils/types';
@@ -36,6 +38,9 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     const scrollViewRef = useRef<ScrollView>(null);
     const composeScrollRef = useRef<ScrollView>(null);
     const insets = useSafeAreaInsets();
+    // true wenn der User nahe genug am unteren Ende der Liste ist.
+    // Startet true → Pfeil bleibt initial verborgen, Auto-Scroll aktiv.
+    const [isNearBottom, setIsNearBottom] = useState(true);
 
     const isEditMode = editingIndex !== null;
     const isModalOpen = isComposing || isEditMode;
@@ -44,6 +49,16 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
 
     const scrollToBottom = () => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
+    };
+
+    // Wenn der User scrollt, prüfen wie weit er vom unteren Ende entfernt ist.
+    // Schwelle 150px — etwa eine halbe Bubble-Höhe; genug Spielraum, dass kleine
+    // Wackler am Listenende den Pfeil nicht auslösen.
+    const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+        const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+        const distanceFromBottom =
+            contentSize.height - layoutMeasurement.height - contentOffset.y;
+        setIsNearBottom(distanceFromBottom < 150);
     };
 
     // Öffnet das Eingabefeld und wärmt parallel die Backend-Verbindung vor,
@@ -213,7 +228,13 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                 ref={scrollViewRef}
                 style={styles.messagesList}
                 contentContainerStyle={styles.scrollContent}
-                onContentSizeChange={scrollToBottom}
+                onContentSizeChange={() => {
+                    // Nur automatisch nach unten scrollen wenn der User dort eh schon ist —
+                    // sonst reißt es ihn beim Lesen alter Nachrichten ungewollt nach unten.
+                    if (isNearBottom) scrollToBottom();
+                }}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
             >
                 {chat?.messages.length === 0 ? (
                     <View style={styles.emptyContainer}>
@@ -237,6 +258,19 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                     </View>
                 )}
             </ScrollView>
+
+            {/* Floating "zur neuesten Nachricht"-Pfeil — nur sichtbar wenn der User
+                weiter oben in der Liste ist. Sitzt knapp über der Eingabe-Leiste. */}
+            {!isNearBottom && (
+                <TouchableOpacity
+                    onPress={scrollToBottom}
+                    style={styles.scrollDownButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Zur neuesten Nachricht"
+                >
+                    <ChevronDown size={24} color="#374151" />
+                </TouchableOpacity>
+            )}
 
             {/* Bottom input bar: paddingBottom direkt im Container, kein externer SafeAreaView-Wrapper */}
             <KeyboardAvoidingView
@@ -396,5 +430,25 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
-    }
+    },
+    scrollDownButton: {
+        position: 'absolute',
+        // Knapp über der Eingabe-Leiste (~90px hoch inkl. paddings).
+        bottom: 90,
+        alignSelf: 'center',
+        backgroundColor: '#ffffff',
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#e5e7eb',
+        // Hebt den Button visuell von der Liste ab.
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+    },
 });
