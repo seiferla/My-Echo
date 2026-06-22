@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    Pressable,
+    StyleSheet,
+    Platform,
+    ToastAndroid,
+    Alert,
+    Vibration,
+} from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Bot, Volume2, Pause, Pencil } from 'lucide-react-native';
 import { speak, stopSpeaking } from '../utils/tts';
 import { useCloudStatus } from '../context/CloudStatusContext';
@@ -39,6 +50,24 @@ export function Message({ message, isTyping, onStartEdit, autoPlay }: MessagePro
         };
     }, []);
 
+    // Long-Press auf die Bubble kopiert den Nachrichten-Text in die Zwischenablage.
+    // Kurze Vibration als haptisches Signal, plus Toast (Android) bzw. Alert (iOS)
+    // als visuelle Bestätigung. Stiller Failsafe bei Clipboard-Fehlern.
+    const handleLongPress = async () => {
+        try {
+            await Clipboard.setStringAsync(message.content);
+            Vibration.vibrate(40);
+            if (Platform.OS === 'android') {
+                ToastAndroid.show('In Zwischenablage kopiert', ToastAndroid.SHORT);
+            } else {
+                Alert.alert('Kopiert', 'Text in die Zwischenablage übernommen.');
+            }
+        } catch {
+            // Im seltenen Fehlerfall keine UI-Lawine — der User merkt es am
+            // ausbleibenden Feedback und kann nochmal drücken.
+        }
+    };
+
     const handleSpeak = async () => {
         if (isPlaying) {
             stopSpeaking();
@@ -70,10 +99,17 @@ export function Message({ message, isTyping, onStartEdit, autoPlay }: MessagePro
                 </View>
             )}
 
-            <View style={[
-                styles.bubble,
-                isUser ? styles.userBubble : styles.assistantBubble
-            ]}>
+            <Pressable
+                onLongPress={handleLongPress}
+                delayLongPress={400}
+                style={({ pressed }) => [
+                    styles.bubble,
+                    isUser ? styles.userBubble : styles.assistantBubble,
+                    pressed && styles.bubblePressed,
+                ]}
+                accessibilityRole="text"
+                accessibilityHint="Lang drücken zum Kopieren"
+            >
                 <Text style={[
                     styles.text,
                     isUser ? styles.userText : styles.assistantText
@@ -91,7 +127,7 @@ export function Message({ message, isTyping, onStartEdit, autoPlay }: MessagePro
                         </TouchableOpacity>
                     )}
                 </View>
-            </View>
+            </Pressable>
         </View>
     );
 }
@@ -122,6 +158,9 @@ const styles = StyleSheet.create({
         maxWidth: '80%',
         padding: 15,
         borderRadius: 20,
+    },
+    bubblePressed: {
+        opacity: 0.85,
     },
     userBubble: {
         backgroundColor: '#60a5fa',
