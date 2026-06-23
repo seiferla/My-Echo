@@ -3,5 +3,5 @@ uvicorn~=0.49.0
 fastapi~=0.138.0
 websockets~=16.0
 msgpack~=1.2.1
-prometheus-fastapi-instrumentator~=8.0.0
+prometheus-fastapi-instrumentator~=8.0.1
 pytest-cov~=7.1.0
