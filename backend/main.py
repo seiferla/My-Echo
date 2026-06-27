@@ -4,11 +4,44 @@ import asyncio
 import msgpack
 import httpx
 import websockets
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from prometheus_fastapi_instrumentator import Instrumentator
 
-app = FastAPI()
+from db import init_db, close_db, list_chats, upsert_chat, delete_chat
+
+# --- Pydantic-Modelle (vor app = FastAPI(...) einfügen) ---------------------
+
+class MessageModel(BaseModel):
+    id: str
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=10_000)
+    timestamp: Optional[int] = None
+    via: Optional[str] = Field(None, pattern="^(send|save)$")
+    editCount: int = 0
+
+
+class ChatModel(BaseModel):
+    id: str
+    title: str = Field(max_length=200)
+    timestamp: int
+    pinned: bool = False
+    messages: list[MessageModel] = []
+
+
+# --- Lifespan: DB beim Start initialisieren, beim Stop schließen ------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+    await close_db()
+
+
+app = FastAPI(lifespan=lifespan)
 Instrumentator().instrument(app).expose(app)
 
 FISH_API_KEY = os.getenv("TTS_API_KEY", "")
@@ -162,3 +195,28 @@ async def health():
             return {**base, "status": "error", "message": f"HTTP {e.response.status_code}"}
         except Exception as e:
             return {**base, "status": "error", "message": str(e)}
+
+
+# --- Endpoints (am Ende der Datei ergänzen) ---------------------------------
+
+@app.get("/chats", response_model=list[ChatModel])
+async def get_chats():
+    """Alle Chats laden — wird beim App-Start aufgerufen."""
+    return await list_chats()
+
+
+@app.put("/chats/{chat_id}")
+async def put_chat(chat_id: str, chat: ChatModel):
+    """Chat anlegen oder komplett ersetzen."""
+    if chat.id != chat_id:
+        raise HTTPException(400, "chat_id mismatch between URL and body")
+    await upsert_chat(chat.model_dump())
+    return {"status": "ok"}
+
+
+@app.delete("/chats/{chat_id}")
+async def remove_chat(chat_id: str):
+    deleted = await delete_chat(chat_id)
+    if not deleted:
+        raise HTTPException(404, f"chat {chat_id} not found")
+    return {"status": "deleted"}
