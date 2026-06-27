@@ -8,7 +8,7 @@ import os
 import json
 import time
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Optional
 
 import aiosqlite
 
@@ -38,7 +38,7 @@ SCHEMA = """
          """
 
 
-_db: aiosqlite.Connection | None = None
+_db: Optional[aiosqlite.Connection] = None
 
 
 async def init_db() -> aiosqlite.Connection:

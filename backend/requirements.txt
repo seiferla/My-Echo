@@ -6,3 +6,4 @@ msgpack~=1.2.1
 prometheus-fastapi-instrumentator~=8.0.2
 pytest-cov~=7.1.0
 aiosqlite~=0.22.1
+pydantic~=2.13.4
