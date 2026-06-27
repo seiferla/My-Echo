@@ -17,6 +17,7 @@ import { ChatArea } from '../components/ChatArea';
 import { storage } from '../utils/storage';
 import { useCloudStatus } from '../context/CloudStatusContext';
 import { Chat, ChatMessage, withMessageIds } from '../utils/types';
+import { loadChats, pushChat, deleteChatRemote, persistLocal } from '../utils/chatSync';
 
 const { width } = Dimensions.get('window');
 
@@ -26,50 +27,50 @@ export default function ChatScreen() {
     const { isAvailable } = useCloudStatus();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [currentChatId, setCurrentChatId] = useState('1');
-    const [chats, setChats] = useState<Chat[]>([
-        { id: '1', title: 'Neuer Chat', messages: [], timestamp: Date.now() },
-    ]);
+    const [chats, setChats] = useState<Chat[]>([]);
 
-    // Lade Chats aus SecureStore beim Start
+    // useEffect "Lade Chats" ersetzen:
     useEffect(() => {
-        const loadChats = async () => {
-            const savedChats = await storage.getItem('myEchoChats');
-            if (savedChats) {
-                try {
-                    // Backfill für Chats ohne Message-IDs (vor Einführung stabiler keys gespeichert)
-                    const parsed: Chat[] = withMessageIds(JSON.parse(savedChats));
-
-                    // Prüfe ob ein neuer Chat für heute erstellt werden muss
-                    const today = new Date().setHours(0, 0, 0, 0);
-                    const latestChat = parsed[0]; // Chats sind nach timestamp absteigend sortiert (neuere oben)
-
-                    if (latestChat && new Date(latestChat.timestamp).setHours(0, 0, 0, 0) < today) {
-                        const newChat: Chat = {
-                            id: Date.now().toString(),
-                            title: 'Neuer Chat',
-                            messages: [],
-                            timestamp: Date.now(),
-                        };
-                        const updatedChats = [newChat, ...parsed];
-                        setChats(updatedChats);
-                        setCurrentChatId(newChat.id);
-                    } else {
-                        setChats(parsed);
-                        if (parsed.length > 0) {
-                            setCurrentChatId(parsed[0].id);
-                        }
-                    }
-                } catch (e) {
-                    console.error('Fehler beim Laden der Chats:', e);
-                }
+        loadChats().then((loaded) => {
+            // "Neuer Chat für heute"-Logik bleibt — operiert jetzt auf den
+            // geladenen Backend-Chats statt auf SecureStore-Rohdaten.
+            const today = new Date().setHours(0, 0, 0, 0);
+            const latest = loaded[0];
+            if (latest && new Date(latest.timestamp).setHours(0, 0, 0, 0) < today) {
+                const newChat: Chat = {
+                    id: Date.now().toString(),
+                    title: 'Neuer Chat',
+                    messages: [],
+                    timestamp: Date.now(),
+                };
+                const updated = [newChat, ...loaded];
+                setChats(updated);
+                setCurrentChatId(newChat.id);
+                pushChat(newChat);                // ← neuen Chat sofort anlegen
+            } else if (loaded.length > 0) {
+                setChats(loaded);
+                setCurrentChatId(loaded[0].id);
+            } else {
+                // Komplett leerer Zustand — eine Begrüßungs-Hülle anlegen
+                const fresh: Chat = {
+                    id: '1',
+                    title: 'Neuer Chat',
+                    messages: [],
+                    timestamp: Date.now(),
+                };
+                setChats([fresh]);
+                pushChat(fresh);
             }
-        };
-        loadChats();
+        });
     }, []);
 
-    // Speichere Chats bei Änderungen
+    // useEffect "Speichere Chats" ersetzen — lokal + Backend parallel:
     useEffect(() => {
-        storage.setItem('myEchoChats', JSON.stringify(chats));
+        if (chats.length === 0) return;
+        persistLocal(chats);                                       // lokaler Cache
+        // Aktuellen Chat pushen — nicht den ganzen Array, das wäre Verschwendung
+        const current = chats.find((c) => c.id === currentChatId);
+        if (current) pushChat(current);
     }, [chats]);
 
     const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
@@ -99,10 +100,13 @@ export default function ChatScreen() {
     };
 
     const deleteChat = (id: string) => {
+        deleteChatRemote(id);
         setChats(prevChats => {
             const newChats = prevChats.filter(chat => chat.id !== id);
             if (newChats.length === 0) {
-                return [{ id: Date.now().toString(), title: 'Neuer Chat', messages: [], timestamp: Date.now() }];
+                const fresh = { id: Date.now().toString(), title: 'Neuer Chat', messages: [], timestamp: Date.now() };
+                pushChat(fresh);
+                return [fresh];
             }
             if (id === currentChatId) {
                 setCurrentChatId(newChats[0].id);
