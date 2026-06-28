@@ -49,6 +49,8 @@ Mobile App  ──HTTP Stream──►  Backend (Pi)  ──WebSocket──►  
 6. The MP3 is stored in the device cache so the next playback of the same phrase is instant
 7. If the backend is unreachable, the app falls back to local speech synthesis automatically
 
+Chats and messages are persisted in the backend (SQLite) and synced to the device. A local copy is kept as an offline cache and merged with the server on startup, so existing history is never lost and survives a reinstall.
+
 ---
 
 ## Project Structure
@@ -56,15 +58,18 @@ Mobile App  ──HTTP Stream──►  Backend (Pi)  ──WebSocket──►  
 ```
 My-Echo/
 ├── backend/
-│   ├── main.py                 FastAPI — HTTP streaming + warmup + health
-│   ├── test_main.py            pytest suite (98% coverage)
+│   ├── main.py                 FastAPI — TTS streaming + warmup + health + chats
+│   ├── db.py                   SQLite persistence for chats & messages
+│   ├── test_main.py            pytest suite (TTS + health)
+│   ├── test_chats.py           pytest suite (chat endpoints)
 │   ├── requirements.txt
+│   ├── docker-compose.yml      Backend stack + persistent chat-DB volume
 │   └── Dockerfile
 ├── mobile-app/
 │   ├── app/                    expo-router screens
 │   ├── components/             Sidebar, ChatArea, Message
 │   ├── context/                CloudStatusContext (health check + green dot)
-│   └── utils/                  storage, tts, ttsCache, config, types, stats
+│   └── utils/                  storage, chatSync, tts, ttsCache, ttsLog, config, types, stats
 ├── monitoring/
 │   ├── docker-compose.yml      Prometheus + Grafana stack
 │   ├── prometheus/             Scrape config
@@ -92,9 +97,11 @@ My-Echo/
 - **Daily auto-chat** — a new chat is created automatically each day
 - **Two send actions** — *Send* saves and auto-plays the message; *Save* stores it silently
 - **Per-message playback** — every bubble has a play/pause button
+- **Copy message text** — long-press any message to copy its text to the clipboard
 - **Edit in fullscreen** — tap the pencil on any message to edit it in a focused, distraction-free modal
 - **Usage statistics** — tracks characters spoken and TTS response times
-- **Local persistence** — chats stored in `expo-secure-store`
+- **Backend chat sync** — chats and messages are saved to the backend database and merged with the local copy on startup, so history survives a reinstall
+- **Offline cache** — chats are also cached on-device (`expo-secure-store`) and used when the backend is unreachable
 
 ### Run Locally
 
@@ -108,33 +115,37 @@ npm start
 
 ## Backend
 
-A lightweight FastAPI service that proxies streaming TTS requests to Fish Audio. Self-hosted on a Raspberry Pi, accessible via WireGuard VPN. Distributed as a Docker image via GHCR.
+A lightweight FastAPI service that proxies streaming TTS requests to Fish Audio and persists chat history in a local SQLite database. Self-hosted on a Raspberry Pi, accessible via WireGuard VPN. Distributed as a Docker image via GHCR.
 
 ### Endpoints
 
-| Method  | Path          | Description                                           |
-|---------|---------------|-------------------------------------------------------|
-| `GET`   | `/stream/tts` | Streams MP3 audio for `?text=...` via chunked HTTP    |
-| `GET`   | `/warmup`     | Pre-warms Fish Audio connection before user sends     |
-| `GET`   | `/health`     | Returns provider status, voice/model, and API credits |
-| `GET`   | `/metrics`    | Prometheus metrics endpoint                           |
+| Method   | Path            | Description                                            |
+|----------|-----------------|--------------------------------------------------------|
+| `GET`    | `/stream/tts`   | Streams MP3 audio for `?text=...` via chunked HTTP     |
+| `GET`    | `/warmup`       | Pre-warms Fish Audio connection before user sends      |
+| `GET`    | `/health`       | Returns provider status, voice/model, and API credits  |
+| `GET`    | `/chats`        | Returns all stored chats                               |
+| `PUT`    | `/chats/{id}`   | Creates or updates a chat (upsert)                     |
+| `DELETE` | `/chats/{id}`   | Deletes a chat                                         |
+| `GET`    | `/metrics`      | Prometheus metrics endpoint                            |
 
 ### Configuration
 
-| Variable      | Default      | Purpose              |
-|---------------|--------------|----------------------|
-| `TTS_API_KEY` | —            | Fish Audio API key   |
-| `TTS_MODEL`   | `s2-pro`     | Model name           |
-| `TTS_VOICE`   | —            | Voice / reference ID |
+| Variable      | Default          | Purpose                       |
+|---------------|------------------|-------------------------------|
+| `TTS_API_KEY` | —                | Fish Audio API key            |
+| `TTS_MODEL`   | `s2-pro`         | Model name                    |
+| `TTS_VOICE`   | —                | Voice / reference ID          |
+| `DB_PATH`     | `/data/chats.db` | SQLite chat database location |
 
 ### Deploy (Raspberry Pi via Portainer)
 
 1. Portainer → **Stacks → Add stack → Web editor**
 2. Paste content of `backend/docker-compose.yml`
 3. Add environment variables above
-4. Deploy — container exposes port `4444`
+4. Deploy — container exposes port `4444` and persists chats in the `myecho-data` volume (mounted at `/data`)
 
-Updates: push to `main` → GitHub Actions builds new image → Portainer **Pull and redeploy**
+Updates: push to `main` → GitHub Actions builds new image → Portainer **Pull and redeploy**. The `myecho-data` volume is preserved across updates, so chat history is kept.
 
 ---
 
@@ -155,13 +166,13 @@ The full stack lives in [`monitoring/`](monitoring/) — deploy `monitoring/dock
 
 | Workflow | Trigger | Result |
 |---|---|---|
-| `android-release.yml` | Push tag `v*.*.*` | Signed APK attached to GitHub Release |
+| `android-release.yml` | Push tag `v*.*.*` (or manual run) | Signed APK/AAB attached to GitHub Release |
 | `backend-deploy.yml` | Push to `backend/` on `main` | Docker image pushed to GHCR |
 | `backend-tests.yml` | Every push & PR | pytest run + coverage badge update |
 
 ```bash
 # Mobile release
-git tag v1.3.1 && git push origin v1.3.1
+git tag v2.0.0 && git push origin v2.0.0
 
 # Backend deploys automatically on every push to backend/
 ```
