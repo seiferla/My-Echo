@@ -31,6 +31,16 @@ Speaking can be exhausting, painful, or impossible — and existing solutions ar
 
 ---
 
+## Demo
+
+<div align="center">
+
+<img src="docs/demo.gif" alt="myEcho in action — typing a message and having it spoken aloud" width="260" />
+
+</div>
+
+---
+
 ## How It Works
 
 <div align="center">
