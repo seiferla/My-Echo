@@ -1,0 +1,46 @@
+@startuml myecho-architecture
+!pragma layout smetana
+title myEcho — Architecture
+
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam componentStyle rectangle
+skinparam ArrowColor #44515F
+skinparam node {
+  BackgroundColor #F4F7FB
+  BorderColor #5B7FA6
+}
+skinparam database {
+  BackgroundColor #FFF6E5
+  BorderColor #B8860B
+}
+skinparam cloud {
+  BackgroundColor #EAF7EE
+  BorderColor #3C9D5A
+}
+
+node "Mobile App (Android)" as device {
+  [Compose & Chat UI] as ui
+  database "Audio cache\nLRU · 100 MB" as acache
+  database "Chat cache\n(offline)" as ccache
+  [Local speech\n(expo-speech)] as fallback
+}
+
+node "Backend — Raspberry Pi\n(FastAPI · Docker)" as pi {
+  [TTS proxy\n/stream/tts · /warmup] as tts
+  [Chat API\n/chats] as chatapi
+  database "SQLite\nchats & messages" as db
+}
+
+cloud "Fish Audio API" as fish
+
+ui  -->  tts      : text (HTTP stream)
+tts -->  ui       : MP3 chunks
+tts <--> fish     : WebSocket
+ui  ..>  acache   : cache hit / store
+ui  ..>  fallback : offline fallback
+
+ui      -->  chatapi : push / load (REST)
+chatapi -->  db
+ui      ..>  ccache  : merge on startup
+@enduml

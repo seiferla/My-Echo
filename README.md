@@ -33,13 +33,13 @@ Speaking can be exhausting, painful, or impossible — and existing solutions ar
 
 ## How It Works
 
-```
-Mobile App  ──HTTP Stream──►  Backend (Pi)  ──WebSocket──►  Fish Audio API
-            ◄───────────────               ◄────────────── (AI voice chunks)
-              MP3 streamed back
-        ▲
-        └── on-device audio cache (LRU, 100 MB cap)
-```
+<div align="center">
+
+![myEcho architecture diagram](docs/myecho-architecture.svg)
+
+</div>
+
+> Diagram source: [`docs/architecture.puml`](docs/architecture.puml) (PlantUML). Regenerate with `java -jar plantuml.jar -tsvg docs/architecture.puml`.
 
 1. User opens the compose field → backend pre-warms the Fish Audio connection
 2. User types and taps Send
@@ -49,7 +49,10 @@ Mobile App  ──HTTP Stream──►  Backend (Pi)  ──WebSocket──►  
 6. The MP3 is stored in the device cache so the next playback of the same phrase is instant
 7. If the backend is unreachable, the app falls back to local speech synthesis automatically
 
-Chats and messages are persisted in the backend (SQLite) and synced to the device. A local copy is kept as an offline cache and merged with the server on startup, so existing history is never lost and survives a reinstall.
+Chats sync independently of audio:
+
+- On startup the app loads chats from the backend and **merges** them with the local copy — nothing is overwritten, so existing history is never lost and survives a reinstall
+- When a chat changes it is saved locally and pushed to the backend; if the backend is offline the local copy is used and synced on the next reachable start
 
 ---
 
