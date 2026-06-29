@@ -296,3 +296,37 @@ export function summarizeTts(stats: TtsStats, from: number, to: number): TtsSumm
     }
     return { requests, chars, durationSec: Math.round(durationMs / 1000), perDay };
 }
+
+export interface MonthAudio {
+    key: string;   // 'YYYY-MM'
+    label: string; // z.B. 'Jun 2026'
+    minutes: number;
+}
+
+const MONTH_LABELS = [
+    'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez',
+];
+
+/**
+ * Erzeugte Audio-Minuten pro Kalendermonat, aufsummiert aus den
+ * TTS-Tagesdaten (`durationMs`). Misst die abgespielte Sprechzeit — bei
+ * Cache-Miss inkl. der Download-Zeit, also eine gute Näherung der Audiolänge.
+ */
+export function ttsAudioPerMonth(stats: TtsStats): MonthAudio[] {
+    const byMonth: Record<string, number> = {};
+    for (const [day, bucket] of Object.entries(stats)) {
+        const month = day.slice(0, 7); // 'YYYY-MM'
+        byMonth[month] = (byMonth[month] ?? 0) + (bucket?.durationMs ?? 0);
+    }
+    return Object.keys(byMonth)
+        .sort()
+        .map((key) => {
+            const [y, m] = key.split('-');
+            return {
+                key,
+                label: `${MONTH_LABELS[Number(m) - 1]} ${y}`,
+                minutes: Math.round((byMonth[key] / 60_000) * 10) / 10,
+            };
+        });
+}

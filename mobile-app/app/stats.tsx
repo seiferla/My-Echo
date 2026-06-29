@@ -25,6 +25,7 @@ import {
     topWords,
     computeTotals,
     summarizeTts,
+    ttsAudioPerMonth,
     loadTtsStats,
     TtsStats,
     TtsSummary,
@@ -141,6 +142,8 @@ export default function StatsScreen() {
     const phrases = useMemo(() => topPhrases(msgs, 8), [msgs]);
     const words = useMemo(() => topWords(msgs, 10), [msgs]);
     const tts: TtsSummary = useMemo(() => summarizeTts(ttsStats, from, to), [ttsStats, from, to]);
+    // Audio-Minuten pro Monat — bewusst über ALLE Daten, unabhängig vom Zeitfilter.
+    const audioPerMonth = useMemo(() => ttsAudioPerMonth(ttsStats), [ttsStats]);
 
     // Pro Tag bei kurzen Zeiträumen, pro Woche bei langen.
     const rangeDays = Math.round((to - from) / DAY_MS) + 1;
@@ -349,6 +352,18 @@ export default function StatsScreen() {
                                     style={styles.chart}
                                 />
                             </ChartCard>
+                        )}
+
+                        {audioPerMonth.length > 0 && (
+                            <View style={styles.chartCard}>
+                                <Text style={styles.chartTitle}>Audio pro Monat (Minuten)</Text>
+                                {audioPerMonth.map((m) => (
+                                    <View key={m.key} style={styles.rankRow}>
+                                        <Text style={styles.rankText}>{m.label}</Text>
+                                        <Text style={styles.rankCount}>{m.minutes} min</Text>
+                                    </View>
+                                ))}
+                            </View>
                         )}
 
                         {/* ---- Cache ---- */}

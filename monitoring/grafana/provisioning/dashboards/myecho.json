@@ -20,7 +20,7 @@
         }
       },
       "targets": [{
-        "expr": "round(sum(increase(http_requests_total{handler=~\"/stream/tts|/ws/tts\"}[24h])))",
+        "expr": "round(sum(increase(http_request_duration_seconds_count{handler=~\"/stream/tts|/ws/tts\"}[24h])))",
         "legendFormat": "TTS Requests (24h)"
       }]
     },
@@ -39,7 +39,7 @@
         }
       },
       "targets": [{
-        "expr": "sum(rate(http_requests_total{handler=~\"/stream/tts|/ws/tts\"}[5m])) * 60",
+        "expr": "sum(rate(http_request_duration_seconds_count{handler=~\"/stream/tts|/ws/tts\"}[5m])) * 60",
         "legendFormat": "req/min"
       }]
     },
@@ -103,15 +103,15 @@
       },
       "targets": [
         {
-          "expr": "rate(http_requests_total{handler=\"/stream/tts\",status=~\"2..\"}[5m])",
+          "expr": "rate(http_request_duration_seconds_count{handler=\"/stream/tts\",status=~\"2..\"}[5m])",
           "legendFormat": "TTS Stream ✓"
         },
         {
-          "expr": "rate(http_requests_total{handler=\"/warmup\",status=~\"2..\"}[5m])",
+          "expr": "rate(http_request_duration_seconds_count{handler=\"/warmup\",status=~\"2..\"}[5m])",
           "legendFormat": "Warmup ✓"
         },
         {
-          "expr": "rate(http_requests_total{handler=~\"/stream/tts|/ws/tts\",status=~\"4..|5..\"}[5m])",
+          "expr": "rate(http_request_duration_seconds_count{handler=~\"/stream/tts|/ws/tts\",status=~\"4..|5..\"}[5m])",
           "legendFormat": "Errors ✗"
         }
       ]
@@ -152,7 +152,7 @@
         }
       },
       "targets": [{
-        "expr": "sum(rate(http_requests_total{handler=~\"/stream/tts|/ws/tts\",status=~\"4..|5..\"}[5m])) / sum(rate(http_requests_total{handler=~\"/stream/tts|/ws/tts\"}[5m]))",
+        "expr": "sum(rate(http_request_duration_seconds_count{handler=~\"/stream/tts|/ws/tts\",status=~\"4..|5..\"}[5m])) / sum(rate(http_request_duration_seconds_count{handler=~\"/stream/tts|/ws/tts\"}[5m]))",
         "legendFormat": "Fehlerrate"
       }]
     },
@@ -166,11 +166,11 @@
       },
       "targets": [
         {
-          "expr": "rate(http_requests_total{handler=\"/warmup\",status=~\"2..\"}[5m])",
+          "expr": "rate(http_request_duration_seconds_count{handler=\"/warmup\",status=~\"2..\"}[5m])",
           "legendFormat": "Warmup Calls"
         },
         {
-          "expr": "rate(http_requests_total{handler=\"/health\",status=~\"2..\"}[5m])",
+          "expr": "rate(http_request_duration_seconds_count{handler=\"/health\",status=~\"2..\"}[5m])",
           "legendFormat": "Health Checks"
         }
       ]
