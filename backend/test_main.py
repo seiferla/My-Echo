@@ -182,7 +182,7 @@ class TestWarmup(unittest.IsolatedAsyncioTestCase):
             result = await main.warmup()
 
         self.assertEqual(result["status"], "error")
-        self.assertIn("Verbindungsfehler", result["message"])
+        self.assertEqual("Internal server error", result["message"])
 
 
 class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
