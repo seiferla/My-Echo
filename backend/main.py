@@ -123,8 +123,8 @@ async def warmup():
             _warm["ws"] = await _open_fish_connection()
             _warm["ts"] = time.monotonic()
             return {"status": "warm"}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+        except Exception:
+            return {"status": "error", "message": "Internal server error"}
 
 
 @app.get("/stream/tts")
