@@ -243,7 +243,7 @@ class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
 
     @patch("main.httpx.AsyncClient")
     async def test_health_generic_exception_returns_error(self, mock_client_class):
-        """Lines 209-210: unerwartete Exception wird als error zurückgegeben."""
+        """Unerwartete Exception wird ohne interne Details als error zurückgegeben."""
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
         mock_client.get.side_effect = Exception("Unexpected error")
@@ -252,4 +252,4 @@ class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
         response = await main.health()
 
         self.assertEqual(response["status"], "error")
-        self.assertIn("Unexpected error", response["message"])
+        self.assertEqual("Internal server error", response["message"])
