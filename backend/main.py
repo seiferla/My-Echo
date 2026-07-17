@@ -193,8 +193,8 @@ async def health():
             return {**base, "status": "unavailable", "message": "Fish Audio API Timeout"}
         except httpx.HTTPStatusError as e:
             return {**base, "status": "error", "message": f"HTTP {e.response.status_code}"}
-        except Exception as e:
-            return {**base, "status": "error", "message": str(e)}
+        except Exception:
+            return {**base, "status": "error", "message": "Internal server error"}
 
 
 # --- Endpoints (am Ende der Datei ergänzen) ---------------------------------
