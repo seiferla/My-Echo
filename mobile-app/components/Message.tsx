@@ -9,10 +9,12 @@ import {
     ToastAndroid,
     Alert,
     Vibration,
+    Share,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import * as Sharing from 'expo-sharing';
 import { Bot, Volume2, Pause, Pencil } from 'lucide-react-native';
-import { speak, stopSpeaking } from '../utils/tts';
+import { speak, stopSpeaking, getShareableAudioUri } from '../utils/tts';
 import { useCloudStatus } from '../context/CloudStatusContext';
 import { recordTtsRequest } from '../utils/ttsLog';
 
@@ -31,6 +33,7 @@ export function Message({ message, isTyping, onStartEdit, autoPlay }: MessagePro
     const isUser = message.role === 'user';
     const { isAvailable, voice, model } = useCloudStatus();
     const [isPlaying, setIsPlaying] = useState(false);
+    const isPreparingShareRef = useRef(false);
     const speakStartRef = useRef<number | null>(null);
 
     // Protokolliert eine abgeschlossene Sprachausgabe genau einmal.
@@ -53,7 +56,7 @@ export function Message({ message, isTyping, onStartEdit, autoPlay }: MessagePro
     // Long-Press auf die Bubble kopiert den Nachrichten-Text in die Zwischenablage.
     // Kurze Vibration als haptisches Signal, plus Toast (Android) bzw. Alert (iOS)
     // als visuelle Bestätigung. Stiller Failsafe bei Clipboard-Fehlern.
-    const handleLongPress = async () => {
+    const handleCopy = async () => {
         try {
             await Clipboard.setStringAsync(message.content);
             Vibration.vibrate(40);
@@ -66,6 +69,63 @@ export function Message({ message, isTyping, onStartEdit, autoPlay }: MessagePro
             // Im seltenen Fehlerfall keine UI-Lawine — der User merkt es am
             // ausbleibenden Feedback und kann nochmal drücken.
         }
+    };
+
+    // Teilt den reinen Text über das native Share-Sheet (WhatsApp ist dort eine
+    // Option unter mehreren — kein direkter whatsapp://-Deep-Link nötig).
+    const shareText = async () => {
+        try {
+            await Share.share({ message: message.content });
+        } catch {
+            // User-Abbruch oder Plattformfehler — kein weiteres Feedback nötig.
+        }
+    };
+
+    // Teilt die gesprochene Version als Audiodatei. Braucht Cloud-TTS (expo-speech
+    // erzeugt keine Datei) — bei Cache-Miss wird erst nachgeladen, das kann kurz dauern.
+    const shareAudio = async () => {
+        if (isPreparingShareRef.current) return;
+        if (!isAvailable) {
+            Alert.alert('Nicht verfügbar', 'Sprachnachricht kann nur geteilt werden, wenn die Cloud-Sprachausgabe erreichbar ist.');
+            return;
+        }
+
+        isPreparingShareRef.current = true;
+        try {
+            const uri = await getShareableAudioUri(message.content, isAvailable, voice, model);
+            if (!uri) {
+                Alert.alert('Fehler', 'Sprachnachricht konnte nicht vorbereitet werden.');
+                return;
+            }
+            if (!(await Sharing.isAvailableAsync())) {
+                Alert.alert('Nicht unterstützt', 'Teilen wird auf diesem Gerät nicht unterstützt.');
+                return;
+            }
+            await Sharing.shareAsync(uri, {
+                mimeType: 'audio/mpeg',
+                dialogTitle: 'Sprachnachricht teilen',
+            });
+        } catch {
+            Alert.alert('Fehler', 'Sprachnachricht konnte nicht geteilt werden.');
+        } finally {
+            isPreparingShareRef.current = false;
+        }
+    };
+
+    const handleShare = () => {
+        Alert.alert('Teilen als', undefined, [
+            { text: 'Text', onPress: shareText },
+            { text: 'Sprachnachricht', onPress: shareAudio },
+            { text: 'Abbrechen', style: 'cancel' },
+        ]);
+    };
+
+    const handleLongPress = () => {
+        Alert.alert('Nachricht', undefined, [
+            { text: 'Kopieren', onPress: handleCopy },
+            { text: 'Teilen', onPress: handleShare },
+            { text: 'Abbrechen', style: 'cancel' },
+        ]);
     };
 
     const handleSpeak = async () => {
@@ -108,7 +168,7 @@ export function Message({ message, isTyping, onStartEdit, autoPlay }: MessagePro
                     pressed && styles.bubblePressed,
                 ]}
                 accessibilityRole="text"
-                accessibilityHint="Lang drücken zum Kopieren"
+                accessibilityHint="Lang drücken zum Kopieren oder Teilen"
             >
                 <Text style={[
                     styles.text,

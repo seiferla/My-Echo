@@ -176,6 +176,35 @@ async function speakWithCloud(
     await playLocalAudio(localUri, session);
 }
 
+// Besorgt die lokale Audio-Datei zu einem Text zum Teilen (z.B. per WhatsApp) —
+// spielt nichts ab. Nutzt denselben Cache wie speak(), lädt bei einem Cache-Miss
+// aber selbst nach. Ohne Cloud-TTS gibt es keine Datei zum Teilen (expo-speech
+// erzeugt keine Audiodatei) → null.
+export async function getShareableAudioUri(
+    text: string,
+    useCloud: boolean,
+    voice = '',
+    model = '',
+): Promise<string | null> {
+    if (!useCloud) return null;
+
+    try {
+        const cachedUri = await getCachedUri(text, voice, model);
+        if (cachedUri) return cachedUri;
+
+        const url = `${BACKEND_STREAM_URL}?text=${encodeURIComponent(text)}`;
+        return await Promise.race([
+            downloadAndCache(text, url, voice, model),
+            new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('Download timeout')), DOWNLOAD_TIMEOUT_MS)
+            ),
+        ]);
+    } catch (e) {
+        console.warn(`${TAG} getShareableAudioUri failed:`, e);
+        return null;
+    }
+}
+
 export async function speak(
     text: string,
     useCloud: boolean,
