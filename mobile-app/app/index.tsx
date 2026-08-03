@@ -14,7 +14,6 @@ import { Menu, PenSquare } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Sidebar } from '../components/Sidebar';
 import { ChatArea } from '../components/ChatArea';
-import { storage } from '../utils/storage';
 import { useCloudStatus } from '../context/CloudStatusContext';
 import { Chat, ChatMessage, withMessageIds } from '../utils/types';
 import { loadChats, pushChat, deleteChatRemote, persistLocal } from '../utils/chatSync';
@@ -95,7 +94,7 @@ export default function ChatScreen() {
 
     const renameChat = (id: string, newTitle: string) => {
         setChats(prevChats => prevChats.map(chat =>
-            chat.id === id ? { ...chat, title: newTitle } : chat
+            chat.id === id ? { ...chat, title: newTitle, titleIsCustom: true } : chat
         ));
     };
 
@@ -121,9 +120,18 @@ export default function ChatScreen() {
     };
 
     const updateChat = (id: string, messages: ChatMessage[]) => {
-        setChats(prevChats => prevChats.map(chat => 
-            chat.id === id 
-                ? { ...chat, messages, title: messages[0]?.content.slice(0, 30) || 'Neuer Chat' }
+        setChats(prevChats => prevChats.map(chat =>
+            chat.id === id
+                ? {
+                    ...chat,
+                    messages,
+                    // Manuell umbenannte Chats bleiben unangetastet — sonst würde
+                    // jede weitere Nachricht den Titel wieder aus messages[0] ableiten
+                    // und den Rename überschreiben.
+                    title: chat.titleIsCustom
+                        ? chat.title
+                        : messages[0]?.content.slice(0, 30) || 'Neuer Chat',
+                }
                 : chat
         ));
     };

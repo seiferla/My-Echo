@@ -29,7 +29,6 @@ interface ChatAreaProps {
 
 export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     const [input, setInput] = useState('');
-    const [isTyping] = useState(false);
     const [lastSentIndex, setLastSentIndex] = useState<number | null>(null);
     const [isComposing, setIsComposing] = useState(false);
     // Wenn editingIndex !== null, zeigt der Modal den Edit-Modus (Check + X statt Save + Send).

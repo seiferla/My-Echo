@@ -23,13 +23,12 @@ interface MessageProps {
         role: 'user' | 'assistant';
         content: string;
     };
-    isTyping?: boolean;
     // Editing happens in a fullscreen modal owned by ChatArea — see handleStartEdit there.
     onStartEdit?: () => void;
     autoPlay?: boolean;
 }
 
-export function Message({ message, isTyping, onStartEdit, autoPlay }: MessageProps) {
+export function Message({ message, onStartEdit, autoPlay }: MessageProps) {
     const isUser = message.role === 'user';
     const { isAvailable, voice, model } = useCloudStatus();
     const [isPlaying, setIsPlaying] = useState(false);

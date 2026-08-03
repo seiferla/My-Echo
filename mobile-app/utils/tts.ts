@@ -224,8 +224,11 @@ export async function speak(
             return;
         } catch (error) {
             if (error instanceof AbortedError) {
+                // An den Aufrufer durchreichen statt hier stillschweigend zu resolven —
+                // sonst hält handleSpeak() eine abgebrochene Wiedergabe für abgeschlossen
+                // und loggt sie fälschlich als vollständigen TTS-Request in die Stats.
                 console.log(`${TAG} Playback aborted — skipping fallback`);
-                return;
+                throw error;
             }
             console.warn(`${TAG} Cloud TTS failed, falling back to expo-speech:`, error);
         }

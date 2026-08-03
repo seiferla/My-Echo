@@ -10,6 +10,9 @@ export interface ChatMessage {
 export interface Chat {
     id: string;
     title: string;
+    // Gesetzt, sobald der Titel manuell umbenannt wurde — verhindert, dass
+    // updateChat() ihn beim nächsten Senden wieder aus messages[0] ableitet.
+    titleIsCustom?: boolean;
     messages: ChatMessage[];
     timestamp: number;
     pinned?: boolean;
