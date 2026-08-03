@@ -1,9 +1,8 @@
 import { Chat, withMessageIds } from './types';
-import { storage } from './storage';
+import { readChats, writeChats } from './chatStorage';
 import { BACKEND_CHATS_URL } from './config';
 
 const TAG = '[myEcho][Sync]';
-const STORAGE_KEY = 'myEchoChats';
 const FETCH_TIMEOUT_MS = 5_000;
 
 function parseChats(raw: string | null): Chat[] {
@@ -53,7 +52,7 @@ function mergeChats(local: Chat[], remote: Chat[]): Chat[] {
  * Offline / Backend nicht erreichbar → reiner lokaler Verlauf, ohne Verlust.
  */
 export async function loadChats(): Promise<Chat[]> {
-    const local = parseChats(await storage.getItem(STORAGE_KEY));
+    const local = parseChats(await readChats());
 
     try {
         const response = await fetch(BACKEND_CHATS_URL, {
@@ -79,7 +78,7 @@ export async function loadChats(): Promise<Chat[]> {
             }
         }
 
-        await storage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        await writeChats(JSON.stringify(merged));
         console.log(
             `${TAG} Merged ${remote.length} remote + ${local.length} local → ${merged.length} chats`
         );
@@ -124,5 +123,5 @@ export async function deleteChatRemote(chatId: string): Promise<void> {
  * Backend-Push aufgerufen — der lokale Cache ist immer der UI-Stand.
  */
 export async function persistLocal(chats: Chat[]): Promise<void> {
-    await storage.setItem(STORAGE_KEY, JSON.stringify(chats));
+    await writeChats(JSON.stringify(chats));
 }

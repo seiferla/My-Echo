@@ -1,4 +1,5 @@
-import { storage } from './storage';
+
+import { readChats } from './chatStorage';
 import { getTtsStats, dayKey, TtsStats } from './ttsLog';
 
 export type { TtsStats } from './ttsLog';
@@ -6,7 +7,7 @@ export type { TtsStats } from './ttsLog';
 /**
  * Auswertungslogik für die Statistikseite.
  * Alle Nachrichten-Statistiken werden aus dem lokal gespeicherten
- * 'myEchoChats'-Eintrag berechnet, die TTS-Statistiken aus 'myEchoTtsStats'.
+ * Chat-Verlauf berechnet, die TTS-Statistiken aus 'myEchoTtsStats'.
  */
 
 export interface ChatMessage {
@@ -35,8 +36,6 @@ export interface FlatMessage {
     editCount: number;
 }
 
-const CHATS_KEY = 'myEchoChats';
-
 // Kleine deutsche Stopwortliste für die Wort-Auswertung.
 const STOPWORDS = new Set([
     'der', 'die', 'das', 'und', 'ist', 'ich', 'du', 'er', 'sie', 'es', 'wir',
@@ -49,7 +48,7 @@ const STOPWORDS = new Set([
 ]);
 
 export async function loadChats(): Promise<Chat[]> {
-    const raw = await storage.getItem(CHATS_KEY);
+    const raw = await readChats();
     if (!raw) return [];
     try {
         return JSON.parse(raw) as Chat[];

@@ -120,6 +120,7 @@ My-Echo/
 
 ```bash
 cd mobile-app
+cp .env.example .env   # EXPO_PUBLIC_BACKEND_URL auf die eigene Backend-IP setzen
 npm install
 npm start
 ```
