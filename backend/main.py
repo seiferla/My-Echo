@@ -49,6 +49,17 @@ WS_URL = "wss://api.fish.audio/v1/tts/live"
 AUDIO_MODEL = os.getenv("TTS_MODEL", "s2-pro")
 AUDIO_REFERENCE_ID = os.getenv("TTS_VOICE", "")
 
+# Standard hier: "balanced" — bester TTFA/Qualitäts-Kompromiss fürs Streaming
+AUDIO_LATENCY = os.getenv("TTS_LATENCY", "balanced")
+
+# chunk_length: Token-Chunkgröße (typ. 100–300, Fish-Default 200). Kleinere
+# Werte erzwingen früheres erstes Audio (schnellere TTFA) auf Kosten etwas
+# höheren Overheads. Für minimale TTFA z.B. TTS_CHUNK_LENGTH=100 setzen.
+try:
+    AUDIO_CHUNK_LENGTH = int(os.getenv("TTS_CHUNK_LENGTH", "200"))
+except ValueError:
+    AUDIO_CHUNK_LENGTH = 200
+
 # --- Pre-Warming State -------------------------------------------------------
 _warm = {"ws": None, "ts": 0.0}
 _warm_lock = asyncio.Lock()
@@ -68,7 +79,8 @@ def _start_payload() -> bytes:
         "request": {
             "text": "",
             "format": "mp3",
-            "latency": "normal",
+            "latency": AUDIO_LATENCY,
+            "chunk_length": AUDIO_CHUNK_LENGTH,
             "reference_id": AUDIO_REFERENCE_ID,
             "prosody": {
                 "speed": 0.85,

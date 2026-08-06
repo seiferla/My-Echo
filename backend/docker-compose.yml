@@ -9,6 +9,8 @@ services:
       TTS_API_KEY: ${TTS_API_KEY}
       TTS_MODEL: ${TTS_MODEL:-s2-pro}
       TTS_VOICE: ${TTS_VOICE:-}
+      TTS_LATENCY: ${TTS_LATENCY:-balanced}
+      TTS_CHUNK_LENGTH: ${TTS_CHUNK_LENGTH:-200}
       DB_PATH: /data/chats.db
     volumes:
       - myecho-data:/data

@@ -151,7 +151,6 @@ async function speakWithCloud(
     const preview = text.length > 40 ? text.slice(0, 40) + '…' : text;
     console.log(`${TAG} speak "${preview}" (${text.length} chars) voice=${voice || '?'} model=${model || '?'}`);
 
-    // Cache-Lookup
     const cachedUri = await getCachedUri(text, voice, model);
     ensureActive();
 
@@ -161,10 +160,20 @@ async function speakWithCloud(
         return;
     }
 
-    // Cache-Miss → Download
-    console.log(`${TAG} Cache MISS — downloading from backend`);
+    // Cache-Miss → erst progressiv aus dem Stream (TTFA am ersten Chunk).
+    // Falls der Player die chunked Response nicht abspielt, auf Download+Cache
+    // zurückfallen — nie schlechter als vorher, und der Cache bleibt befüllt.
     const url = `${BACKEND_STREAM_URL}?text=${encodeURIComponent(text)}`;
+    try {
+        console.log(`${TAG} Cache MISS — streaming from backend`);
+        await playLocalAudio(url, session);
+        return;
+    } catch (e) {
+        if (e instanceof AbortedError) throw e;
+        console.warn(`${TAG} Streaming failed, falling back to download:`, e);
+    }
 
+    ensureActive();
     const localUri = await Promise.race([
         downloadAndCache(text, url, voice, model),
         new Promise<never>((_, reject) =>
@@ -172,7 +181,6 @@ async function speakWithCloud(
         ),
     ]);
     ensureActive();
-
     await playLocalAudio(localUri, session);
 }
 
