@@ -6,10 +6,14 @@ import httpx
 import websockets
 from contextlib import asynccontextmanager
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from db import init_db, close_db, list_chats, upsert_chat, delete_chat
 
@@ -43,6 +47,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 Instrumentator().instrument(app).expose(app)
+
+# Rate limiting: single-user app, generous limits to prevent API abuse
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS: allow mobile app (Expo) and local dev origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8081",   # Expo web
+        "http://localhost:19006",  # Expo web (alt)
+        "exp://*",                 # Expo Go (native)
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 FISH_API_KEY = os.getenv("TTS_API_KEY", "")
 WS_URL = "wss://api.fish.audio/v1/tts/live"
@@ -140,7 +162,8 @@ async def warmup():
 
 
 @app.get("/stream/tts")
-async def stream_tts(text: str):
+@limiter.limit("30/minute")
+async def stream_tts(request: Request, text: str):
     async def generate():
         # 1. Vorgewärmte Verbindung nutzen, sonst frisch öffnen
         ws = await _take_warm_connection()
