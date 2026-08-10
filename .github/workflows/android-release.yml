@@ -29,9 +29,6 @@ permissions:
 env:
   NODE_VERSION: "22"
   JAVA_VERSION: "17"
-  # JS-basierte Actions auf den Node-24-Runtime zwingen. Ohne das laufen
-  # actions/* noch auf dem ab Juni 2026 deprecateten Node-20-Runtime.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-android:
@@ -63,13 +60,13 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Set up Gradle (mit Caching)
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Versionsname bestimmen
         id: version
@@ -91,7 +88,7 @@ jobs:
       # ----------------------------------------------------------------------
       - name: Restore prebuild cache
         id: prebuild-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: mobile-app/android
           key: prebuild-${{ runner.os }}-${{ hashFiles('mobile-app/app.json', 'mobile-app/package-lock.json', 'mobile-app/app/**', 'mobile-app/assets/**') }}
@@ -102,7 +99,7 @@ jobs:
 
       - name: Save prebuild cache
         if: steps.prebuild-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: mobile-app/android
           key: ${{ steps.prebuild-cache.outputs.cache-primary-key }}
@@ -114,7 +111,7 @@ jobs:
       # darf also bedenkenlos gespeichert werden.
       # ----------------------------------------------------------------------
       - name: Cache native build outputs
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             mobile-app/android/.gradle
@@ -185,7 +182,7 @@ jobs:
           echo "path=mobile-app/android/$file" >> "$GITHUB_OUTPUT"
 
       - name: APK/AAB als Artefakt hochladen
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: myecho-${{ steps.version.outputs.name }}-${{ env.FORMAT }}
           path: ${{ steps.artifact.outputs.path }}
