@@ -4,6 +4,14 @@ import msgpack
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import main
+from starlette.requests import Request
+
+
+def _mock_request():
+    """Build a mock Request for tests that call rate-limited endpoints directly."""
+    req = MagicMock(spec=Request)
+    req.client.host = "127.0.0.1"
+    return req
 
 
 class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
@@ -63,7 +71,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
         warm_ws = self._make_ws_mock()
 
         with patch.object(main, "_take_warm_connection", AsyncMock(return_value=warm_ws)):
-            response = await main.stream_tts("Hallo Welt")
+            response = await main.stream_tts(_mock_request(), "Hallo Welt")
             collected = b"".join([c async for c in response.body_iterator])
 
         self.assertEqual(collected, b"chunk1chunk2")
@@ -74,7 +82,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(main, "_take_warm_connection", AsyncMock(return_value=None)), \
              patch.object(main, "_open_fish_connection", AsyncMock(return_value=fresh_ws)):
-            response = await main.stream_tts("Test")
+            response = await main.stream_tts(_mock_request(), "Test")
             collected = b"".join([c async for c in response.body_iterator])
 
         self.assertEqual(collected, b"chunk1chunk2")
@@ -88,7 +96,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(main, "_take_warm_connection", AsyncMock(return_value=dead_ws)), \
              patch.object(main, "_open_fish_connection", AsyncMock(return_value=fresh_ws)):
-            response = await main.stream_tts("Retry test")
+            response = await main.stream_tts(_mock_request(), "Retry test")
             collected = b"".join([c async for c in response.body_iterator])
 
         self.assertEqual(collected, b"chunk1chunk2")
@@ -103,7 +111,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(main, "_take_warm_connection", AsyncMock(return_value=dead_ws)), \
              patch.object(main, "_open_fish_connection", AsyncMock(return_value=fresh_ws)):
-            response = await main.stream_tts("Close exception test")
+            response = await main.stream_tts(_mock_request(), "Close exception test")
             collected = b"".join([c async for c in response.body_iterator])
 
         self.assertEqual(collected, b"chunk1chunk2")
@@ -115,7 +123,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(main, "_take_warm_connection", AsyncMock(return_value=None)), \
              patch.object(main, "_open_fish_connection", AsyncMock(return_value=failing_ws)):
-            response = await main.stream_tts("fail")
+            response = await main.stream_tts(_mock_request(), "fail")
             with self.assertRaises(Exception):
                 async for _ in response.body_iterator:
                     pass
@@ -126,7 +134,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
         ws.close.side_effect = Exception("close failed")
 
         with patch.object(main, "_take_warm_connection", AsyncMock(return_value=ws)):
-            response = await main.stream_tts("finally test")
+            response = await main.stream_tts(_mock_request(), "finally test")
             collected = b"".join([c async for c in response.body_iterator])
 
         self.assertEqual(collected, b"chunk1chunk2")
@@ -135,7 +143,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
         ws = self._make_ws_mock()
         with patch.object(main, "_take_warm_connection", AsyncMock(return_value=None)), \
              patch.object(main, "_open_fish_connection", AsyncMock(return_value=ws)):
-            response = await main.stream_tts("Audio-Typ Test")
+            response = await main.stream_tts(_mock_request(), "Audio-Typ Test")
             self.assertEqual(response.media_type, "audio/mpeg")
 
 
