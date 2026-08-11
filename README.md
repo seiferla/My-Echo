@@ -15,7 +15,7 @@ Type what you want to say — myEcho speaks it back in a natural AI voice.
 ![Expo](https://img.shields.io/badge/Expo-56-000020?logo=expo&logoColor=white)
 ![React Native](https://img.shields.io/badge/React%20Native-0.85-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.139-009688?logo=fastapi&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![Backend Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/seiferla/6a78432e927c4d553d55828c74b8859d/raw/myecho-coverage.json)
 
@@ -114,7 +114,7 @@ My-Echo/
 - **Edit in fullscreen** — tap the pencil on any message to edit it in a focused, distraction-free modal
 - **Usage statistics** — tracks characters spoken and TTS response times
 - **Backend chat sync** — chats and messages are saved to the backend database and merged with the local copy on startup, so history survives a reinstall
-- **Offline cache** — chats are also cached on-device (`expo-secure-store`) and used when the backend is unreachable
+- **Offline cache** — chats are cached on-device as a local JSON file and used when the backend is unreachable
 
 ### Run Locally
 
@@ -147,10 +147,12 @@ A lightweight FastAPI service that proxies streaming TTS requests to Fish Audio 
 
 | Variable      | Default          | Purpose                       |
 |---------------|------------------|-------------------------------|
-| `TTS_API_KEY` | —                | Fish Audio API key            |
-| `TTS_MODEL`   | `s2-pro`         | Model name                    |
-| `TTS_VOICE`   | —                | Voice / reference ID          |
-| `DB_PATH`     | `/data/chats.db` | SQLite chat database location |
+| `TTS_API_KEY`      | —                | Fish Audio API key            |
+| `TTS_MODEL`        | `s2-pro`         | Model name                    |
+| `TTS_VOICE`        | —                | Voice / reference ID          |
+| `TTS_LATENCY`      | `balanced`       | `normal`, `balanced`, or `low`|
+| `TTS_CHUNK_LENGTH` | `50`             | Tokens before first audio chunk (lower = faster TTFA) |
+| `DB_PATH`          | `/data/chats.db` | SQLite chat database location |
 
 ### Deploy (Raspberry Pi via Portainer)
 
@@ -165,10 +167,11 @@ Updates: push to `main` → GitHub Actions builds new image → Portainer **Pull
 
 ## Monitoring
 
-Prometheus + Grafana dashboard self-hosted on the Pi.
+Prometheus + Grafana dashboard self-hosted on the Pi. The Grafana URL is configured via `BACKEND_HOST` in `monitoring/.env`.
 
-```
-http://192.168.178.21:3001
+```bash
+cp monitoring/.env.example monitoring/.env   # set BACKEND_HOST to your Pi IP
+docker compose -f monitoring/docker-compose.yml up -d
 ```
 
 Shows request rate, latency (p50/p95/p99), error rate and warmup hit rate.
@@ -186,7 +189,7 @@ The full stack lives in [`monitoring/`](monitoring/) — deploy `monitoring/dock
 
 ```bash
 # Mobile release
-git tag v2.0.0 && git push origin v2.0.0
+git tag v2.0.1 && git push origin v2.0.1
 
 # Backend deploys automatically on every push to backend/
 ```
