@@ -74,13 +74,13 @@ AUDIO_REFERENCE_ID = os.getenv("TTS_VOICE", "")
 # Standard hier: "balanced" — bester TTFA/Qualitäts-Kompromiss fürs Streaming
 AUDIO_LATENCY = os.getenv("TTS_LATENCY", "balanced")
 
-# chunk_length: Token-Chunkgröße (typ. 100–300, Fish-Default 200). Kleinere
-# Werte erzwingen früheres erstes Audio (schnellere TTFA) auf Kosten etwas
-# höheren Overheads. Für minimale TTFA z.B. TTS_CHUNK_LENGTH=100 setzen.
+# chunk_length: Token-Chunkgröße (typ. 30–300, Fish-Default 200). Kleinere
+# Werte erzwingen früheres erstes Audio (schnellere TTFA). 50 ist ein guter
+# Kompromiss für typische AAC-Nachrichten (2–200 Zeichen).
 try:
-    AUDIO_CHUNK_LENGTH = int(os.getenv("TTS_CHUNK_LENGTH", "200"))
+    AUDIO_CHUNK_LENGTH = int(os.getenv("TTS_CHUNK_LENGTH", "50"))
 except ValueError:
-    AUDIO_CHUNK_LENGTH = 200
+    AUDIO_CHUNK_LENGTH = 50
 
 # --- Pre-Warming State -------------------------------------------------------
 _warm = {"ws": None, "ts": 0.0}
