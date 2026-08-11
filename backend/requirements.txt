@@ -7,4 +7,4 @@ prometheus-fastapi-instrumentator~=8.1.0
 pytest-cov~=7.1.0
 aiosqlite~=0.22.1
 pydantic~=2.13.4
-slowapi~=0.1.9
+slowapi~=0.1.10
