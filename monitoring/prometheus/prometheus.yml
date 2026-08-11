@@ -5,5 +5,5 @@ global:
 scrape_configs:
   - job_name: "myecho-backend"
     static_configs:
-      - targets: ["192.168.178.21:4444"]
+      - targets: ["__BACKEND_HOST__:4444"]
     metrics_path: "/metrics"

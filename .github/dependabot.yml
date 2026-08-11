@@ -6,7 +6,7 @@
 version: 2
 updates:
   - package-ecosystem: "npm"
-    directory: "/"
+    directory: "/mobile-app"
     schedule:
       interval: "daily"
     groups:
@@ -18,7 +18,7 @@ updates:
     open-pull-requests-limit: 20
 
   - package-ecosystem: "pip"
-    directory: "/"
+    directory: "/backend"
     schedule:
       interval: "daily"
     groups:

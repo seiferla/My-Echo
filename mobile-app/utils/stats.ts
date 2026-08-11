@@ -1,7 +1,9 @@
 
 import { readChats } from './chatStorage';
 import { getTtsStats, dayKey, TtsStats } from './ttsLog';
+import { Chat, ChatMessage } from './types';
 
+export type { Chat, ChatMessage };
 export type { TtsStats } from './ttsLog';
 
 /**
@@ -9,22 +11,6 @@ export type { TtsStats } from './ttsLog';
  * Alle Nachrichten-Statistiken werden aus dem lokal gespeicherten
  * Chat-Verlauf berechnet, die TTS-Statistiken aus 'myEchoTtsStats'.
  */
-
-export interface ChatMessage {
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp?: number;
-    via?: 'send' | 'save';
-    editCount?: number;
-}
-
-export interface Chat {
-    id: string;
-    title: string;
-    messages: ChatMessage[];
-    timestamp: number;
-    pinned?: boolean;
-}
 
 /** Eine einzelne geäußerte (vom Nutzer verfasste) Nachricht, flach. */
 export interface FlatMessage {
