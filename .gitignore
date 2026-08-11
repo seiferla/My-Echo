@@ -23,4 +23,4 @@ mobile-app/.idea/
 # secrets
 .env
 .env.local
-.env.*.local
+.env.*.localFETCH_HEAD
