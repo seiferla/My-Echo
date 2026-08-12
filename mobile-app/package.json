@@ -35,7 +35,7 @@
   },
   "devDependencies": {
     "@expo/config-plugins": "^56.0.8",
-    "@types/react": "~19.2.15",
+    "@types/react": "~19.2.18",
     "typescript": "^6.0.3"
   },
   "overrides": {
