@@ -23,7 +23,7 @@
     "expo-sharing": "~56.0.23",
     "expo-speech": "~56.0.3",
     "expo-status-bar": "~56.0.4",
-    "lucide-react-native": "^1.16.0",
+    "lucide-react-native": "^1.30.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
