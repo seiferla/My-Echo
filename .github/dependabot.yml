@@ -1,6 +1,9 @@
 # Dependabot-Konfiguration für myEcho.
-# Alle Abhängigkeiten pro Ökosystem werden in EINEM wöchentlichen PR gebündelt —
-# keine Flut von Einzel-PRs. Maximal 5 offene PRs insgesamt.
+# Jede Abhängigkeit bekommt einen eigenen PR — kein Sammel-PR mehr.
+# Ausnahme: die Expo-SDK-Pakete werden in EINER Gruppe gebündelt, da sie
+# versionsgebunden sind (expo, expo-*, @expo/*, react, react-dom, react-native,
+# react-native-screens, safe-area-context, svg, web) und nur zusammen funktionieren.
+# Maximal 5 offene PRs insgesamt.
 #
 # Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
@@ -12,9 +15,18 @@ updates:
       interval: "weekly"
       day: "monday"
     groups:
-      all-dependencies:
+      expo-sdk:
         patterns:
-          - "*"
+          - "expo"
+          - "expo-*"
+          - "@expo/*"
+          - "react"
+          - "react-dom"
+          - "react-native"
+          - "react-native-screens"
+          - "react-native-safe-area-context"
+          - "react-native-svg"
+          - "react-native-web"
     open-pull-requests-limit: 5
 
   - package-ecosystem: "pip"
@@ -22,8 +34,4 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    groups:
-      all-dependencies:
-        patterns:
-          - "*"
     open-pull-requests-limit: 5
