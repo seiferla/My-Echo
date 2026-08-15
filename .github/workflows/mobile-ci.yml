@@ -23,10 +23,11 @@ permissions:
   contents: read
 
 env:
-  # MUSS zu android-release.yml passen. Node 22 liefert npm 10.x, das Lockfiles
-  # strenger prüft als das npm 11.x neuerer Node-Versionen. Bei einer anderen
-  # Version hier würde der Check grün sein, der Release-Build aber trotzdem rot.
-  NODE_VERSION: "22"
+  # MUSS zu android-release.yml passen. Unterschiedliche Node-Versionen bringen
+  # unterschiedliche npm-Versionen mit, die Lockfiles unterschiedlich streng
+  # prüfen — bei einer abweichenden Version hier würde der Check grün sein,
+  # der Release-Build aber trotzdem rot.
+  NODE_VERSION: "24"
 
 jobs:
   check:
