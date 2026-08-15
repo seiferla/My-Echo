@@ -1,0 +1,56 @@
+name: Mobile CI
+
+# Schneller Check für die Expo-App bei jeder Änderung an mobile-app/.
+#
+# Zweck: Dependency-Probleme früh fangen — VOR dem Merge und vor dem teuren
+# nativen Build in android-release.yml (der nur manuell bzw. bei Tags läuft).
+# `npm ci` schlägt fehl, sobald package.json und package-lock.json nicht mehr
+# synchron sind — genau das hat ein Dependabot-PR (@expo/metro-runtime auf die
+# SDK-57-Zeile, während der Rest auf SDK 56 bleibt) unbemerkt nach main gebracht.
+on:
+  pull_request:
+    paths: ["mobile-app/**"]
+  push:
+    branches: [main]
+    paths: ["mobile-app/**"]
+
+# Pro Branch nur ein Lauf gleichzeitig; ältere Läufe abbrechen.
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # MUSS zu android-release.yml passen. Node 22 liefert npm 10.x, das Lockfiles
+  # strenger prüft als das npm 11.x neuerer Node-Versionen. Bei einer anderen
+  # Version hier würde der Check grün sein, der Release-Build aber trotzdem rot.
+  NODE_VERSION: "22"
+
+jobs:
+  check:
+    name: Install & typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile-app/package-lock.json
+
+      # Der eigentliche Gatekeeper: bricht ab, wenn das Lockfile nicht zu
+      # package.json passt.
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit

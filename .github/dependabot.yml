@@ -27,6 +27,25 @@ updates:
           - "react-native-safe-area-context"
           - "react-native-svg"
           - "react-native-web"
+    # Expo kodiert die SDK-Nummer als semver-Major (56.x -> 57.x = neues SDK).
+    # Ein einzelnes @expo/*-Paket auf die nächste SDK-Zeile zu heben, zerreißt
+    # den Stack: die anderen Pakete bleiben auf der alten Zeile, npm muss eine
+    # zweite, nicht gepinnte Kopie auflösen, und `npm ci` bricht ab, sobald
+    # deren Patch-Version driftet. Deshalb hier nur Patches automatisch.
+    # SDK-Upgrades bewusst und komplett per `npx expo install expo@^57 --fix`.
+    ignore:
+      - dependency-name: "@expo/*"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "expo"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+      - dependency-name: "expo-*"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
     open-pull-requests-limit: 5
 
   - package-ecosystem: "pip"
