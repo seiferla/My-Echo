@@ -39,7 +39,7 @@
     "typescript": "^6.0.3"
   },
   "overrides": {
-    "react-native-reanimated": "4.3.1",
+    "react-native-reanimated": "4.5.3",
     "@xmldom/xmldom": "^0.9.10",
     "postcss": "^8.5.10",
     "tar": "^7.5.11",
