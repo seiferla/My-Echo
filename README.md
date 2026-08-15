@@ -15,6 +15,7 @@ Type what you want to say — myEcho speaks it back in a natural AI voice.
 ![Expo](https://img.shields.io/badge/Expo-56-000020?logo=expo&logoColor=white)
 ![React Native](https://img.shields.io/badge/React%20Native-0.85-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white)
+![Node](https://img.shields.io/badge/Node-24_LTS-339933?logo=node.js&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![Backend Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/seiferla/6a78432e927c4d553d55828c74b8859d/raw/myecho-coverage.json)
@@ -89,6 +90,7 @@ My-Echo/
 │   └── grafana/                Dashboard + datasource provisioning
 └── .github/workflows/
     ├── android-release.yml     Signed APK/AAB build + GitHub Release
+    ├── mobile-ci.yml           npm ci + typecheck on every mobile-app push/PR
     ├── backend-deploy.yml      Docker image build + push to GHCR
     └── backend-tests.yml       pytest + coverage badge
 ```
@@ -117,6 +119,8 @@ My-Echo/
 - **Offline cache** — chats are cached on-device as a local JSON file and used when the backend is unreachable
 
 ### Run Locally
+
+Requires Node 24 LTS (matches CI and the Docker image).
 
 ```bash
 cd mobile-app
@@ -184,6 +188,7 @@ The full stack lives in [`monitoring/`](monitoring/) — deploy `monitoring/dock
 | Workflow | Trigger | Result |
 |---|---|---|
 | `android-release.yml` | Push tag `v*.*.*` (or manual run) | Signed APK/AAB attached to GitHub Release |
+| `mobile-ci.yml` | Push & PR touching `mobile-app/` | `npm ci` + TypeScript typecheck |
 | `backend-deploy.yml` | Push to `backend/` on `main` | Docker image pushed to GHCR |
 | `backend-tests.yml` | Every push & PR | pytest run + coverage badge update |
 
