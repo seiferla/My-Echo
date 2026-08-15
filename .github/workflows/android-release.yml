@@ -27,7 +27,7 @@ permissions:
   contents: write # nötig, um bei Tags ein Release zu erstellen
 
 env:
-  NODE_VERSION: "22"
+  NODE_VERSION: "24"
   JAVA_VERSION: "17"
 
 jobs:
