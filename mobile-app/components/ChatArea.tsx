@@ -15,6 +15,9 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Send, X, Save, Check, ChevronDown } from 'lucide-react-native';
 import { Message } from './Message';
+import { PhraseBar } from './PhraseBar';
+import { usePhrases } from '../context/PhrasesContext';
+import { Phrase } from '../utils/phrases';
 import { BACKEND_WARMUP_URL } from '../utils/config';
 import { ChatMessage, newMessageId } from '../utils/types';
 
@@ -28,6 +31,7 @@ interface ChatAreaProps {
 }
 
 export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
+    const { visiblePhrases, settings, recordUse } = usePhrases();
     const [input, setInput] = useState('');
     const [lastSentIndex, setLastSentIndex] = useState<number | null>(null);
     const [isComposing, setIsComposing] = useState(false);
@@ -40,6 +44,10 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     // true wenn der User nahe genug am unteren Ende der Liste ist.
     // Startet true → Pfeil bleibt initial verborgen, Auto-Scroll aktiv.
     const [isNearBottom, setIsNearBottom] = useState(true);
+
+    // Die Phrasen wandern mit: leerer Chat → Kacheln in der Mitte,
+    // sobald Nachrichten da sind → schmale Zeile über der Eingabe.
+    const showStrip = (chat?.messages.length ?? 0) > 0 && visiblePhrases.length > 0;
 
     const isEditMode = editingIndex !== null;
     const isModalOpen = isComposing || isEditMode;
@@ -77,40 +85,44 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
         setLastSentIndex(null);
     }, [chat?.id]);
 
-    const handleSend = () => {
-        if (!input.trim() || !chat) return;
+    // Gemeinsamer Weg für Senden (mit Sprachausgabe) und Speichern (stumm).
+    // Nimmt den Text als Parameter, damit auch eine Phrase direkt gesendet
+    // werden kann, ohne vorher durch das Eingabefeld zu laufen.
+    const appendMessage = (text: string, via: 'send' | 'save') => {
+        const content = text.trim();
+        if (!content || !chat) return;
 
         const userMessage: ChatMessage = {
             id: newMessageId(),
             role: 'user',
-            content: input,
+            content,
             timestamp: Date.now(),
-            via: 'send',
+            via,
         };
 
         const updatedMessages = [...chat.messages, userMessage];
         onUpdateChat(updatedMessages);
-        setLastSentIndex(updatedMessages.length - 1);
+        // Nur beim Senden vorlesen — autoPlay hängt am Index der neuen Nachricht.
+        setLastSentIndex(via === 'send' ? updatedMessages.length - 1 : null);
         setInput('');
         setIsComposing(false);
     };
 
-    const handleSave = () => {
-        if (!input.trim() || !chat) return;
+    const handleSend = () => appendMessage(input, 'send');
+    const handleSave = () => appendMessage(input, 'save');
 
-        const userMessage: ChatMessage = {
-            id: newMessageId(),
-            role: 'user',
-            content: input,
-            timestamp: Date.now(),
-            via: 'save',
-        };
-
-        const updatedMessages = [...chat.messages, userMessage];
-        onUpdateChat(updatedMessages);
-        setLastSentIndex(null);
-        setInput('');
-        setIsComposing(false);
+    // Antippen einer Phrase. Das Verhalten gilt für alle Phrasen gemeinsam und
+    // wird auf der Phrasen-Seite umgeschaltet:
+    //   an  → sofort senden und sprechen (schnellste Antwort, z.B. "Ja")
+    //   aus → Text ins Eingabefeld legen, an vorhandenen Text angehängt, damit
+    //         sich Sätze aus Bausteinen zusammensetzen lassen.
+    const handlePhrase = (phrase: Phrase) => {
+        recordUse(phrase.id);
+        if (settings.instantEnabled) {
+            appendMessage(phrase.text, 'send');
+            return;
+        }
+        setInput((prev) => (prev.trim() ? `${prev.trim()} ${phrase.text}` : phrase.text));
     };
 
     const handleClose = () => {
@@ -239,6 +251,14 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                     <View style={styles.emptyContainer}>
                         <Text style={styles.emptyTitle}>myEcho</Text>
                         <Text style={styles.emptySubtitle}>Wie kann ich Ihnen heute helfen?</Text>
+                        {/* Leerer Chat → viel Platz: die Phrasen liegen als große
+                            Kacheln mittig, direkt erreichbar beim App-Start. */}
+                        <PhraseBar
+                            phrases={visiblePhrases}
+                            variant="grid"
+                            speaksInstantly={settings.instantEnabled}
+                            onSelect={handlePhrase}
+                        />
                     </View>
                 ) : (
                     <View style={styles.messagesWrapper}>
@@ -263,7 +283,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
             {!isNearBottom && (
                 <TouchableOpacity
                     onPress={scrollToBottom}
-                    style={styles.scrollDownButton}
+                    style={[styles.scrollDownButton, showStrip && styles.scrollDownButtonRaised]}
                     accessibilityRole="button"
                     accessibilityLabel="Zur neuesten Nachricht"
                 >
@@ -277,6 +297,16 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
                 <View style={styles.inputArea}>
+                    {/* Laufender Chat → die Phrasen rücken als schmale Zeile
+                        direkt über die Eingabe, wo der Daumen ohnehin liegt. */}
+                    {showStrip && (
+                        <PhraseBar
+                            phrases={visiblePhrases}
+                            variant="strip"
+                            speaksInstantly={settings.instantEnabled}
+                            onSelect={handlePhrase}
+                        />
+                    )}
                     <View style={[styles.inputContainer, { paddingBottom: insets.bottom + 10 }]}>
                         <TouchableOpacity
                             onPress={openCompose}
@@ -288,6 +318,18 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                             >
                                 {input || "Nachricht senden..."}
                             </Text>
+                            {/* Phrasen können das Feld füllen, ohne dass der Editor
+                                aufgeht — deshalb braucht es hier ein Verwerfen. */}
+                            {!!input && (
+                                <TouchableOpacity
+                                    onPress={() => setInput('')}
+                                    style={styles.clearButton}
+                                    accessibilityLabel="Eingabe löschen"
+                                    hitSlop={8}
+                                >
+                                    <X size={18} color="#9ca3af" />
+                                </TouchableOpacity>
+                            )}
                         </TouchableOpacity>
                         <TouchableOpacity
                             onPress={() => input.trim() ? handleSave() : openCompose()}
@@ -389,17 +431,24 @@ const styles = StyleSheet.create({
     },
     inputFake: {
         flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
         backgroundColor: '#f9fafb',
         borderWidth: 1,
         borderColor: '#d1d5db',
         borderRadius: 25,
-        paddingHorizontal: 20,
+        paddingLeft: 20,
+        paddingRight: 12,
         paddingVertical: 12,
-        justifyContent: 'center',
     },
     inputFakeText: {
+        flex: 1,
         fontSize: 18,
         color: '#111827',
+    },
+    clearButton: {
+        padding: 4,
     },
     placeholderText: {
         color: '#9ca3af',
@@ -449,5 +498,9 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.15,
         shadowRadius: 6,
+    },
+    // Mit Phrasen-Zeile sitzt die Eingabe-Leiste höher — der Pfeil muss mit.
+    scrollDownButtonRaised: {
+        bottom: 140,
     },
 });

@@ -12,7 +12,7 @@ import {
     Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3 } from 'lucide-react-native';
+import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3, Zap } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Chat } from '../utils/types';
 
@@ -145,6 +145,14 @@ export function Sidebar({
                 >
                     <BarChart3 size={24} color="#0284c7" />
                     <Text style={styles.statsButtonText}>Statistik</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={() => { onClose(); router.push('/phrases'); }}
+                    style={styles.phrasesButton}
+                >
+                    <Zap size={24} color="#0284c7" />
+                    <Text style={styles.statsButtonText}>Phrasen</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -297,6 +305,16 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '500',
         color: '#0284c7',
+    },
+    phrasesButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#bae6fd',
+        backgroundColor: '#f0f9ff',
     },
     newChatButton: {
         flexDirection: 'row',
