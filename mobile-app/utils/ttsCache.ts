@@ -1,4 +1,5 @@
 import { File, Directory, Paths } from 'expo-file-system';
+import { Platform } from 'react-native';
 
 const TAG = '[myEcho][Cache]';
 const MAX_CACHE_BYTES = 100 * 1024 * 1024;   // 100 MB hard cap
@@ -29,8 +30,24 @@ export interface CacheStats {
     hitRatePct: number;
 }
 
-const cacheDir = new Directory(Paths.document, 'tts-cache');
-const indexFile = new File(cacheDir, 'index.json');
+// expo-file-system gibt es im Web nicht — dort schon beim Modul-Import ein
+// Directory anzulegen ließ das ganze Bundle crashen. Deshalb: Pfade erst bei
+// Bedarf erzeugen und im Web den Cache komplett überspringen (die Wiedergabe
+// läuft dort direkt über den Backend-Stream).
+const isWeb = Platform.OS === 'web';
+
+let _cacheDir: Directory | null = null;
+let _indexFile: File | null = null;
+
+function cacheDirRef(): Directory {
+    if (!_cacheDir) _cacheDir = new Directory(Paths.document, 'tts-cache');
+    return _cacheDir;
+}
+
+function indexFileRef(): File {
+    if (!_indexFile) _indexFile = new File(cacheDirRef(), 'index.json');
+    return _indexFile;
+}
 
 const emptyIndex = (): CacheIndex => ({
     version: 1,
@@ -74,7 +91,7 @@ function cacheKey(
 }
 
 function cacheFile(hash: string): File {
-    return new File(cacheDir, `${hash}.mp3`);
+    return new File(cacheDirRef(), `${hash}.mp3`);
 }
 
 // --- Initialisation (lazy, deduplicated) ---
@@ -83,12 +100,16 @@ async function ensureInit(): Promise<void> {
     if (_index !== null) return;
     if (_initPromise) return _initPromise;
     _initPromise = (async () => {
-        if (!cacheDir.exists) {
-            cacheDir.create({ intermediates: true });
+        if (isWeb) {
+            _index = emptyIndex();
+            return;
         }
-        if (indexFile.exists) {
+        if (!cacheDirRef().exists) {
+            cacheDirRef().create({ intermediates: true });
+        }
+        if (indexFileRef().exists) {
             try {
-                const raw = indexFile.textSync();
+                const raw = indexFileRef().textSync();
                 const parsed = JSON.parse(raw) as CacheIndex;
                 _index = parsed.version === 1 ? parsed : emptyIndex();
             } catch {
@@ -108,11 +129,12 @@ async function ensureInit(): Promise<void> {
 // --- Persistence (debounced sync write) ---
 
 function schedulePersist(): void {
+    if (isWeb) return;
     if (_persistTimer) clearTimeout(_persistTimer);
     _persistTimer = setTimeout(() => {
         if (!_index) return;
         try {
-            indexFile.write(JSON.stringify(_index));
+            indexFileRef().write(JSON.stringify(_index));
         } catch (e) {
             console.warn(`${TAG} Index persist failed:`, e);
         }
@@ -120,12 +142,13 @@ function schedulePersist(): void {
 }
 
 function persistNow(): void {
+    if (isWeb) return;
     if (_persistTimer) {
         clearTimeout(_persistTimer);
         _persistTimer = null;
     }
     if (!_index) return;
-    indexFile.write(JSON.stringify(_index));
+    indexFileRef().write(JSON.stringify(_index));
 }
 
 // --- LRU Eviction ---
@@ -158,6 +181,7 @@ export async function getCachedUri(
     format?: string
 ): Promise<string | null> {
     await ensureInit();
+    if (isWeb) return null;
     const hash = cacheKey(text, voiceId, model, format);
     const entry = _index!.entries[hash];
 
@@ -197,6 +221,9 @@ export async function downloadAndCache(
     format?: string
 ): Promise<string> {
     await ensureInit();
+    // Ohne Dateisystem gibt es nichts zu cachen — der Aufrufer fällt dann auf
+    // Streaming bzw. expo-speech zurück.
+    if (isWeb) throw new Error('TTS cache unavailable on web');
     const hash = cacheKey(text, voiceId, model, format);
 
     // Deduplicate concurrent requests for the same hash
@@ -266,8 +293,10 @@ export async function getCacheStats(): Promise<CacheStats> {
 export async function clearCache(): Promise<void> {
     await ensureInit();
     try {
-        cacheDir.delete();
-        cacheDir.create({ intermediates: true });
+        if (!isWeb) {
+            cacheDirRef().delete();
+            cacheDirRef().create({ intermediates: true });
+        }
     } catch (e) {
         console.warn(`${TAG} Clear failed:`, e);
     }
