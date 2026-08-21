@@ -24,6 +24,20 @@ Type what you want to say — myEcho speaks it back in a natural AI voice.
 
 ---
 
+## Table of Contents
+
+- [About](#about)
+- [Demo](#demo)
+- [How It Works](#how-it-works)
+- [Project Structure](#project-structure)
+- [Mobile App](#mobile-app)
+- [Backend](#backend)
+- [Monitoring](#monitoring)
+- [CI/CD](#cicd)
+- [Status](#status)
+
+---
+
 ## About
 
 **myEcho is built for people who can no longer use their own voice.**
