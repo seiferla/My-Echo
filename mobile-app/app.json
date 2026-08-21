@@ -25,7 +25,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.myecho.app"
+      "package": "io.github.seiferla.myecho"
     },
     "web": {
       "favicon": "./assets/favicon.png"
