@@ -24,3 +24,9 @@ mobile-app/.idea/
 .env
 .env.local
 .env.*.localFETCH_HEAD
+
+# generierte Datenschutz-Seite (GitHub Pages)
+/site/
+
+# nur lokal: enthaelt interne Angaben (Heimnetz-IP, Keystore-/Signing-Schritte)
+/docs/PLAY_DEPLOYMENT.md

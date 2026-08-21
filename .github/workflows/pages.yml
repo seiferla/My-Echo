@@ -1,0 +1,67 @@
+# Veroeffentlicht NUR die Datenschutzerklaerung auf GitHub Pages.
+# Alles andere in docs/ bleibt aussen vor, weil der Build-Schritt gezielt nur
+# die beiden PRIVACY-Dateien einliest.
+#
+# Ergebnis: https://seiferla.github.io/My-Echo/            (deutsch)
+#           https://seiferla.github.io/My-Echo/privacy-en.html  (englisch)
+name: Pages (Datenschutz)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/PRIVACY.md'
+      - 'docs/PRIVACY_EN.md'
+      - 'scripts/build_privacy_site.py'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Zwei parallele Deployments wuerden sich gegenseitig abbrechen.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install markdown
+        run: pip install --disable-pip-version-check markdown==3.7
+
+      - name: Build site
+        run: python3 scripts/build_privacy_site.py site
+
+      - name: Sicherheitsnetz — nichts Internes veroeffentlichen
+        run: |
+          # Bricht ab, falls versehentlich interne Angaben in der Seite landen.
+          if grep -rniE '192\.168\.|10\.[0-9]+\.|wireguard|keystore|SERVICE_ACCOUNT|API_KEY' site/; then
+            echo "::error::Interne Angaben im Build gefunden — Deployment abgebrochen."
+            exit 1
+          fi
+          echo "OK — keine internen Angaben gefunden."
+          ls -la site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
