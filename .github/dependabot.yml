@@ -12,7 +12,7 @@ updates:
   - package-ecosystem: "npm"
     directory: "/mobile-app"
     schedule:
-      interval: "weekly"
+      interval: "daily"
       day: "monday"
     groups:
       expo-sdk:
@@ -51,6 +51,6 @@ updates:
   - package-ecosystem: "pip"
     directory: "/backend"
     schedule:
-      interval: "weekly"
+      interval: "daily"
       day: "monday"
     open-pull-requests-limit: 5
