@@ -46,6 +46,13 @@ updates:
         update-types:
           - "version-update:semver-major"
           - "version-update:semver-minor"
+      # react-native ist SDK-gebunden (SDK 57 -> RN 0.86.x) und per Override
+      # an react-native-reanimated@4.5.3 gekoppelt (Peer-Range 0.83-0.86).
+      # Ein Minor-Bump außerhalb eines SDK-Upgrades bricht `npm ci`.
+      - dependency-name: "react-native"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
     open-pull-requests-limit: 5
 
   - package-ecosystem: "pip"
