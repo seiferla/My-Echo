@@ -12,8 +12,8 @@ Type what you want to say — myEcho speaks it back in a natural AI voice.
 
 <br/>
 
-![Expo](https://img.shields.io/badge/Expo-56-000020?logo=expo&logoColor=white)
-![React Native](https://img.shields.io/badge/React%20Native-0.85-61DAFB?logo=react&logoColor=black)
+![Expo](https://img.shields.io/badge/Expo-57-000020?logo=expo&logoColor=white)
+![React Native](https://img.shields.io/badge/React%20Native-0.86-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white)
 ![Node](https://img.shields.io/badge/Node-24_LTS-339933?logo=node.js&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white)
