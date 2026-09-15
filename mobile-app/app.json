@@ -36,6 +36,12 @@
       "expo-asset",
       "./plugins/withReleaseSigning",
       [
+        "./plugins/withGradleWrapperVersion",
+        {
+          "version": "9.7.1"
+        }
+      ],
+      [
         "expo-audio",
         {
           "enableBackgroundPlayback": true
