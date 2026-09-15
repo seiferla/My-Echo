@@ -23,7 +23,7 @@ permissions:
 
 env:
   NODE_VERSION: "24"
-  JAVA_VERSION: "25"
+  JAVA_VERSION: "21"
   PREVIEW_TAG: android-preview
 
 jobs:
