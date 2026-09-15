@@ -1,0 +1,120 @@
+name: Android PR Build
+
+# Baut die App auf jedem PR, der mobile-app/** ändert — als reiner Smoke-Test.
+#
+# Zweck: Genau die Lücke schließen, die den JDK-25-Vorfall verursacht hat.
+# mobile-ci.yml prüft nur `npm ci` + `tsc`, den echten nativen Gradle-Build
+# gab es vorher erst NACH dem Merge (android-merge-build.yml, push auf main)
+# oder nur manuell (android-release.yml). Ein kaputter natviver Build (z.B.
+# Kotlin-Compiler-Fehler durch eine JDK-Version, die AGP/Kotlin nicht
+# unterstützt) fiel dadurch immer erst auf main auf, nie auf dem Feature-Branch.
+#
+# Bewusst NICHT "der ganze Prozess" wie android-merge-build.yml:
+#   - kein Signing (kein Zugriff auf den Release-Keystore nötig)
+#   - nur assembleDebug, kein bundleRelease/AAB
+#   - kein Draft-/GitHub-Release, kein Hochladen in einen Release
+#   - kürzere Artefakt-Aufbewahrung (nur zum kurzen Antesten gedacht)
+#
+# JAVA_VERSION MUSS zu android-merge-build.yml und android-release.yml passen —
+# sonst testet dieser Workflow eine andere Kombination als die, die tatsächlich
+# released wird, und die Lücke von oben öffnet sich wieder.
+on:
+  pull_request:
+    # Workflow-Datei selbst mit im Filter, sonst validiert eine Änderung an
+    # diesem Workflow sich nicht selbst.
+    paths: ["mobile-app/**", ".github/workflows/android-pr-build.yml"]
+
+concurrency:
+  group: android-pr-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  JAVA_VERSION: "21"
+
+jobs:
+  build-debug:
+    name: Build debug APK (smoke test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile-app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      # Quality-Gate vor dem nativen Build — spart einen kaputten Gradle-Lauf,
+      # wenn schon die Typen nicht stimmen.
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle (mit Caching)
+        uses: gradle/actions/setup-gradle@v6
+
+      # Prebuild-Cache: gleicher Key wie android-merge-build.yml/android-release.yml,
+      # damit sich alle drei Workflows den Cache teilen statt ihn zu duplizieren.
+      - name: Restore prebuild cache
+        id: prebuild-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: mobile-app/android
+          key: prebuild-${{ runner.os }}-${{ hashFiles('mobile-app/app.json', 'mobile-app/package-lock.json', 'mobile-app/app/**', 'mobile-app/assets/**') }}
+
+      - name: Expo prebuild (Android)
+        if: steps.prebuild-cache.outputs.cache-hit != 'true'
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Save prebuild cache
+        if: steps.prebuild-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: mobile-app/android
+          key: ${{ steps.prebuild-cache.outputs.cache-primary-key }}
+
+      # Native-Build-Cache — gleicher Key wie die anderen beiden Workflows.
+      - name: Cache native build outputs
+        uses: actions/cache@v6
+        with:
+          path: |
+            mobile-app/android/.gradle
+            mobile-app/android/app/.cxx
+            mobile-app/node_modules/react-native/ReactAndroid/build
+          key: native-${{ runner.os }}-${{ hashFiles('mobile-app/package-lock.json', 'mobile-app/android/build.gradle', 'mobile-app/android/app/build.gradle') }}
+          restore-keys: |
+            native-${{ runner.os }}-
+
+      # Debug-Build braucht keinen Signing-Keystore — withReleaseSigning.js
+      # greift nur für den release-buildType, debug bleibt unangetastet.
+      - name: Gradle-Build (Debug-APK)
+        working-directory: mobile-app/android
+        env:
+          GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: ./gradlew assembleDebug --build-cache --parallel --stacktrace -PreactNativeArchitectures=arm64-v8a
+
+      - name: Debug-APK als Artefakt hochladen
+        uses: actions/upload-artifact@v7
+        with:
+          name: myecho-debug-${{ github.event.pull_request.head.sha }}
+          path: mobile-app/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 3
