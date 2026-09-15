@@ -1,6 +1,7 @@
 import os
 import time
 import asyncio
+import logging
 import msgpack
 import httpx
 import websockets
@@ -16,6 +17,9 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from db import init_db, close_db, list_chats, upsert_chat, delete_chat
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("myecho.tts")
 
 # --- Pydantic-Modelle (vor app = FastAPI(...) einfügen) ---------------------
 
@@ -165,12 +169,19 @@ async def warmup():
 @limiter.limit("30/minute")
 async def stream_tts(request: Request, text: str):
     async def generate():
+        t_start = time.monotonic()
+
         # 1. Vorgewärmte Verbindung nutzen, sonst frisch öffnen
         ws = await _take_warm_connection()
+        warm = ws is not None
         opened_fresh = False
         if ws is None:
             ws = await _open_fish_connection()
             opened_fresh = True
+
+        first_audio_logged = False
+        chunk_count = 0
+        byte_count = 0
 
         try:
             # 2. Text senden (start ist bereits gesendet — warm oder fresh)
@@ -178,6 +189,7 @@ async def stream_tts(request: Request, text: str):
                 await ws.send(msgpack.packb({"event": "text", "text": text}))
                 await ws.send(msgpack.packb({"event": "flush"}))
                 await ws.send(msgpack.packb({"event": "stop"}))
+                t_sent = time.monotonic()
             except Exception:
                 # Warme Verbindung war doch tot → einmal frisch neu versuchen
                 if not opened_fresh:
@@ -189,6 +201,7 @@ async def stream_tts(request: Request, text: str):
                     await ws.send(msgpack.packb({"event": "text", "text": text}))
                     await ws.send(msgpack.packb({"event": "flush"}))
                     await ws.send(msgpack.packb({"event": "stop"}))
+                    t_sent = time.monotonic()
                 else:
                     raise
 
@@ -196,10 +209,31 @@ async def stream_tts(request: Request, text: str):
             async for message in ws:
                 msg = msgpack.unpackb(message)
                 if msg.get("event") == "audio":
+                    if not first_audio_logged:
+                        first_audio_logged = True
+                        t_first_audio = time.monotonic()
+                        logger.info(
+                            "TTS first audio: %d ms after text sent (%d ms total), "
+                            "chars=%d, warm=%s, chunk_length=%d, latency=%s",
+                            int((t_first_audio - t_sent) * 1000),
+                            int((t_first_audio - t_start) * 1000),
+                            len(text),
+                            warm,
+                            AUDIO_CHUNK_LENGTH,
+                            AUDIO_LATENCY,
+                        )
+                    chunk_count += 1
+                    byte_count += len(msg["audio"])
                     yield msg["audio"]
                 elif msg.get("event") == "finish":
                     break
         finally:
+            logger.info(
+                "TTS finished: %d ms total, %d audio chunks, %d bytes",
+                int((time.monotonic() - t_start) * 1000),
+                chunk_count,
+                byte_count,
+            )
             try:
                 await ws.close()
             except Exception:
