@@ -21,6 +21,10 @@ import { Phrase } from '../utils/phrases';
 import { BACKEND_WARMUP_URL } from '../utils/config';
 import { ChatMessage, newMessageId } from '../utils/types';
 
+// Muss unter dem Backend-Timeout WARM_TTL_SECONDS (25 s) bleiben, sonst
+// kühlt die Fish-Audio-Verbindung ab, bevor der nächste Warmup-Ping kommt.
+const WARMUP_INTERVAL_MS = 20_000;
+
 interface ChatAreaProps {
     chat?: {
         id: string;
@@ -68,16 +72,29 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
         setIsNearBottom(distanceFromBottom < 150);
     };
 
-    // Öffnet das Eingabefeld und wärmt parallel die Backend-Verbindung vor,
-    // damit der TTS-Request beim Senden schneller startet (fire-and-forget).
+    // Öffnet das Eingabefeld — das Warmhalten der Backend-Verbindung übernimmt
+    // der useEffect unten, solange isComposing true ist.
     const openCompose = () => {
-        fetch(BACKEND_WARMUP_URL).catch(() => {});
         setIsComposing(true);
     };
 
     useEffect(() => {
         scrollToBottom();
     }, [chat?.messages]);
+
+    // Hält die Fish-Audio-Verbindung warm, solange das Compose-Modal offen ist —
+    // User tippen oft länger als die Backend-TTL (25 s), daher reicht ein
+    // einmaliger Warmup-Call beim Öffnen nicht aus.
+    useEffect(() => {
+        if (!isComposing) return;
+
+        fetch(BACKEND_WARMUP_URL).catch(() => {});
+        const interval = setInterval(() => {
+            fetch(BACKEND_WARMUP_URL).catch(() => {});
+        }, WARMUP_INTERVAL_MS);
+
+        return () => clearInterval(interval);
+    }, [isComposing]);
 
     // Beim Chat-Wechsel autoPlay zurücksetzen — sonst würde nach dem Wechsel
     // die Nachricht an gleicher Position vorgelesen, obwohl sie nicht neu gesendet wurde.

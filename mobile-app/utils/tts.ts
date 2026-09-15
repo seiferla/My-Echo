@@ -6,6 +6,11 @@ import { getCachedUri, downloadAndCache } from './ttsCache';
 const TAG = '[myEcho][TTS]';
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 const PLAY_TIMEOUT_MS = 10_000;
+// Auf Android wartet expo-audio (ExoPlayer) 2.5 s gepufferten Audios, bevor die
+// Wiedergabe startet. Bei kurzen Texten ist der ganze Clip ohnehin schneller da
+// als dieser Puffer — Streaming bringt dann keinen Vorteil, füllt aber auch
+// nicht den Cache. Für solche Texte direkt herunterladen und cachen.
+const SHORT_TEXT_CHARS = 60;
 
 // Konfiguriert die Audio-Session so, dass die Wiedergabe weiterläuft, wenn der
 // Bildschirm gesperrt wird oder die App in den Hintergrund geht. Ohne das
@@ -112,7 +117,7 @@ async function playLocalAudio(uri: string, session: number): Promise<void> {
             if (status.isLoaded && !playbackStarted) {
                 playbackStarted = true;
                 clearTimeout(timeout);
-                console.log(`${TAG} Playback started (${Date.now() - t0} ms)`);
+                console.log(`${TAG} Player ready (isLoaded) after ${Date.now() - t0} ms`);
             }
 
             if (status.error) {
@@ -125,6 +130,7 @@ async function playLocalAudio(uri: string, session: number): Promise<void> {
             }
 
             if (status.didJustFinish) {
+                console.log(`${TAG} Playback finished after ${Date.now() - t0} ms`);
                 settle(() => {
                     try { player.remove(); } catch {}
                     resolve();
@@ -134,6 +140,22 @@ async function playLocalAudio(uri: string, session: number): Promise<void> {
 
         player.play();
     });
+}
+
+// Download mit Timeout — dreimal im File gebraucht (kurzer Text, Streaming-
+// Fallback bei langem Text, getShareableAudioUri), daher hier gebündelt.
+function downloadWithTimeout(
+    text: string,
+    url: string,
+    voice: string,
+    model: string,
+): Promise<string> {
+    return Promise.race([
+        downloadAndCache(text, url, voice, model),
+        new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Download timeout')), DOWNLOAD_TIMEOUT_MS)
+        ),
+    ]);
 }
 
 async function speakWithCloud(
@@ -147,6 +169,7 @@ async function speakWithCloud(
     const ensureActive = () => {
         if (session !== activeSession) throw new AbortedError();
     };
+    const tSpeak = Date.now();
 
     const preview = text.length > 40 ? text.slice(0, 40) + '…' : text;
     console.log(`${TAG} speak "${preview}" (${text.length} chars) voice=${voice || '?'} model=${model || '?'}`);
@@ -155,18 +178,41 @@ async function speakWithCloud(
     ensureActive();
 
     if (cachedUri) {
-        console.log(`${TAG} Cache HIT`);
+        console.log(`${TAG} Cache HIT (${Date.now() - tSpeak} ms lookup)`);
         await playLocalAudio(cachedUri, session);
+        console.log(`${TAG} speak done — path=cache, total ${Date.now() - tSpeak} ms`);
         return;
     }
 
-    // Cache-Miss → erst progressiv aus dem Stream (TTFA am ersten Chunk).
-    // Falls der Player die chunked Response nicht abspielt, auf Download+Cache
-    // zurückfallen — nie schlechter als vorher, und der Cache bleibt befüllt.
     const url = `${BACKEND_STREAM_URL}?text=${encodeURIComponent(text)}`;
-    try {
+
+    // Kurze Texte: direkt herunterladen und cachen statt streamen. ExoPlayer
+    // (Android) puffert vor Wiedergabestart ohnehin 2.5 s — bei kurzen Clips
+    // ist der Download schneller fertig als dieser Puffer, und der Stream-Pfad
+    // würde den Cache nie befüllen.
+    if (text.length <= SHORT_TEXT_CHARS) {
+        try {
+            console.log(`${TAG} Cache MISS — short text, download+cache`);
+            const localUri = await downloadWithTimeout(text, url, voice, model);
+            console.log(`${TAG} Downloaded in ${Date.now() - tSpeak} ms`);
+            ensureActive();
+            await playLocalAudio(localUri, session);
+            console.log(`${TAG} speak done — path=download, total ${Date.now() - tSpeak} ms`);
+            return;
+        } catch (e) {
+            if (e instanceof AbortedError) throw e;
+            console.warn(`${TAG} Short-text download failed, falling back to streaming:`, e);
+        }
+    } else {
         console.log(`${TAG} Cache MISS — streaming from backend`);
+    }
+
+    // Progressiv aus dem Stream (TTFA am ersten Chunk). Falls der Player die
+    // chunked Response nicht abspielt, auf Download+Cache zurückfallen — nie
+    // schlechter als vorher, und der Cache bleibt befüllt.
+    try {
         await playLocalAudio(url, session);
+        console.log(`${TAG} speak done — path=stream, total ${Date.now() - tSpeak} ms`);
         return;
     } catch (e) {
         if (e instanceof AbortedError) throw e;
@@ -174,14 +220,11 @@ async function speakWithCloud(
     }
 
     ensureActive();
-    const localUri = await Promise.race([
-        downloadAndCache(text, url, voice, model),
-        new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Download timeout')), DOWNLOAD_TIMEOUT_MS)
-        ),
-    ]);
+    const localUri = await downloadWithTimeout(text, url, voice, model);
+    console.log(`${TAG} Downloaded in ${Date.now() - tSpeak} ms`);
     ensureActive();
     await playLocalAudio(localUri, session);
+    console.log(`${TAG} speak done — path=stream-fallback-download, total ${Date.now() - tSpeak} ms`);
 }
 
 // Besorgt die lokale Audio-Datei zu einem Text zum Teilen (z.B. per WhatsApp) —
@@ -201,12 +244,7 @@ export async function getShareableAudioUri(
         if (cachedUri) return cachedUri;
 
         const url = `${BACKEND_STREAM_URL}?text=${encodeURIComponent(text)}`;
-        return await Promise.race([
-            downloadAndCache(text, url, voice, model),
-            new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('Download timeout')), DOWNLOAD_TIMEOUT_MS)
-            ),
-        ]);
+        return await downloadWithTimeout(text, url, voice, model);
     } catch (e) {
         console.warn(`${TAG} getShareableAudioUri failed:`, e);
         return null;
