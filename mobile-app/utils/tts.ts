@@ -67,7 +67,15 @@ export function stopSpeaking(): void {
     Speech.stop();
 }
 
-async function playLocalAudio(uri: string, session: number): Promise<void> {
+// Gibt die TTFA (Zeit bis zum ersten hörbaren Ton, gemessen ab startMs) zurück.
+// onFirstAudio wird genau dann aufgerufen, wenn der erste Ton tatsächlich läuft —
+// das erlaubt dem TTFA-Test, die Wiedergabe direkt danach abzubrechen.
+async function playLocalAudio(
+    uri: string,
+    session: number,
+    startMs: number,
+    onFirstAudio?: () => void,
+): Promise<number> {
     return new Promise((resolve, reject) => {
         // Vor Player-Erstellung prüfen — wenn schon abgebrochen, kein Player erstellen
         if (session !== activeSession) {
@@ -80,6 +88,8 @@ async function playLocalAudio(uri: string, session: number): Promise<void> {
         currentPlayer = player;
 
         let playbackStarted = false;
+        let ttfaLogged = false;
+        let ttfaMs = 0;
         let settled = false;
 
         const settle = (cleanup: () => void) => {
@@ -120,6 +130,14 @@ async function playLocalAudio(uri: string, session: number): Promise<void> {
                 console.log(`${TAG} Player ready (isLoaded) after ${Date.now() - t0} ms`);
             }
 
+            // `playing` wird true, sobald tatsächlich Ton kommt — das ist der
+            // beste Proxy für die TTFA, die wir messen wollen.
+            if (status.playing && !ttfaLogged) {
+                ttfaLogged = true;
+                ttfaMs = Date.now() - startMs;
+                try { onFirstAudio?.(); } catch {}
+            }
+
             if (status.error) {
                 console.warn(`${TAG} expo-audio error:`, status.error);
                 settle(() => {
@@ -133,7 +151,7 @@ async function playLocalAudio(uri: string, session: number): Promise<void> {
                 console.log(`${TAG} Playback finished after ${Date.now() - t0} ms`);
                 settle(() => {
                     try { player.remove(); } catch {}
-                    resolve();
+                    resolve(ttfaMs);
                 });
             }
         });
@@ -158,18 +176,36 @@ function downloadWithTimeout(
     ]);
 }
 
+export type SpeakPath =
+    | 'cache'
+    | 'download'
+    | 'stream'
+    | 'stream-fallback-download'
+    | 'local';
+
+/** Ergebnis einer Sprachausgabe — Grundlage für den TTFA-Test. */
+export interface SpeakResult {
+    path: SpeakPath;
+    /** Zeit vom speak()-Eintritt bis zum ersten hörbaren Ton (null wenn nie hörbar). */
+    ttfaMs: number | null;
+    /** Gesamtdauer bis zum Ende der Wiedergabe. */
+    totalMs: number;
+    chars: number;
+}
+
 async function speakWithCloud(
     text: string,
     voice: string,
     model: string,
-): Promise<void> {
+    startMs: number,
+    onFirstAudio?: () => void,
+): Promise<SpeakResult> {
     // Session-Snapshot beim Eintritt — stopSpeaking() während dieses Aufrufs
     // ändert activeSession, sodass ensureActive() unten wirft.
     const session = activeSession;
     const ensureActive = () => {
         if (session !== activeSession) throw new AbortedError();
     };
-    const tSpeak = Date.now();
 
     const preview = text.length > 40 ? text.slice(0, 40) + '…' : text;
     console.log(`${TAG} speak "${preview}" (${text.length} chars) voice=${voice || '?'} model=${model || '?'}`);
@@ -178,10 +214,10 @@ async function speakWithCloud(
     ensureActive();
 
     if (cachedUri) {
-        console.log(`${TAG} Cache HIT (${Date.now() - tSpeak} ms lookup)`);
-        await playLocalAudio(cachedUri, session);
-        console.log(`${TAG} speak done — path=cache, total ${Date.now() - tSpeak} ms`);
-        return;
+        console.log(`${TAG} Cache HIT (${Date.now() - startMs} ms lookup)`);
+        const ttfaMs = await playLocalAudio(cachedUri, session, startMs, onFirstAudio);
+        console.log(`${TAG} [METRIC] path=cache chars=${text.length} ttfa=${ttfaMs} total=${Date.now() - startMs}`);
+        return { path: 'cache', ttfaMs, totalMs: Date.now() - startMs, chars: text.length };
     }
 
     const url = `${BACKEND_STREAM_URL}?text=${encodeURIComponent(text)}`;
@@ -194,11 +230,11 @@ async function speakWithCloud(
         try {
             console.log(`${TAG} Cache MISS — short text, download+cache`);
             const localUri = await downloadWithTimeout(text, url, voice, model);
-            console.log(`${TAG} Downloaded in ${Date.now() - tSpeak} ms`);
+            console.log(`${TAG} Downloaded in ${Date.now() - startMs} ms`);
             ensureActive();
-            await playLocalAudio(localUri, session);
-            console.log(`${TAG} speak done — path=download, total ${Date.now() - tSpeak} ms`);
-            return;
+            const ttfaMs = await playLocalAudio(localUri, session, startMs, onFirstAudio);
+            console.log(`${TAG} [METRIC] path=download chars=${text.length} ttfa=${ttfaMs} total=${Date.now() - startMs}`);
+            return { path: 'download', ttfaMs, totalMs: Date.now() - startMs, chars: text.length };
         } catch (e) {
             if (e instanceof AbortedError) throw e;
             console.warn(`${TAG} Short-text download failed, falling back to streaming:`, e);
@@ -211,9 +247,9 @@ async function speakWithCloud(
     // chunked Response nicht abspielt, auf Download+Cache zurückfallen — nie
     // schlechter als vorher, und der Cache bleibt befüllt.
     try {
-        await playLocalAudio(url, session);
-        console.log(`${TAG} speak done — path=stream, total ${Date.now() - tSpeak} ms`);
-        return;
+        const ttfaMs = await playLocalAudio(url, session, startMs, onFirstAudio);
+        console.log(`${TAG} [METRIC] path=stream chars=${text.length} ttfa=${ttfaMs} total=${Date.now() - startMs}`);
+        return { path: 'stream', ttfaMs, totalMs: Date.now() - startMs, chars: text.length };
     } catch (e) {
         if (e instanceof AbortedError) throw e;
         console.warn(`${TAG} Streaming failed, falling back to download:`, e);
@@ -221,10 +257,11 @@ async function speakWithCloud(
 
     ensureActive();
     const localUri = await downloadWithTimeout(text, url, voice, model);
-    console.log(`${TAG} Downloaded in ${Date.now() - tSpeak} ms`);
+    console.log(`${TAG} Downloaded in ${Date.now() - startMs} ms`);
     ensureActive();
-    await playLocalAudio(localUri, session);
-    console.log(`${TAG} speak done — path=stream-fallback-download, total ${Date.now() - tSpeak} ms`);
+    const ttfaMs = await playLocalAudio(localUri, session, startMs, onFirstAudio);
+    console.log(`${TAG} [METRIC] path=stream-fallback-download chars=${text.length} ttfa=${ttfaMs} total=${Date.now() - startMs}`);
+    return { path: 'stream-fallback-download', ttfaMs, totalMs: Date.now() - startMs, chars: text.length };
 }
 
 // Besorgt die lokale Audio-Datei zu einem Text zum Teilen (z.B. per WhatsApp) —
@@ -256,7 +293,9 @@ export async function speak(
     useCloud: boolean,
     voice = '',
     model = '',
-): Promise<void> {
+    onFirstAudio?: () => void,
+): Promise<SpeakResult> {
+    const startMs = Date.now();
     stopSpeaking();
     // Session nach stopSpeaking() merken — wenn sich dieser Wert bis zum
     // Fallback ändert, hat eine neuere speak()-Instanz bereits übernommen.
@@ -266,8 +305,7 @@ export async function speak(
 
     if (useCloud) {
         try {
-            await speakWithCloud(text, voice, model);
-            return;
+            return await speakWithCloud(text, voice, model, startMs, onFirstAudio);
         } catch (error) {
             if (error instanceof AbortedError) {
                 // An den Aufrufer durchreichen statt hier stillschweigend zu resolven —
@@ -287,15 +325,26 @@ export async function speak(
     // In dem Fall Fallback überspringen — sonst Overlap mit der neuen Instanz.
     if (session !== activeSession) {
         console.log(`${TAG} Fallback skipped — newer speak() already active`);
-        return;
+        return { path: 'local', ttfaMs: null, totalMs: Date.now() - startMs, chars: text.length };
     }
 
     return new Promise((resolve) => {
+        let ttfaMs: number | null = null;
+        const result = (): SpeakResult => ({
+            path: 'local',
+            ttfaMs,
+            totalMs: Date.now() - startMs,
+            chars: text.length,
+        });
         Speech.speak(text, {
             language: 'de-DE',
-            onDone: () => { console.log(`${TAG} expo-speech done`); resolve(); },
-            onStopped: resolve,
-            onError: () => resolve(),
+            onStart: () => {
+                ttfaMs = Date.now() - startMs;
+                try { onFirstAudio?.(); } catch {}
+            },
+            onDone: () => { console.log(`${TAG} expo-speech done`); resolve(result()); },
+            onStopped: () => resolve(result()),
+            onError: () => resolve(result()),
         });
     });
 }
