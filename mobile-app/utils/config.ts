@@ -8,3 +8,8 @@ export const BACKEND_STREAM_URL  = `${BACKEND_BASE}/stream/tts`;
 export const BACKEND_HEALTH_URL  = `${BACKEND_BASE}/health`;
 export const BACKEND_WARMUP_URL  = `${BACKEND_BASE}/warmup`;
 export const BACKEND_CHATS_URL   = `${BACKEND_BASE}/chats`;
+
+// A/B-Schalter für die Satz-Vorab-Synthese. Aktivieren per
+// EXPO_PUBLIC_SENTENCE_STREAMING=1 in der .env. Steht die Implementierung
+// noch aus, bleibt der Wert false und der normale Einzel-Stream-Pfad aktiv.
+export const SENTENCE_STREAMING = process.env.EXPO_PUBLIC_SENTENCE_STREAMING === '1';
