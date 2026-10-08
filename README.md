@@ -1,5 +1,7 @@
 <div align="center">
 
+🌐 **English** | [Deutsch](README.de.md)
+
 # myEcho
 
 ## *"Giving a voice back to those who lost theirs."*
