@@ -1,7 +1,9 @@
 import { createAudioPlayer, AudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as Speech from 'expo-speech';
-import { BACKEND_STREAM_URL } from './config';
+import { BACKEND_STREAM_URL, SENTENCE_STREAMING } from './config';
 import { getCachedUri, downloadAndCache } from './ttsCache';
+import { splitCompletedSentences } from './split';
+import { createSynthQueue } from './synthQueue';
 
 const TAG = '[myEcho][TTS]';
 const DOWNLOAD_TIMEOUT_MS = 15_000;
@@ -44,6 +46,11 @@ class AbortedError extends Error {
 // sobald activeSession nicht mehr übereinstimmt.
 let activeSession = 0;
 let currentPlayer: AudioPlayer | null = null;
+// Vorab geladene Player für den jeweils nächsten Satz (Satz-Streaming). Werden
+// in stopSpeaking() freigegeben, falls sie nie zum Einsatz kamen.
+const preparedPlayers = new Set<AudioPlayer>();
+// Zeitpunkt, zu dem der letzte Clip zu Ende war — nur für die Lücken-Messung.
+let lastFinishAt = 0;
 let currentAbort: (() => void) | null = null;
 
 export function stopSpeaking(): void {
@@ -63,18 +70,25 @@ export function stopSpeaking(): void {
         currentPlayer = null;
     }
 
-    // 3. Lokale Sprachausgabe stoppen
+    // 3. Vorab geladene Player des nächsten Satzes freigeben
+    for (const p of preparedPlayers) {
+        try { p.remove(); } catch {}
+    }
+    preparedPlayers.clear();
+
+    // 4. Lokale Sprachausgabe stoppen
     Speech.stop();
 }
 
 // Gibt die TTFA (Zeit bis zum ersten hörbaren Ton, gemessen ab startMs) zurück.
-// onFirstAudio wird genau dann aufgerufen, wenn der erste Ton tatsächlich läuft —
-// das erlaubt dem TTFA-Test, die Wiedergabe direkt danach abzubrechen.
+// onFirstAudio wird genau dann aufgerufen, wenn der erste Ton tatsächlich läuft
+// (Satz-Streaming startet darüber die Synthese der Folgesätze).
 async function playLocalAudio(
     uri: string,
     session: number,
     startMs: number,
     onFirstAudio?: () => void,
+    preloaded?: AudioPlayer,
 ): Promise<number> {
     return new Promise((resolve, reject) => {
         // Vor Player-Erstellung prüfen — wenn schon abgebrochen, kein Player erstellen
@@ -84,7 +98,8 @@ async function playLocalAudio(
         }
 
         const t0 = Date.now();
-        const player = createAudioPlayer({ uri });
+        const player = preloaded ?? createAudioPlayer({ uri });
+        preparedPlayers.delete(player);
         currentPlayer = player;
 
         let playbackStarted = false;
@@ -135,6 +150,9 @@ async function playLocalAudio(
             if (status.playing && !ttfaLogged) {
                 ttfaLogged = true;
                 ttfaMs = Date.now() - startMs;
+                if (lastFinishAt) {
+                    console.log(`${TAG} [METRIC] gap=${Date.now() - lastFinishAt}ms (previous clip end → next clip audible)`);
+                }
                 try { onFirstAudio?.(); } catch {}
             }
 
@@ -149,6 +167,7 @@ async function playLocalAudio(
 
             if (status.didJustFinish) {
                 console.log(`${TAG} Playback finished after ${Date.now() - t0} ms`);
+                lastFinishAt = Date.now();
                 settle(() => {
                     try { player.remove(); } catch {}
                     resolve(ttfaMs);
@@ -183,7 +202,7 @@ export type SpeakPath =
     | 'stream-fallback-download'
     | 'local';
 
-/** Ergebnis einer Sprachausgabe — Grundlage für den TTFA-Test. */
+/** Ergebnis einer Sprachausgabe (Pfad + TTFA, siehe [METRIC]-Logs). */
 export interface SpeakResult {
     path: SpeakPath;
     /** Zeit vom speak()-Eintritt bis zum ersten hörbaren Ton (null wenn nie hörbar). */
@@ -191,6 +210,8 @@ export interface SpeakResult {
     /** Gesamtdauer bis zum Ende der Wiedergabe. */
     totalMs: number;
     chars: number;
+    /** Anzahl der Sätze, wenn satzweise gesprochen wurde (Satz-Streaming). */
+    sentences?: number;
 }
 
 async function speakWithCloud(
@@ -288,6 +309,150 @@ export async function getShareableAudioUri(
     }
 }
 
+// ---- Satz-Vorab-Synthese ----
+// Einzelne Sätze werden im Hintergrund synthetisiert und im Cache abgelegt
+// (Cache-Key = Satztext). Regeln der Warteschlange: siehe synthQueue.ts.
+const synthQueue = createSynthQueue(
+    async (text, voice, model) => {
+        if (await getCachedUri(text, voice, model)) return;
+        const url = `${BACKEND_STREAM_URL}?text=${encodeURIComponent(text)}`;
+        await downloadWithTimeout(text, url, voice, model);
+        console.log(`${TAG} Prefetched sentence (${text.length} chars)`);
+    },
+    (e) => console.warn(`${TAG} Prefetch failed:`, e),
+);
+
+export const prefetchSentence = synthQueue.enqueue;
+
+// Lädt den Player für einen Satz schon, während der vorige noch spielt: wartet
+// auf die Synthese, erzeugt den Player (lädt die Datei) und lässt ihn pausiert.
+// Liefert null, wenn der Satz nicht (rechtzeitig) im Cache liegt.
+async function preparePlayer(
+    sentence: string,
+    voice: string,
+    model: string,
+    session: number,
+): Promise<AudioPlayer | null> {
+    const pending = synthQueue.awaitPending(sentence, voice, model);
+    if (pending) await pending;
+    if (session !== activeSession) return null;
+    const uri = await getCachedUri(sentence, voice, model);
+    if (!uri || session !== activeSession) return null;
+    const player = createAudioPlayer({ uri });
+    preparedPlayers.add(player);
+    return player;
+}
+
+function toSentences(text: string): string[] {
+    const { completed, remainder } = splitCompletedSentences(text);
+    return remainder ? [...completed, remainder] : completed;
+}
+
+// Spricht einen mehrsätzigen Text satzweise. Satz 1 läuft über den normalen
+// Pfad (Cache/Download/Stream); sobald er hörbar ist, werden die übrigen Sätze
+// im Hintergrund synthetisiert, sodass sie bei Satzende meist schon im Cache
+// liegen. TTFA ist die von Satz 1.
+async function speakSentences(
+    sentences: string[],
+    fullText: string,
+    voice: string,
+    model: string,
+    startMs: number,
+    onFirstAudio?: () => void,
+): Promise<SpeakResult> {
+    const session = activeSession;
+    const ensureActive = () => {
+        if (session !== activeSession) throw new AbortedError();
+    };
+
+    let restStarted = false;
+    const startRest = () => {
+        if (restStarted) return;
+        restStarted = true;
+        for (const s of sentences.slice(1)) void prefetchSentence(s, voice, model);
+    };
+
+    // Player des nächsten Satzes schon laden, während der aktuelle spielt —
+    // vermeidet die hörbare Pause durch Player-Erzeugung beim Satzwechsel.
+    let nextPlayer: Promise<AudioPlayer | null> | null = null;
+    const prepareNext = (i: number) => {
+        if (i < sentences.length) nextPlayer = preparePlayer(sentences[i], voice, model, session);
+    };
+
+    let first: SpeakResult | null = null;
+    for (let i = 0; i < sentences.length; i++) {
+        ensureActive();
+        const sentence = sentences[i];
+
+        try {
+            if (i === 0) {
+                // Läuft schon ein Download für Satz 1 (Tipp-Vorab-Synthese), darauf
+                // warten statt doppelt zu laden.
+                const pending = synthQueue.awaitPending(sentence, voice, model);
+                if (pending) await pending;
+                ensureActive();
+
+                first = await speakWithCloud(
+                    sentence, voice, model, startMs,
+                    () => { startRest(); prepareNext(1); onFirstAudio?.(); },
+                );
+                startRest();
+            } else {
+                const player = nextPlayer ? await nextPlayer : null;
+                nextPlayer = null;
+                ensureActive();
+                prepareNext(i + 1);
+
+                if (player) {
+                    await playLocalAudio('', session, startMs, undefined, player);
+                } else {
+                    // Nicht im Cache (Synthese fehlgeschlagen/zu langsam): normaler Pfad.
+                    const pending = synthQueue.awaitPending(sentence, voice, model);
+                    if (pending) await pending;
+                    ensureActive();
+                    await speakWithCloud(sentence, voice, model, startMs);
+                }
+            }
+        } catch (e) {
+            if (e instanceof AbortedError || i === 0) throw e;
+            // Mitten im Text ausgefallen: Rest lokal sprechen, nichts wiederholen.
+            console.warn(`${TAG} Sentence ${i + 1} failed, finishing with expo-speech:`, e);
+            await speakLocal(sentences.slice(i).join(' '), startMs);
+            break;
+        }
+    }
+
+    return {
+        path: first!.path,
+        ttfaMs: first!.ttfaMs,
+        totalMs: Date.now() - startMs,
+        chars: fullText.length,
+        sentences: sentences.length,
+    };
+}
+
+function speakLocal(text: string, startMs: number, onFirstAudio?: () => void): Promise<SpeakResult> {
+    return new Promise((resolve) => {
+        let ttfaMs: number | null = null;
+        const result = (): SpeakResult => ({
+            path: 'local',
+            ttfaMs,
+            totalMs: Date.now() - startMs,
+            chars: text.length,
+        });
+        Speech.speak(text, {
+            language: 'de-DE',
+            onStart: () => {
+                ttfaMs = Date.now() - startMs;
+                try { onFirstAudio?.(); } catch {}
+            },
+            onDone: () => { console.log(`${TAG} expo-speech done`); resolve(result()); },
+            onStopped: () => resolve(result()),
+            onError: () => resolve(result()),
+        });
+    });
+}
+
 export async function speak(
     text: string,
     useCloud: boolean,
@@ -296,6 +461,7 @@ export async function speak(
     onFirstAudio?: () => void,
 ): Promise<SpeakResult> {
     const startMs = Date.now();
+    lastFinishAt = 0;
     stopSpeaking();
     // Session nach stopSpeaking() merken — wenn sich dieser Wert bis zum
     // Fallback ändert, hat eine neuere speak()-Instanz bereits übernommen.
@@ -305,6 +471,13 @@ export async function speak(
 
     if (useCloud) {
         try {
+            if (SENTENCE_STREAMING) {
+                const sentences = toSentences(text);
+                // Ganzer Text schon im Cache (z.B. gespeicherte Phrase) → normaler Pfad.
+                if (sentences.length > 1 && !(await getCachedUri(text, voice, model))) {
+                    return await speakSentences(sentences, text, voice, model, startMs, onFirstAudio);
+                }
+            }
             return await speakWithCloud(text, voice, model, startMs, onFirstAudio);
         } catch (error) {
             if (error instanceof AbortedError) {
@@ -328,23 +501,5 @@ export async function speak(
         return { path: 'local', ttfaMs: null, totalMs: Date.now() - startMs, chars: text.length };
     }
 
-    return new Promise((resolve) => {
-        let ttfaMs: number | null = null;
-        const result = (): SpeakResult => ({
-            path: 'local',
-            ttfaMs,
-            totalMs: Date.now() - startMs,
-            chars: text.length,
-        });
-        Speech.speak(text, {
-            language: 'de-DE',
-            onStart: () => {
-                ttfaMs = Date.now() - startMs;
-                try { onFirstAudio?.(); } catch {}
-            },
-            onDone: () => { console.log(`${TAG} expo-speech done`); resolve(result()); },
-            onStopped: () => resolve(result()),
-            onError: () => resolve(result()),
-        });
-    });
+    return speakLocal(text, startMs, onFirstAudio);
 }

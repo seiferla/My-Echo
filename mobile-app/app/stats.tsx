@@ -218,10 +218,6 @@ export default function StatsScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.scroll}>
-                <TouchableOpacity style={styles.ttfaBtn} onPress={() => router.push('/ttfa-test')}>
-                    <Text style={styles.ttfaBtnText}>TTFA-Test</Text>
-                </TouchableOpacity>
-
                 {loading ? (
                     <Text style={styles.muted}>Lade Daten…</Text>
                 ) : allMsgs.length === 0 ? (
@@ -562,15 +558,4 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     clearBtnText: { fontSize: 15, fontWeight: '600', color: '#e11d48' },
-
-    ttfaBtn: {
-        width: '100%',
-        maxWidth: 560,
-        backgroundColor: '#0ea5e9',
-        borderRadius: 12,
-        paddingVertical: 14,
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    ttfaBtnText: { fontSize: 15, fontWeight: '700', color: '#ffffff' },
 });

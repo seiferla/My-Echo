@@ -25,7 +25,6 @@ export default function Layout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="stats" />
         <Stack.Screen name="phrases" />
-        <Stack.Screen name="ttfa-test" />
       </Stack>
       </PhrasesProvider>
       </CloudStatusProvider>
