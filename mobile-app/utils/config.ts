@@ -8,3 +8,7 @@ export const BACKEND_STREAM_URL  = `${BACKEND_BASE}/stream/tts`;
 export const BACKEND_HEALTH_URL  = `${BACKEND_BASE}/health`;
 export const BACKEND_WARMUP_URL  = `${BACKEND_BASE}/warmup`;
 export const BACKEND_CHATS_URL   = `${BACKEND_BASE}/chats`;
+
+// Satzweise Sprachausgabe (erster Satz sofort, Rest im Hintergrund). Standardmäßig
+// an; zum A/B-Vergleich mit EXPO_PUBLIC_SENTENCE_STREAMING=0 abschaltbar.
+export const SENTENCE_STREAMING = process.env.EXPO_PUBLIC_SENTENCE_STREAMING !== '0';
