@@ -11,14 +11,18 @@ import {
     Modal,
     NativeSyntheticEvent,
     NativeScrollEvent,
+    Switch,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, X, Save, Check, ChevronDown } from 'lucide-react-native';
+import { Send, X, Save, Check, ChevronDown, Zap, Leaf } from 'lucide-react-native';
 import { Message } from './Message';
 import { PhraseBar } from './PhraseBar';
 import { usePhrases } from '../context/PhrasesContext';
 import { Phrase } from '../utils/phrases';
 import { BACKEND_WARMUP_URL } from '../utils/config';
+import { useCloudStatus } from '../context/CloudStatusContext';
+import { onTypingChanged, resetTypingPrefetch } from '../utils/typingPrefetch';
+import { useFastMode } from '../utils/speedMode';
 import { ChatMessage, newMessageId } from '../utils/types';
 
 // Muss unter dem Backend-Timeout WARM_TTL_SECONDS (25 s) bleiben, sonst
@@ -36,6 +40,8 @@ interface ChatAreaProps {
 
 export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     const { visiblePhrases, settings, recordUse } = usePhrases();
+    const { isAvailable, voice, model } = useCloudStatus();
+    const [fastMode, setFastMode] = useFastMode();
     const [input, setInput] = useState('');
     const [lastSentIndex, setLastSentIndex] = useState<number | null>(null);
     const [isComposing, setIsComposing] = useState(false);
@@ -95,6 +101,17 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
 
         return () => clearInterval(interval);
     }, [isComposing]);
+
+    // Satz-Vorab-Synthese (Schnell-Modus): Während getippt wird, fertige Sätze (und
+    // nach 1 s Tipppause den Rest) schon im Hintergrund synthetisieren. Im
+    // Eco-Modus und beim Bearbeiten (wird nur gespeichert, nicht gesprochen) aus.
+    useEffect(() => {
+        if (!isComposing || isEditMode || !isAvailable || !fastMode) {
+            resetTypingPrefetch();
+            return;
+        }
+        onTypingChanged(input, voice, model);
+    }, [input, isComposing, isEditMode, isAvailable, fastMode, voice, model]);
 
     // Beim Chat-Wechsel autoPlay zurücksetzen — sonst würde nach dem Wechsel
     // die Nachricht an gleicher Position vorgelesen, obwohl sie nicht neu gesendet wurde.
@@ -189,6 +206,26 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                         <TouchableOpacity onPress={handleCloseModal} style={styles.modalButton}>
                             <X size={32} color="#4b5563" />
                         </TouchableOpacity>
+                        {!isEditMode && (
+                            // Ganze Fläche antippbar (große Trefferfläche), Switch nur zur Anzeige.
+                            <TouchableOpacity
+                                style={[styles.speedToggle, { backgroundColor: fastMode ? '#e0f2fe' : '#dcfce7' }]}
+                                onPress={() => setFastMode(!fastMode)}
+                                activeOpacity={0.7}
+                            >
+                                {fastMode ? <Zap size={28} color="#0ea5e9" /> : <Leaf size={28} color="#16a34a" />}
+                                <Text style={[styles.speedLabel, { color: fastMode ? '#0ea5e9' : '#16a34a' }]}>
+                                    {fastMode ? 'Schnell' : 'Eco'}
+                                </Text>
+                                <Switch
+                                    value={fastMode}
+                                    onValueChange={setFastMode}
+                                    style={{ transform: [{ scaleX: 1.4 }, { scaleY: 1.4 }] }}
+                                    trackColor={{ false: '#bbf7d0', true: '#bae6fd' }}
+                                    thumbColor={fastMode ? '#0ea5e9' : '#16a34a'}
+                                />
+                            </TouchableOpacity>
+                        )}
                         <View style={{ flexDirection: 'row', gap: 10 }}>
                             {isEditMode ? (
                                 // Edit-Modus: nur Check (Speichern)
@@ -382,6 +419,19 @@ const styles = StyleSheet.create({
         padding: 20,
         borderBottomWidth: 1,
         borderBottomColor: '#e5e7eb',
+    },
+    speedToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 8,
+        paddingLeft: 14,
+        paddingRight: 18,
+        borderRadius: 30,
+    },
+    speedLabel: {
+        fontSize: 20,
+        fontWeight: '700',
     },
     modalButton: {
         padding: 10,
