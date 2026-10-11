@@ -122,10 +122,14 @@ jobs:
       - name: Gradle-Build (APK + AAB)
         working-directory: mobile-app/android
         env:
-          ANDROID_VERSION_CODE: ${{ github.run_number }}
           ANDROID_VERSION_NAME: ${{ steps.version.outputs.name }}
           GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
+          # Gemeinsame Formel mit android-release.yml (zeitbasiert, workflow-
+          # übergreifend monoton) — getrennte run_number-Zähler liefen auseinander.
+          export ANDROID_VERSION_CODE=$("$GITHUB_WORKSPACE/.github/scripts/android-version-code.sh")
+          echo "versionCode=$ANDROID_VERSION_CODE"
+
           COMMON_FLAGS="--build-cache --parallel --stacktrace"
           # APK zum Sideloaden: nur arm64-v8a (alle modernen Phones) -> schneller.
           ./gradlew assembleRelease $COMMON_FLAGS -PreactNativeArchitectures=arm64-v8a
