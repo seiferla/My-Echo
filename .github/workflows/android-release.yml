@@ -155,15 +155,21 @@ jobs:
         working-directory: mobile-app/android
         env:
           # Monoton steigender versionCode pro Lauf; Versionsname aus Tag/app.json.
-          # Offset +100: Play kannte bereits Code 56 (aus einer anderen Quelle), der
-          # Lauf-Zähler lag darunter -> "no existing users can upgrade". Der Offset
-          # hält den Code über allem, was schon hochgeladen wurde.
-          ANDROID_VERSION_CODE: ${{ github.run_number + 100 }}
+          # Der Code wird unten im Script als RUN_NUMBER + 100 berechnet (Actions-
+          # Expressions können nicht rechnen).
+          RUN_NUMBER: ${{ github.run_number }}
           ANDROID_VERSION_NAME: ${{ steps.version.outputs.name }}
           # Mehr Heap fürs Gradle-Daemon-JVM. ubuntu-latest hat 7 GB RAM;
           # 4 GB für Gradle verhindert GC-Thrashing bei großen RN-Builds.
           GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
+          # Offset +100: Play kannte bereits Code 56 (u.a. aus android-merge-build.yml,
+          # das einen eigenen Lauf-Zähler hat), der Zähler dieses Workflows lag
+          # darunter -> "no existing users can upgrade". Der Offset hält den Code
+          # über allem, was schon hochgeladen wurde.
+          export ANDROID_VERSION_CODE=$((RUN_NUMBER + 100))
+          echo "versionCode=$ANDROID_VERSION_CODE"
+
           # --no-daemon weggelassen: gradle/actions/setup-gradle managed den Daemon
           # und spart so pro Aufruf ~10s JVM-Startup.
           # --parallel: parallele Modul-Builds (RN/Expo verträgt das in aktuellen Versionen).
