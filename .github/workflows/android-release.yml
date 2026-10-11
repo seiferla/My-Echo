@@ -155,7 +155,10 @@ jobs:
         working-directory: mobile-app/android
         env:
           # Monoton steigender versionCode pro Lauf; Versionsname aus Tag/app.json.
-          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          # Offset +100: Play kannte bereits Code 56 (aus einer anderen Quelle), der
+          # Lauf-Zähler lag darunter -> "no existing users can upgrade". Der Offset
+          # hält den Code über allem, was schon hochgeladen wurde.
+          ANDROID_VERSION_CODE: ${{ github.run_number + 100 }}
           ANDROID_VERSION_NAME: ${{ steps.version.outputs.name }}
           # Mehr Heap fürs Gradle-Daemon-JVM. ubuntu-latest hat 7 GB RAM;
           # 4 GB für Gradle verhindert GC-Thrashing bei großen RN-Builds.
