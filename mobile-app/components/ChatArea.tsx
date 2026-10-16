@@ -11,7 +11,6 @@ import {
     Modal,
     NativeSyntheticEvent,
     NativeScrollEvent,
-    Switch,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Send, X, Save, Check, ChevronDown, Zap, Leaf } from 'lucide-react-native';
@@ -207,23 +206,18 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                             <X size={32} color="#4b5563" />
                         </TouchableOpacity>
                         {!isEditMode && (
-                            // Ganze Fläche antippbar (große Trefferfläche), Switch nur zur Anzeige.
+                            // Nur Icon, feste Größe wie die anderen Header-Buttons: ein
+                            // breiter Text/Switch schob auf schmalen Handys den Sende-Button
+                            // aus dem Bild. Blitz = Schnell, Blatt = Eco.
                             <TouchableOpacity
-                                style={[styles.speedToggle, { backgroundColor: fastMode ? '#e0f2fe' : '#dcfce7' }]}
                                 onPress={() => setFastMode(!fastMode)}
+                                style={[styles.modalButton, { backgroundColor: fastMode ? '#e0f2fe' : '#dcfce7' }]}
                                 activeOpacity={0.7}
+                                accessibilityRole="switch"
+                                accessibilityState={{ checked: fastMode }}
+                                accessibilityLabel={fastMode ? 'Schnell-Modus an' : 'Eco-Modus an'}
                             >
-                                {fastMode ? <Zap size={28} color="#0ea5e9" /> : <Leaf size={28} color="#16a34a" />}
-                                <Text style={[styles.speedLabel, { color: fastMode ? '#0ea5e9' : '#16a34a' }]}>
-                                    {fastMode ? 'Schnell' : 'Eco'}
-                                </Text>
-                                <Switch
-                                    value={fastMode}
-                                    onValueChange={setFastMode}
-                                    style={{ transform: [{ scaleX: 1.4 }, { scaleY: 1.4 }] }}
-                                    trackColor={{ false: '#bbf7d0', true: '#bae6fd' }}
-                                    thumbColor={fastMode ? '#0ea5e9' : '#16a34a'}
-                                />
+                                {fastMode ? <Zap size={32} color="#0ea5e9" /> : <Leaf size={32} color="#16a34a" />}
                             </TouchableOpacity>
                         )}
                         <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -419,19 +413,6 @@ const styles = StyleSheet.create({
         padding: 20,
         borderBottomWidth: 1,
         borderBottomColor: '#e5e7eb',
-    },
-    speedToggle: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-        paddingVertical: 8,
-        paddingLeft: 14,
-        paddingRight: 18,
-        borderRadius: 30,
-    },
-    speedLabel: {
-        fontSize: 20,
-        fontWeight: '700',
     },
     modalButton: {
         padding: 10,
