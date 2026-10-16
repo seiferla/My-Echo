@@ -238,7 +238,5 @@ git tag v2.0.1 && git push origin v2.0.1
 
 The app is in active development, built for personal use.
 
-Privacy policy: [German](https://seiferla.github.io/My-Echo/) · [English](https://seiferla.github.io/My-Echo/privacy-en.html)
-
 ---
 This project is being developed with the help of Claude and other AI tools. 
