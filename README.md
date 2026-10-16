@@ -69,12 +69,13 @@ Speaking can be exhausting, painful, or impossible — and existing solutions ar
 > Diagram source: [`docs/architecture.puml`](docs/architecture.puml) (PlantUML). Regenerate with `java -jar plantuml.jar -tsvg docs/architecture.puml`.
 
 1. User opens the compose field → backend pre-warms the Fish Audio connection
-2. User types and taps Send
-3. App checks the on-device audio cache → cache hit plays instantly from local file
-4. Cache miss: app requests audio via HTTP streaming from the self-hosted backend
-5. Backend forwards text to Fish Audio and streams MP3 chunks back in real time
-6. The MP3 is stored in the device cache so the next playback of the same phrase is instant
-7. If the backend is unreachable, the app falls back to local speech synthesis automatically
+2. In **Schnell** mode (default), finished sentences are already synthesized while the user types; in **Eco** mode, synthesis starts only on send
+3. User taps Send → the first sentence starts playing; the remaining sentences are prepared while it plays
+4. App checks the on-device audio cache → cache hit plays instantly from local file
+5. Cache miss: app requests audio via HTTP streaming from the self-hosted backend
+6. Backend forwards text to Fish Audio and streams MP3 chunks back in real time
+7. The MP3 is stored in the device cache so the next playback of the same phrase is instant
+8. If the backend is unreachable, the app falls back to local speech synthesis automatically
 
 Chats sync independently of audio:
 
@@ -97,18 +98,26 @@ My-Echo/
 │   └── Dockerfile
 ├── mobile-app/
 │   ├── app/                    expo-router screens
-│   ├── components/             Sidebar, ChatArea, Message
-│   ├── context/                CloudStatusContext (health check + green dot)
-│   └── utils/                  storage, chatSync, tts, ttsCache, ttsLog, config, types, stats
+│   ├── components/             ChatArea, Sidebar, Message, PhraseBar
+│   ├── context/                CloudStatusContext (health check + green dot), PhrasesContext
+│   └── utils/                  tts, synthQueue, typingPrefetch(Core), speedMode, ttsCache,
+│                               chatStorage, chatSync, phrases, split, stats, storage, config, types, ttsLog
 ├── monitoring/
 │   ├── docker-compose.yml      Prometheus + Grafana stack
 │   ├── prometheus/             Scrape config
 │   └── grafana/                Dashboard + datasource provisioning
+├── docs/
+│   ├── PRIVACY.md / PRIVACY_EN.md   Privacy policy (published via GitHub Pages)
+│   ├── adr/                    Architecture Decision Records
+│   └── release-notes/          Release notes per version
 └── .github/workflows/
-    ├── android-release.yml     Signed APK/AAB build + GitHub Release
+    ├── android-pr-build.yml    Android build for PRs touching mobile-app/
+    ├── android-merge-build.yml Android build + draft release on merge to main
+    ├── android-release.yml     Signed APK/AAB build + GitHub Release (on tag)
     ├── mobile-ci.yml           npm ci + typecheck on every mobile-app push/PR
     ├── backend-deploy.yml      Docker image build + push to GHCR
-    └── backend-tests.yml       pytest + coverage badge
+    ├── backend-tests.yml       pytest + coverage badge
+    └── pages.yml               Publishes the privacy policy to GitHub Pages
 ```
 
 ---
@@ -127,6 +136,9 @@ My-Echo/
 - **Chat history sidebar** — create, pin, rename, and delete chats
 - **Daily auto-chat** — a new chat is created automatically each day
 - **Two send actions** — *Send* saves and auto-plays the message; *Save* stores it silently
+- **Schnell / Eco switch** — *Schnell* (default) prepares speech while you type, so playback starts at once on send; *Eco* prepares it only on send and uses fewer voice-service requests. The choice is saved
+- **Sentence-by-sentence playback** — long messages start with the first sentence; the next one is loaded while the current one plays, with no audible gap
+- **Quick phrases** — a phrase bar above the input for one-tap speaking; phrases can be edited on their own screen
 - **Per-message playback** — every bubble has a play/pause button
 - **Copy message text** — long-press any message to copy its text to the clipboard
 - **Edit in fullscreen** — tap the pencil on any message to edit it in a focused, distraction-free modal
@@ -145,6 +157,8 @@ npm install
 npm start
 ```
 
+For comparing against the old single-stream playback, set `EXPO_PUBLIC_SENTENCE_STREAMING=0` in `.env`.
+
 ---
 
 ## Backend
@@ -155,7 +169,7 @@ A lightweight FastAPI service that proxies streaming TTS requests to Fish Audio 
 
 | Method   | Path            | Description                                            |
 |----------|-----------------|--------------------------------------------------------|
-| `GET`    | `/stream/tts`   | Streams MP3 audio for `?text=...` via chunked HTTP     |
+| `GET`    | `/stream/tts`   | Streams MP3 audio for `?text=...` via chunked HTTP (30/min per client) |
 | `GET`    | `/warmup`       | Pre-warms Fish Audio connection before user sends      |
 | `GET`    | `/health`       | Returns provider status, voice/model, and API credits  |
 | `GET`    | `/chats`        | Returns all stored chats                               |
@@ -203,10 +217,13 @@ The full stack lives in [`monitoring/`](monitoring/) — deploy `monitoring/dock
 
 | Workflow | Trigger | Result |
 |---|---|---|
+| `android-pr-build.yml` | PR touching `mobile-app/` | Android build for review |
+| `android-merge-build.yml` | Push to `main` | Android build + draft GitHub Release |
 | `android-release.yml` | Push tag `v*.*.*` (or manual run) | Signed APK/AAB attached to GitHub Release |
 | `mobile-ci.yml` | Push & PR touching `mobile-app/` | `npm ci` + TypeScript typecheck |
 | `backend-deploy.yml` | Push to `backend/` on `main` | Docker image pushed to GHCR |
 | `backend-tests.yml` | Every push & PR | pytest run + coverage badge update |
+| `pages.yml` | Push to privacy docs on `main` | Privacy policy published to GitHub Pages |
 
 ```bash
 # Mobile release
@@ -220,6 +237,8 @@ git tag v2.0.1 && git push origin v2.0.1
 ## Status
 
 The app is in active development, built for personal use.
+
+Privacy policy: [German](https://seiferla.github.io/My-Echo/) · [English](https://seiferla.github.io/My-Echo/privacy-en.html)
 
 ---
 This project is being developed with the help of Claude and other AI tools. 

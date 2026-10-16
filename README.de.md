@@ -69,12 +69,13 @@ Sprechen kann anstrengend, schmerzhaft oder unmöglich sein — und bestehende L
 > Diagramm-Quelle: [`docs/architecture.puml`](docs/architecture.puml) (PlantUML). Neu erzeugen mit `java -jar plantuml.jar -tsvg docs/architecture.puml`.
 
 1. Der Nutzer öffnet das Eingabefeld → das Backend wärmt die Fish-Audio-Verbindung vor
-2. Der Nutzer tippt und drückt auf Senden
-3. Die App prüft den Audio-Cache auf dem Gerät → bei einem Treffer wird sofort aus der lokalen Datei abgespielt
-4. Cache-Miss: Die App fordert das Audio per HTTP-Streaming vom selbst gehosteten Backend an
-5. Das Backend leitet den Text an Fish Audio weiter und streamt MP3-Chunks in Echtzeit zurück
-6. Die MP3 wird im Geräte-Cache gespeichert, sodass dieselbe Phrase beim nächsten Mal sofort abgespielt wird
-7. Ist das Backend nicht erreichbar, wechselt die App automatisch auf lokale Sprachsynthese
+2. Im Modus **Schnell** (Standard) werden fertige Sätze schon während des Tippens synthetisiert; im Modus **Eco** erst beim Senden
+3. Der Nutzer tippt und drückt auf Senden → der erste Satz startet sofort; die restlichen Sätze werden während der Wiedergabe vorbereitet
+4. Die App prüft den Audio-Cache auf dem Gerät → bei einem Treffer wird sofort aus der lokalen Datei abgespielt
+5. Cache-Miss: Die App fordert das Audio per HTTP-Streaming vom selbst gehosteten Backend an
+6. Das Backend leitet den Text an Fish Audio weiter und streamt MP3-Chunks in Echtzeit zurück
+7. Die MP3 wird im Geräte-Cache gespeichert, sodass dieselbe Phrase beim nächsten Mal sofort abgespielt wird
+8. Ist das Backend nicht erreichbar, wechselt die App automatisch auf lokale Sprachsynthese
 
 Chats werden unabhängig vom Audio synchronisiert:
 
@@ -97,18 +98,26 @@ My-Echo/
 │   └── Dockerfile
 ├── mobile-app/
 │   ├── app/                    expo-router Screens
-│   ├── components/             Sidebar, ChatArea, Message
-│   ├── context/                CloudStatusContext (Health-Check + grüner Punkt)
-│   └── utils/                  storage, chatSync, tts, ttsCache, ttsLog, config, types, stats
+│   ├── components/             ChatArea, Sidebar, Message, PhraseBar
+│   ├── context/                CloudStatusContext (Health-Check + grüner Punkt), PhrasesContext
+│   └── utils/                  tts, synthQueue, typingPrefetch(Core), speedMode, ttsCache,
+│                               chatStorage, chatSync, phrases, split, stats, storage, config, types, ttsLog
 ├── monitoring/
 │   ├── docker-compose.yml      Prometheus + Grafana Stack
 │   ├── prometheus/             Scrape-Konfiguration
 │   └── grafana/                Dashboard + Datasource-Provisioning
+├── docs/
+│   ├── PRIVACY.md / PRIVACY_EN.md   Datenschutzerklärung (über GitHub Pages veröffentlicht)
+│   ├── adr/                    Architecture Decision Records
+│   └── release-notes/          Release Notes je Version
 └── .github/workflows/
-    ├── android-release.yml     Signierter APK/AAB-Build + GitHub Release
+    ├── android-pr-build.yml    Android-Build für PRs mit Änderungen in mobile-app/
+    ├── android-merge-build.yml Android-Build + Draft-Release beim Merge auf main
+    ├── android-release.yml     Signierter APK/AAB-Build + GitHub Release (bei Tag)
     ├── mobile-ci.yml           npm ci + Typecheck bei jedem mobile-app Push/PR
     ├── backend-deploy.yml      Docker-Image bauen + nach GHCR pushen
-    └── backend-tests.yml       pytest + Coverage-Badge
+    ├── backend-tests.yml       pytest + Coverage-Badge
+    └── pages.yml               Veröffentlicht die Datenschutzerklärung auf GitHub Pages
 ```
 
 ---
@@ -127,6 +136,9 @@ My-Echo/
 - **Chatverlauf in der Seitenleiste** — Chats erstellen, anheften, umbenennen und löschen
 - **Täglicher Auto-Chat** — jeden Tag wird automatisch ein neuer Chat angelegt
 - **Zwei Sende-Aktionen** — *Senden* speichert und spielt die Nachricht automatisch ab; *Speichern* legt sie still ab
+- **Schnell / Eco-Schalter** — *Schnell* (Standard) bereitet die Sprache schon beim Tippen vor, sodass die Wiedergabe beim Senden sofort startet; *Eco* bereitet sie erst beim Senden vor und nutzt weniger Anfragen beim Sprachdienst. Die Auswahl wird gespeichert
+- **Satzweise Wiedergabe** — lange Nachrichten starten mit dem ersten Satz; der nächste wird geladen, während der aktuelle läuft, ohne hörbare Pause
+- **Schnellphrasen** — eine Phrasenleiste über dem Eingabefeld zum Sprechen per Tipp; Phrasen lassen sich auf einem eigenen Screen bearbeiten
 - **Wiedergabe pro Nachricht** — jede Sprechblase hat einen Play/Pause-Button
 - **Nachrichtentext kopieren** — lange auf eine Nachricht tippen, um den Text in die Zwischenablage zu kopieren
 - **Bearbeiten im Vollbild** — auf den Stift an einer Nachricht tippen, um sie in einem fokussierten, ablenkungsfreien Modal zu bearbeiten
@@ -145,6 +157,8 @@ npm install
 npm start
 ```
 
+Zum Vergleich mit der alten Einzel-Stream-Wiedergabe kann `EXPO_PUBLIC_SENTENCE_STREAMING=0` in der `.env` gesetzt werden.
+
 ---
 
 ## Backend
@@ -155,7 +169,7 @@ Ein schlanker FastAPI-Dienst, der Streaming-TTS-Anfragen an Fish Audio weiterlei
 
 | Methode  | Pfad            | Beschreibung                                                   |
 |----------|-----------------|----------------------------------------------------------------|
-| `GET`    | `/stream/tts`   | Streamt MP3-Audio für `?text=...` per Chunked HTTP             |
+| `GET`    | `/stream/tts`   | Streamt MP3-Audio für `?text=...` per Chunked HTTP (30/min pro Client) |
 | `GET`    | `/warmup`       | Wärmt die Fish-Audio-Verbindung vor, bevor der Nutzer sendet   |
 | `GET`    | `/health`       | Liefert Provider-Status, Stimme/Modell und API-Guthaben        |
 | `GET`    | `/chats`        | Liefert alle gespeicherten Chats                               |
@@ -203,10 +217,13 @@ Der komplette Stack liegt in [`monitoring/`](monitoring/) — `monitoring/docker
 
 | Workflow | Auslöser | Ergebnis |
 |---|---|---|
+| `android-pr-build.yml` | PR mit Änderungen in `mobile-app/` | Android-Build zum Prüfen |
+| `android-merge-build.yml` | Push auf `main` | Android-Build + Draft-GitHub-Release |
 | `android-release.yml` | Push eines Tags `v*.*.*` (oder manueller Lauf) | Signierter APK/AAB am GitHub Release |
 | `mobile-ci.yml` | Push & PR mit Änderungen in `mobile-app/` | `npm ci` + TypeScript-Typecheck |
 | `backend-deploy.yml` | Push auf `backend/` in `main` | Docker-Image wird nach GHCR gepusht |
 | `backend-tests.yml` | Jeder Push & PR | pytest-Lauf + Aktualisierung des Coverage-Badges |
+| `pages.yml` | Push auf die Datenschutz-Dokumente in `main` | Datenschutzerklärung auf GitHub Pages |
 
 ```bash
 # Mobile-Release
@@ -220,6 +237,8 @@ git tag v2.0.1 && git push origin v2.0.1
 ## Status
 
 Die App befindet sich in aktiver Entwicklung und ist für den persönlichen Gebrauch gebaut.
+
+Datenschutzerklärung: [Deutsch](https://seiferla.github.io/My-Echo/) · [English](https://seiferla.github.io/My-Echo/privacy-en.html)
 
 ---
 Dieses Projekt wird mit Hilfe von Claude und anderen KI-Tools entwickelt.
