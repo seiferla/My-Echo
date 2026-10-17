@@ -55,3 +55,9 @@ jobs:
 
       - name: TypeScript typecheck
         run: npx tsc --noEmit
+
+      # Ersatz für den nativen Build bei reinen JS-Änderungen (android-pr-build.yml
+      # läuft dann nicht): Metro bündelt das JS genau wie im Gradle-Build — fängt
+      # kaputte Imports, fehlende Module und Babel-Fehler in Sekunden statt Minuten.
+      - name: JS-Bundle-Export (Android)
+        run: npx expo export --platform android --output-dir "$RUNNER_TEMP/expo-export"
