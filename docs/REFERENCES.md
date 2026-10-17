@@ -9,13 +9,14 @@ Only public information. **Last checked: 2026-10-17.** Prices and features chang
 |---|---|---|---|
 | Example | Apple *Live Speech* (iOS 17+) | AssistiveWare *Proloquo2Go* | this project |
 | Made for | Anyone who needs to speak by typing | Complex communication needs, symbol-based | People with voice disorders who can type |
-| Voice | System voices, or *Personal Voice* (needs about 15 min of your own recording; iPhone 12 or newer; not possible if you cannot speak) | Natural-sounding voices, several accents | Natural cloud AI voice (Fish Audio), local voice as fallback |
+| Voice | System voices, or *Personal Voice* (needs about 15 min of your own recording; iPhone 12 or newer; not possible if you cannot speak) | Natural-sounding voices, several accents | Natural cloud AI voice (Fish Audio), cloned from about 30 s of audio; local voice as fallback |
 | Price | Free, built into the phone | One-time purchase, about 250–300 EUR (retail, early 2025) | Free, open source, private project |
 
 ## What is different about myEcho
 
 These points come from this repository, not from outside sources.
 
+- **A voice cloned from about 30 seconds of audio.** Fish Audio asks for at least 10 s per sample and recommends longer clean samples for best quality (see sources). Apple's Personal Voice asks for about 15 minutes.
 - **Natural voice without the wait.** Speech is made sentence by sentence. The first sentence plays while the next ones are prepared (`README.md` → *How It Works*).
 - **Schnell / Eco mode.** *Schnell* prepares speech while you type, so playback starts at once on send. *Eco* prepares it only on send.
 - **Always able to speak.** If the cloud voice is not reachable, the app switches to the voice on the device.
@@ -27,6 +28,7 @@ These points come from this repository, not from outside sources.
 - myEcho is **not** a full AAC system. It has no symbol vocabulary and is made for people who can still type.
 - It needs an internet connection for the natural voice. Offline it uses the device voice.
 - It is currently shared with a small test group, not published in a public store.
+- The voice is set once on the server (`TTS_VOICE`). Recording and cloning your own voice inside the app is not built yet.
 - No latency measurements against other apps were made. "Starts speaking sooner" is a design goal, not a benchmark result.
 
 ## Sources
@@ -37,3 +39,5 @@ These points come from this repository, not from outside sources.
 - EASTIN / REHADAT — [Proloquo2Go product entry](https://www.eastin.eu/en/searches/products/detail/database-rehadat/id-tec_129177.0) (299.99 EUR incl. VAT, price date 2025-02-11, non-binding)
 - AssistiveWare — [Proloquo2Go press release (voices)](https://assistiveware.com/press-releases/assistiveware-reveals-proloquo2go-30-expressivepower-switch-access-social-sharing-new-voices-and) (old announcement)
 - Apple Machine Learning Research — [Compact Neural TTS Voices for Accessibility](https://arxiv.org/html/2501.17332v1) (device voices are fast but less natural; cloud neural voices are more natural but add latency)
+- Fish Audio — [Creating models: best practices](https://docs.fish.audio/resources/best-practices/creating-models) (at least 10 s per sample in the guide; two samples of 30–45 s recommended)
+- Fish Audio — [Voice cloning](https://docs.fish.audio/features/voice-cloning) (a clean 10 s reference can be enough; longer helps)
