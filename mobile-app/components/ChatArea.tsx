@@ -3,6 +3,7 @@ import {
     View,
     Text,
     ScrollView,
+    ScrollViewInstance,
     TouchableOpacity,
     TextInput,
     StyleSheet,
@@ -47,8 +48,8 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     // Wenn editingIndex !== null, zeigt der Modal den Edit-Modus (Check + X statt Save + Send).
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editInput, setEditInput] = useState('');
-    const scrollViewRef = useRef<ScrollView>(null);
-    const composeScrollRef = useRef<ScrollView>(null);
+    const scrollViewRef = useRef<ScrollViewInstance>(null);
+    const composeScrollRef = useRef<ScrollViewInstance>(null);
     const insets = useSafeAreaInsets();
     // true wenn der User nahe genug am unteren Ende der Liste ist.
     // Startet true → Pfeil bleibt initial verborgen, Auto-Scroll aktiv.
