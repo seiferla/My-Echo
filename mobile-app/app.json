@@ -32,7 +32,7 @@
       [
         "./plugins/withGradleWrapperVersion",
         {
-          "version": "9.4.1"
+          "version": "9.8.1"
         }
       ],
       [
