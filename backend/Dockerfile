@@ -1,9 +1,9 @@
-FROM python:3.11.12-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
 # Install uv package manager
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /uvx /bin/
 
 COPY requirements.txt .
 RUN uv pip install --system --no-cache -r requirements.txt
