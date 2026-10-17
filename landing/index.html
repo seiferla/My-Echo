@@ -135,7 +135,7 @@
   .ph { position: absolute; inset: 0; display: block; text-align: center; margin: 0; opacity: 0;
     font-size: clamp(26px, 4.6vw, 48px); line-height: 1.1; letter-spacing: -.03em; font-weight: 600; text-wrap: balance; will-change: opacity, transform; }
 
-  /* ---------- 30 seconds vs 15 minutes ---------- */
+  /* ---------- 30 seconds vs. typical voice banking ---------- */
   .time-cmp { padding: clamp(100px, 16vh, 180px) 0; }
   .rows { margin: clamp(48px, 8vh, 80px) auto 0; max-width: 860px; display: grid; gap: 34px; }
   .row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 12px; }
@@ -144,7 +144,9 @@
   .row-head .val small { font-size: .42em; letter-spacing: -.01em; margin-left: 4px; color: var(--gray); }
   .row.us .val { color: var(--gold); }
   .track { height: 14px; border-radius: 980px; background: rgba(255, 255, 255, .06); overflow: hidden; }
-  .track i { display: block; height: 100%; border-radius: inherit; transform-origin: 0 50%; transform: scaleX(calc(var(--w) * var(--p, 1))); background: #3a4257; }
+  .track i { display: block; height: 100%; border-radius: inherit; width: calc(var(--w) * 100% * var(--p, 1)); min-width: calc(14px * var(--p, 1)); background: #3a4257; }
+  .row .sub { margin-top: 10px; font-size: 14px; color: var(--gray); }
+  .row.us .sub { color: var(--gold-2); }
   .row.us .track { overflow: visible; }
   .row.us .track i { background: linear-gradient(90deg, var(--gold-2), var(--gold)); box-shadow: 0 0 12px rgba(240, 201, 135, .55); }
   .fine { margin: 34px auto 0; max-width: 760px; color: var(--gray); font-size: 13px; line-height: 1.5; text-align: center; letter-spacing: -.005em; }
@@ -348,26 +350,37 @@
   </div>
 </section>
 
-<!-- 30 SECONDS vs 15 MINUTES -->
+<!-- 30 SECONDS vs. typical voice banking -->
 <section class="time-cmp">
   <div class="wrap center" data-stagger>
-    <h2 class="headline rv"><span lang="en">Not 15 minutes.<br><span class="gold">30 seconds.</span></span><span lang="de">Nicht 15 Minuten.<br><span class="gold">30 Sekunden.</span></span></h2>
-    <p class="subhead rv"><span lang="en">That is all the recording it took. Less time in front of a microphone. More time to talk.</span><span lang="de">Mehr Aufnahme hat es nicht gebraucht. Weniger Zeit vor dem Mikrofon. Mehr Zeit zum Reden.</span></p>
+    <h2 class="headline rv"><span lang="en">From 30 minutes<br><span class="gold">to 30 seconds.</span></span><span lang="de">Von 30 Minuten<br><span class="gold">auf 30 Sekunden.</span></span></h2>
+    <p class="subhead rv"><span lang="en">Voice banking for communication aids usually asks for 10 to 30 minutes of recording, or more. For the personal voice in myEcho, 30 seconds were enough.</span><span lang="de">Voice Banking für Kommunikationshilfen verlangt meist 10 bis 30 Minuten Aufnahme oder mehr. Für die persönliche Stimme in myEcho haben 30 Sekunden gereicht.</span></p>
   </div>
   <div class="wrap">
     <div class="rows" id="rows">
       <div class="row">
-        <div class="row-head"><span class="who"><span lang="en">Apple Personal Voice setup</span><span lang="de">Einrichtung von Apple Personal Voice</span></span><span class="val">~<b data-to="15">15</b><small>min</small></span></div>
+        <div class="row-head"><span class="who">ElevenLabs <span lang="en">Professional Voice Clone</span><span lang="de">Professional Voice Clone</span></span><span class="val">30+<small>min</small></span></div>
         <div class="track"><i style="--w: 1"></i></div>
+      </div>
+      <div class="row">
+        <div class="row-head"><span class="who">Acapela My-Own-Voice</span><span class="val">10+<small>min</small></span></div>
+        <div class="track"><i style="--w: .3333"></i></div>
+        <div class="sub"><span lang="en">50 sentences, about 10 to 30 minutes</span><span lang="de">50 Sätze, etwa 10 bis 30 Minuten</span></div>
+      </div>
+      <div class="row">
+        <div class="row-head"><span class="who">Apple Personal Voice <span class="gray">(iOS 26)</span></span><span class="val">&lt;1<small>min</small></span></div>
+        <div class="track"><i style="--w: .0333"></i></div>
+        <div class="sub"><span lang="en">10 phrases — but not available in German</span><span lang="de">10 Sätze — aber nicht auf Deutsch verfügbar</span></div>
       </div>
       <div class="row us">
         <div class="row-head"><span class="who">myEcho</span><span class="val"><b data-to="30">30</b><small><span lang="en">sec</span><span lang="de">Sek.</span></small></span></div>
-        <div class="track"><i style="--w: .0333"></i></div>
+        <div class="track"><i style="--w: .0167"></i></div>
+        <div class="sub"><span lang="en">Speaks German</span><span lang="de">Spricht Deutsch</span></div>
       </div>
     </div>
     <p class="fine rv">
-      <span lang="en">Recording time to create a personal voice. Apple’s figure is about 15 minutes, as described by Apple. Sources in the <a href="https://github.com/seiferla/My-Echo/blob/main/docs/REFERENCES.md">reference file</a>.</span>
-      <span lang="de">Aufnahmezeit, um eine persönliche Stimme zu erstellen. Apples Wert liegt laut Apple bei etwa 15 Minuten. Quellen in der <a href="https://github.com/seiferla/My-Echo/blob/main/docs/REFERENCES.md">Referenzdatei</a>.</span>
+      <span lang="en">Recording time needed to create a personal voice, based on each provider’s own information, checked 17 Oct 2026. More clean audio usually gives a more robust voice. Sources in the <a href="https://github.com/seiferla/My-Echo/blob/main/docs/REFERENCES.md">reference file</a>.</span>
+      <span lang="de">Aufnahmezeit, um eine persönliche Stimme zu erstellen, nach Angaben der Anbieter, Stand 17. Oktober 2026. Mehr sauberes Audio ergibt in der Regel eine robustere Stimme. Quellen in der <a href="https://github.com/seiferla/My-Echo/blob/main/docs/REFERENCES.md">Referenzdatei</a>.</span>
     </p>
   </div>
 </section>
@@ -388,7 +401,7 @@
           <dt><span lang="en">Made for</span><span lang="de">Gedacht für</span></dt>
           <dd><span lang="en">Anyone who needs to speak by typing</span><span lang="de">Alle, die tippend sprechen müssen</span></dd>
           <dt><span lang="en">Voice</span><span lang="de">Stimme</span></dt>
-          <dd><span lang="en">System voices, or Personal Voice (about 15 minutes of recording)</span><span lang="de">Systemstimmen oder Personal Voice (etwa 15 Minuten Aufnahme)</span></dd>
+          <dd><span lang="en">System voices, or Personal Voice (10 phrases, under a minute — not available in German)</span><span lang="de">Systemstimmen oder Personal Voice (10 Sätze, unter einer Minute — nicht auf Deutsch verfügbar)</span></dd>
           <dt><span lang="en">Setup</span><span lang="de">Einrichtung</span></dt>
           <dd><span lang="en">Turn on in Accessibility settings</span><span lang="de">In den Bedienungshilfen einschalten</span></dd>
           <dt><span lang="en">Price</span><span lang="de">Preis</span></dt>
@@ -406,7 +419,7 @@
           <dt><span lang="en">Setup</span><span lang="de">Einrichtung</span></dt>
           <dd><span lang="en">A full system with its own vocabulary</span><span lang="de">Ein komplettes System mit eigenem Vokabular</span></dd>
           <dt><span lang="en">Price</span><span lang="de">Preis</span></dt>
-          <dd><span lang="en">One-time purchase, about €250–300</span><span lang="de">Einmalkauf, etwa 250–300 €</span></dd>
+          <dd><span lang="en">One-time purchase, €299.99 (German App Store)</span><span lang="de">Einmalkauf, 299,99 € (deutscher App Store)</span></dd>
         </dl>
       </article>
       <article class="col us rise" data-p="enter" data-d=".36">
@@ -650,7 +663,7 @@
       }
     }
 
-    // ---- 30 s vs 15 min bars
+    // ---- recording-time bars
     var rows = document.getElementById('rows');
     var counters = Array.prototype.slice.call(rows.querySelectorAll('[data-to]'));
     function barsFrame(p) {
