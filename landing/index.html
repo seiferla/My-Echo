@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>myEcho — Type it. It speaks.</title>
+<meta name="description" content="myEcho is an assistive communication app for people with voice disorders. Type what you want to say, and it speaks it back in a natural AI voice.">
+<meta name="theme-color" content="#070d1c">
+<meta property="og:title" content="myEcho — Type it. It speaks.">
+<meta property="og:description" content="Assistive communication app for people with voice disorders. Natural AI voice, instant playback.">
+<meta property="og:image" content="assets/icon.webp">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<style>
+  :root {
+    --bg: #070d1c;
+    --bg-2: #0c1530;
+    --card: #101a38;
+    --line: rgba(255, 255, 255, .09);
+    --fg: #f5f5f7;
+    --muted: #a1a9bd;
+    --gold: #f0c987;
+    --gold-2: #e0a650;
+    --radius: 28px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+  img { display: block; max-width: 100%; }
+
+  /* language switch: only the active language is shown */
+  html[lang="en"] [lang="de"], html[lang="de"] [lang="en"] { display: none !important; }
+
+  .wrap { width: min(1080px, 100% - 40px); margin-inline: auto; }
+
+  /* nav */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(7, 13, 28, .72);
+    -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 52px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -.01em; }
+  .brand img { width: 26px; height: 26px; border-radius: 7px; }
+  .links { display: flex; align-items: center; gap: 22px; font-size: 14px; color: var(--muted); }
+  .links a:hover { color: var(--fg); }
+  .lang { border: 1px solid var(--line); background: transparent; color: var(--fg);
+    border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .lang:hover { background: rgba(255, 255, 255, .07); }
+  @media (max-width: 640px) { .links a.hide-s { display: none; } }
+
+  /* hero */
+  .hero { position: relative; text-align: center; padding: 84px 0 0; overflow: hidden;
+    background:
+      radial-gradient(60% 50% at 50% 38%, rgba(240, 201, 135, .20), transparent 70%),
+      radial-gradient(90% 60% at 50% 0%, #14224a, transparent 70%);
+  }
+  .hero .icon { width: 112px; height: 112px; margin: 0 auto 28px; border-radius: 25%;
+    box-shadow: 0 0 0 1px var(--line), 0 20px 60px rgba(240, 201, 135, .25); }
+  h1 { margin: 0; font-size: clamp(44px, 8vw, 88px); line-height: 1.03; letter-spacing: -.03em; font-weight: 700; }
+  .grad { background: linear-gradient(120deg, var(--gold), var(--gold-2) 60%, #fff0cf);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { max-width: 640px; margin: 22px auto 0; font-size: clamp(19px, 2.6vw, 24px); line-height: 1.4; color: var(--muted); }
+  .cta { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 34px; }
+  .btn { display: inline-block; padding: 13px 26px; border-radius: 999px; font-weight: 600; font-size: 17px; transition: transform .2s, background .2s; }
+  .btn:hover { transform: scale(1.03); }
+  .btn.primary { background: linear-gradient(120deg, var(--gold), var(--gold-2)); color: #1a1204; }
+  .btn.ghost { border: 1px solid rgba(255, 255, 255, .25); }
+  .btn.ghost:hover { background: rgba(255, 255, 255, .07); }
+  .hero .phone { margin: 64px auto 0; width: min(300px, 70vw); }
+  .hero .phone .screen { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .fade-bottom { height: 120px; margin-top: -120px; position: relative;
+    background: linear-gradient(to bottom, transparent, var(--bg)); }
+
+  /* phone frame */
+  .phone { position: relative; }
+  .phone .screen {
+    border-radius: 42px; overflow: hidden; border: 9px solid #1b2547;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, .12), 0 40px 80px rgba(0, 0, 0, .55);
+    background: #fff;
+  }
+  .phone .screen img { width: 100%; height: auto; }
+
+  /* feature sections */
+  section.feature { padding: 120px 0; }
+  section.feature .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: center; }
+  section.feature.flip .text { order: 2; }
+  .eyebrow { color: var(--gold); font-weight: 600; font-size: 15px; letter-spacing: .02em; margin-bottom: 10px; }
+  h2 { margin: 0; font-size: clamp(34px, 5vw, 56px); line-height: 1.06; letter-spacing: -.025em; font-weight: 700; }
+  .text p { margin: 20px 0 0; font-size: clamp(18px, 2.2vw, 21px); line-height: 1.45; color: var(--muted); max-width: 30em; }
+  section.feature .phone { width: min(300px, 74vw); margin-inline: auto; }
+  section.alt { background: linear-gradient(to bottom, var(--bg), var(--bg-2) 20%, var(--bg-2) 80%, var(--bg)); }
+  @media (max-width: 820px) {
+    section.feature { padding: 80px 0; }
+    section.feature .wrap { grid-template-columns: 1fr; gap: 48px; text-align: center; }
+    section.feature.flip .text { order: 0; }
+    .text p { margin-inline: auto; }
+  }
+
+  /* grid */
+  .grid-title { text-align: center; padding: 40px 0 56px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; padding-bottom: 120px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 30px 28px 34px; }
+  .card .ico { font-size: 30px; line-height: 1; margin-bottom: 18px; }
+  .card h3 { margin: 0 0 8px; font-size: 21px; letter-spacing: -.01em; }
+  .card p { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.5; }
+  @media (max-width: 900px) { .cards { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+
+  /* closing */
+  .closing { text-align: center; padding: 100px 0 110px;
+    background: radial-gradient(60% 80% at 50% 100%, rgba(240, 201, 135, .16), transparent 70%); }
+  .closing p { margin: 20px auto 0; max-width: 560px; color: var(--muted); font-size: 20px; }
+
+  footer { border-top: 1px solid var(--line); padding: 28px 0 44px; color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; }
+  footer a:hover { color: var(--fg); }
+  footer .fl { display: flex; gap: 22px; flex-wrap: wrap; }
+
+  /* reveal on scroll */
+  .reveal { opacity: 0; transform: translateY(32px); transition: opacity .9s cubic-bezier(.2,.7,.2,1), transform .9s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .btn { transition: none; }
+  }
+  .no-js .reveal { opacity: 1; transform: none; }
+</style>
+</head>
+<body class="no-js">
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="assets/icon.webp" alt="" width="26" height="26">myEcho</a>
+    <div class="links">
+      <a class="hide-s" href="#features"><span lang="en">Features</span><span lang="de">Funktionen</span></a>
+      <a class="hide-s" href="../"><span lang="en">Privacy</span><span lang="de">Datenschutz</span></a>
+      <a href="https://github.com/seiferla/My-Echo">GitHub</a>
+      <button class="lang" id="lang" type="button" aria-label="Switch language">DE / EN</button>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <img class="icon" src="assets/icon.webp" alt="myEcho app icon" width="112" height="112">
+    <h1>
+      <span lang="en">Type it.<br><span class="grad">myEcho speaks it.</span></span>
+      <span lang="de">Tippen.<br><span class="grad">myEcho spricht.</span></span>
+    </h1>
+    <p class="lead">
+      <span lang="en">An assistive communication app for people with voice disorders. Write what you want to say — and hear it in a natural AI voice, right away.</span>
+      <span lang="de">Eine Kommunikations-App für Menschen mit Stimmstörungen. Schreib, was du sagen möchtest — und hör es sofort in einer natürlichen KI-Stimme.</span>
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/seiferla/My-Echo"><span lang="en">View on GitHub</span><span lang="de">Auf GitHub ansehen</span></a>
+      <a class="btn ghost" href="#features"><span lang="en">See how it works</span><span lang="de">So funktioniert's</span></a>
+    </div>
+    <div class="phone reveal"><div class="screen"><img src="assets/compose.webp" alt="myEcho compose screen with the text 'Hallo mein Name ist'" width="540" height="1204"></div></div>
+  </div>
+  <div class="fade-bottom"></div>
+</header>
+
+<main id="features">
+
+<section class="feature">
+  <div class="wrap">
+    <div class="text reveal">
+      <div class="eyebrow"><span lang="en">Natural voice</span><span lang="de">Natürliche Stimme</span></div>
+      <h2><span lang="en">Your words.<br>Spoken at once.</span><span lang="de">Deine Worte.<br>Sofort gesprochen.</span></h2>
+      <p>
+        <span lang="en">Tap send and the first sentence starts playing while the rest is prepared. No waiting, no gaps — even for long messages.</span>
+        <span lang="de">Auf „Senden“ tippen, und der erste Satz läuft sofort, während der Rest vorbereitet wird. Kein Warten, keine Pausen — auch bei langen Nachrichten.</span>
+      </p>
+    </div>
+    <div class="phone reveal"><div class="screen"><img src="assets/chat.webp" alt="myEcho chat with spoken messages" width="540" height="1204" loading="lazy"></div></div>
+  </div>
+</section>
+
+<section class="feature flip alt">
+  <div class="wrap">
+    <div class="text reveal">
+      <div class="eyebrow"><span lang="en">Quick phrases</span><span lang="de">Schnelle Sätze</span></div>
+      <h2><span lang="en">The things you<br>say every day.</span><span lang="de">Was du jeden Tag<br>sagst.</span></h2>
+      <p>
+        <span lang="en">Keep your most used phrases one tap away — “Yes”, “No”, “One moment, I’m writing.” Edit, sort and speak them instantly.</span>
+        <span lang="de">Deine häufigsten Sätze sind nur einen Tipp entfernt — „Ja“, „Nein“, „Einen Moment bitte, ich schreibe.“ Bearbeiten, sortieren, sofort sprechen.</span>
+      </p>
+    </div>
+    <div class="phone reveal"><div class="screen"><img src="assets/phrases.webp" alt="myEcho phrase editor with quick phrases" width="540" height="1204" loading="lazy"></div></div>
+  </div>
+</section>
+
+<section class="feature">
+  <div class="wrap">
+    <div class="text reveal">
+      <div class="eyebrow"><span lang="en">Your numbers</span><span lang="de">Deine Zahlen</span></div>
+      <h2><span lang="en">See how<br>you use it.</span><span lang="de">Sieh, wie<br>du es nutzt.</span></h2>
+      <p>
+        <span lang="en">A clear statistics screen shows messages, speaking time and your most frequent words. Repeated phrases come from a local cache and play instantly.</span>
+        <span lang="de">Eine übersichtliche Statistik zeigt Nachrichten, Sprechzeit und deine häufigsten Wörter. Wiederholte Sätze kommen aus einem lokalen Cache und spielen sofort.</span>
+      </p>
+    </div>
+    <div class="phone reveal"><div class="screen"><img src="assets/stats.webp" alt="myEcho statistics screen" width="540" height="1204" loading="lazy"></div></div>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="grid-title reveal">
+    <div class="eyebrow"><span lang="en">Built for everyday use</span><span lang="de">Gebaut für den Alltag</span></div>
+    <h2><span lang="en">Small details that matter.</span><span lang="de">Details, die zählen.</span></h2>
+  </div>
+  <div class="cards">
+    <div class="card reveal"><div class="ico">⚡</div>
+      <h3><span lang="en">Schnell &amp; Eco</span><span lang="de">Schnell &amp; Eco</span></h3>
+      <p><span lang="en">Schnell prepares speech while you type. Eco waits until you send and saves voice-service requests.</span><span lang="de">Schnell bereitet die Sprache beim Tippen vor. Eco wartet bis zum Senden und spart Anfragen.</span></p></div>
+    <div class="card reveal"><div class="ico">📡</div>
+      <h3><span lang="en">Always able to speak</span><span lang="de">Immer sprechfähig</span></h3>
+      <p><span lang="en">If the cloud voice is not reachable, myEcho switches to the voice on your device. A green dot shows the connection.</span><span lang="de">Ist die Cloud-Stimme nicht erreichbar, nutzt myEcho die Stimme des Geräts. Ein grüner Punkt zeigt die Verbindung.</span></p></div>
+    <div class="card reveal"><div class="ico">🔊</div>
+      <h3><span lang="en">Background playback</span><span lang="de">Hintergrund-Wiedergabe</span></h3>
+      <p><span lang="en">Speech keeps playing when the screen locks, so long messages always finish.</span><span lang="de">Die Sprache läuft weiter, wenn der Bildschirm sperrt — lange Nachrichten werden immer zu Ende gesprochen.</span></p></div>
+    <div class="card reveal"><div class="ico">💬</div>
+      <h3><span lang="en">Chat history</span><span lang="de">Chat-Verlauf</span></h3>
+      <p><span lang="en">Create, pin, rename and delete chats. A new chat starts automatically each day.</span><span lang="de">Chats anlegen, anheften, umbenennen und löschen. Jeden Tag startet automatisch ein neuer Chat.</span></p></div>
+    <div class="card reveal"><div class="ico">🔒</div>
+      <h3><span lang="en">No account, no tracking</span><span lang="de">Kein Konto, kein Tracking</span></h3>
+      <p><span lang="en">No login, no ads, no tracking. Read the <a href="../" style="text-decoration:underline">privacy policy</a> in plain words.</span><span lang="de">Kein Login, keine Werbung, kein Tracking. Lies die <a href="../" style="text-decoration:underline">Datenschutzerklärung</a> in einfachen Worten.</span></p></div>
+    <div class="card reveal"><div class="ico">🧩</div>
+      <h3><span lang="en">Open source</span><span lang="de">Open Source</span></h3>
+      <p><span lang="en">The whole app and backend are open on GitHub. Built with Expo, React Native and FastAPI.</span><span lang="de">App und Backend sind offen auf GitHub. Gebaut mit Expo, React Native und FastAPI.</span></p></div>
+  </div>
+</div>
+
+<section class="closing">
+  <div class="wrap reveal">
+    <h2><span lang="en">A voice, when<br><span class="grad">you need one.</span></span><span lang="de">Eine Stimme, wenn<br><span class="grad">du sie brauchst.</span></span></h2>
+    <p>
+      <span lang="en">myEcho is a private, non-profit project and is currently shared with a small group of testers.</span>
+      <span lang="de">myEcho ist ein privates, nicht kommerzielles Projekt und wird aktuell mit einer kleinen Testgruppe geteilt.</span>
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/seiferla/My-Echo"><span lang="en">Follow the project</span><span lang="de">Projekt ansehen</span></a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>© myEcho · <span lang="en">Assistive communication app</span><span lang="de">Assistive Kommunikations-App</span></div>
+    <div class="fl">
+      <a href="../"><span lang="en">Privacy</span><span lang="de">Datenschutz</span></a>
+      <a href="../privacy-en.html">Privacy (EN)</a>
+      <a href="https://github.com/seiferla/My-Echo">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    document.body.classList.remove('no-js');
+
+    // language: saved choice, else browser language
+    var lang = 'en';
+    try { lang = localStorage.getItem('lang') || ''; } catch (e) {}
+    if (lang !== 'de' && lang !== 'en') lang = (navigator.language || '').toLowerCase().indexOf('de') === 0 ? 'de' : 'en';
+    root.lang = lang;
+    document.getElementById('lang').addEventListener('click', function () {
+      root.lang = root.lang === 'de' ? 'en' : 'de';
+      try { localStorage.setItem('lang', root.lang); } catch (e) {}
+    });
+
+    // reveal on scroll
+    var els = document.querySelectorAll('.reveal');
+    if (!('IntersectionObserver' in window)) { els.forEach(function (el) { el.classList.add('in'); }); return; }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+    }, { threshold: 0.15 });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>
+</body>
+</html>

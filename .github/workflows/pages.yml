@@ -13,6 +13,7 @@ on:
       - 'docs/PRIVACY.md'
       - 'docs/PRIVACY_EN.md'
       - 'scripts/build_privacy_site.py'
+      - 'landing/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -42,10 +43,15 @@ jobs:
       - name: Build site
         run: python3 scripts/build_privacy_site.py site
 
+      # Landing page unter /app/. Die Datenschutz-URLs (/ und /privacy-en.html)
+      # bleiben unveraendert, weil sie z.B. im Play Store verlinkt sind.
+      - name: Landing page kopieren
+        run: cp -R landing site/app
+
       - name: Sicherheitsnetz — nichts Internes veroeffentlichen
         run: |
           # Bricht ab, falls versehentlich interne Angaben in der Seite landen.
-          if grep -rniE '192\.168\.|10\.[0-9]+\.|wireguard|keystore|SERVICE_ACCOUNT|API_KEY' site/; then
+          if grep -rniIE '192\.168\.|10\.[0-9]+\.|wireguard|keystore|SERVICE_ACCOUNT|API_KEY' site/; then
             echo "::error::Interne Angaben im Build gefunden — Deployment abgebrochen."
             exit 1
           fi
