@@ -3,6 +3,7 @@ import {
     View,
     Text,
     ScrollView,
+    ScrollViewInstance,
     StyleSheet,
     TouchableOpacity,
     TextInput,
@@ -58,7 +59,7 @@ export default function PhrasesScreen() {
     // editing === null → Editor geschlossen. editing === 'new' → neue Phrase.
     const [editing, setEditing] = useState<'new' | Phrase | null>(null);
     const [draftText, setDraftText] = useState('');
-    const editorScrollRef = useRef<ScrollView>(null);
+    const editorScrollRef = useRef<ScrollViewInstance>(null);
 
     // --- Drag & Drop ---------------------------------------------------------
     // dragIndex = Position, an der die Phrase aufgenommen wurde.
