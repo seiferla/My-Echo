@@ -118,6 +118,20 @@
   .hint i { width: 10px; height: 10px; border-right: 2px solid var(--gold); border-bottom: 2px solid var(--gold); transform: rotate(45deg); animation: nudge 1.6s var(--ease) infinite; }
   @keyframes nudge { 0%, 100% { transform: translateY(0) rotate(45deg); opacity: .5; } 50% { transform: translateY(7px) rotate(45deg); opacity: 1; } }
 
+  /* progress dots while a pinned scene plays; a "scroll on" cue when it is finished */
+  .pager { position: absolute; left: 50%; bottom: clamp(14px, 3.5vh, 34px); z-index: 4; transform: translateX(-50%); width: 240px; height: 54px; display: flex; align-items: flex-end; justify-content: center;
+    opacity: 0; transition: opacity .5s var(--ease); pointer-events: none; }
+  .pager.show { opacity: 1; }
+  .dots { display: flex; gap: 8px; align-items: center; height: 10px; transition: opacity .35s; }
+  .dots i { width: 8px; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .22); transition: background .3s, width .4s var(--ease); }
+  .dots i.on { width: 26px; background: var(--gold); }
+  .cue { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; gap: 7px; opacity: 0; transform: translateY(10px); transition: opacity .5s var(--ease), transform .5s var(--ease);
+    font-size: 13px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--gold); white-space: nowrap; pointer-events: none; }
+  .cue i { width: 11px; height: 11px; border-right: 2px solid var(--gold); border-bottom: 2px solid var(--gold); transform: rotate(45deg); animation: nudge 1.6s var(--ease) infinite; }
+  .pager.done .dots { opacity: 0; }
+  .pager.done .cue { opacity: 1; transform: none; pointer-events: auto; }
+  .cue:hover { filter: brightness(1.15); }
+
   /* ---------- manifesto: words light up with the scroll ---------- */
   .manifesto { padding: clamp(110px, 18vh, 200px) 0 clamp(60px, 10vh, 120px); }
   .scrub { margin: 0 auto; max-width: 21em; font-size: clamp(32px, 5.2vw, 64px); line-height: 1.1; font-weight: 600; letter-spacing: -.03em; text-wrap: pretty; }
@@ -125,19 +139,19 @@
 
   /* ---------- personal voice scene (pinned, scroll-scrubbed) ---------- */
   .voice { position: relative; height: 280vh; }
-  .stage { position: sticky; top: 0; height: 100vh; height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden;
+  .stage { position: sticky; top: 0; height: 100vh; height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden; padding-bottom: clamp(48px, 8vh, 76px);
     background: radial-gradient(50% 45% at 50% 42%, rgba(240, 201, 135, calc(.04 + var(--p, 0) * .14)), transparent 70%); }
   .stage .eyebrow { margin-bottom: clamp(10px, 2.4vh, 24px); }
-  .orb { position: relative; width: min(290px, 40vh, 70vw); aspect-ratio: 1; }
+  .orb { position: relative; width: min(290px, 36vh, 70vw); aspect-ratio: 1; }
   .orb svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
   .orb .track { fill: none; stroke: rgba(255, 255, 255, .08); stroke-width: 5; }
   .orb .bar { fill: none; stroke: url(#ringGrad); stroke-width: 5; stroke-linecap: round; filter: drop-shadow(0 0 10px rgba(240, 201, 135, .5)); }
   .orb .core { position: absolute; inset: 0; display: grid; place-items: center; }
   .orb .time { font-size: clamp(40px, 9vh, 68px); font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
   .orb .appicon { position: absolute; width: 62%; border-radius: 22.5%; opacity: 0; box-shadow: 0 0 0 1px var(--line), 0 20px 60px rgba(240, 201, 135, .4); }
-  .wave { display: flex; gap: 4px; height: clamp(54px, 11vh, 96px); align-items: center; justify-content: center; margin-top: clamp(18px, 4vh, 40px); }
+  .wave { display: flex; gap: 4px; height: clamp(46px, 9vh, 90px); align-items: center; justify-content: center; margin-top: clamp(18px, 4vh, 40px); }
   .wave i { display: block; width: 4px; height: 100%; border-radius: 3px; background: linear-gradient(var(--gold-3), var(--gold) 40%, var(--gold-2)); transform: scaleY(.12); }
-  .phases { position: relative; width: min(780px, 100% - 44px); min-height: clamp(110px, 25vh, 190px); margin-top: clamp(14px, 3.4vh, 34px); }
+  .phases { position: relative; width: min(780px, 100% - 44px); min-height: clamp(100px, 22vh, 180px); margin-top: clamp(14px, 3.4vh, 34px); }
   .ph { position: absolute; inset: 0; display: block; text-align: center; margin: 0; opacity: 0;
     font-size: clamp(26px, 4.6vw, 48px); line-height: 1.1; letter-spacing: -.03em; font-weight: 600; text-wrap: balance; will-change: opacity, transform; }
 
@@ -237,7 +251,7 @@
   footer .fl { display: flex; gap: 20px; flex-wrap: wrap; }
 
   /* ---------- reduced motion / no JS: calm, complete, static ---------- */
-  .no-js .hint, .reduce .hint { display: none; }
+  .no-js .hint, .reduce .hint, .no-js .pager, .reduce .pager { display: none; }
   .no-js .hero, .reduce .hero { height: auto; }
   .no-js .hero-stage, .reduce .hero-stage { position: relative; height: auto; display: block; padding-bottom: 80px; }
   .no-js .hero-copy, .reduce .hero-copy { position: relative; inset: auto; opacity: 1; transform: none; filter: none; padding-bottom: 50px; }
@@ -315,6 +329,10 @@
         <h3><span lang="en">Heard.</span><span lang="de">Gehört.</span></h3>
         <p><span lang="en">In a natural, personal voice.</span><span lang="de">In einer natürlichen, persönlichen Stimme.</span></p></div>
     </div>
+    <div class="pager" id="pagerHero" aria-hidden="true">
+      <div class="dots"><i></i><i></i><i></i></div>
+      <a class="cue" href="#manifesto" tabindex="-1"><span lang="en">Scroll to continue</span><span lang="de">Weiter scrollen</span><i></i></a>
+    </div>
     <div class="side">
       <span class="chip"><span lang="en">No account</span><span lang="de">Kein Konto</span></span>
       <span class="chip"><span lang="en">No setup</span><span lang="de">Keine Einrichtung</span></span>
@@ -324,7 +342,7 @@
 </header>
 
 <!-- MANIFESTO: the words light up one by one as you scroll -->
-<section class="manifesto">
+<section class="manifesto" id="manifesto">
   <div class="wrap center">
     <p class="scrub" lang="en">Your voice is how people know you. When it fades, a part of you goes quiet. <span class="gold">myEcho is here to make it heard again.</span></p>
     <p class="scrub" lang="de">An deiner Stimme erkennen dich die Menschen. Wenn sie schwindet, wird ein Teil von dir still. <span class="gold">myEcho ist da, um sie wieder hörbar werden zu lassen.</span></p>
@@ -347,6 +365,10 @@
       </div>
     </div>
     <div class="wave" id="wave" aria-hidden="true"></div>
+    <div class="pager" id="pagerVoice" aria-hidden="true">
+      <div class="dots"><i></i><i></i><i></i></div>
+      <a class="cue" href="#recording" tabindex="-1"><span lang="en">Scroll to continue</span><span lang="de">Weiter scrollen</span><i></i></a>
+    </div>
     <div class="phases">
       <p class="ph" lang="en">Your voice is part of who you are.</p>
       <p class="ph" lang="en"><span class="gold">30 seconds</span> of recording were enough to bring the old voice back.</p>
@@ -359,7 +381,7 @@
 </section>
 
 <!-- 30 SECONDS vs. typical voice banking -->
-<section class="time-cmp">
+<section class="time-cmp" id="recording">
   <div class="wrap center" data-stagger>
     <h2 class="headline rv"><span lang="en">From 30 minutes<br><span class="gold">to 30 seconds.</span></span><span lang="de">Von 30 Minuten<br><span class="gold">auf 30 Sekunden.</span></span></h2>
     <p class="subhead rv"><span lang="en">Voice banking for communication aids usually asks for 10 to 30 minutes of recording, or more. For the personal voice in myEcho, 30 seconds were enough.</span><span lang="de">Voice Banking für Kommunikationshilfen verlangt meist 10 bis 30 Minuten Aufnahme oder mehr. Für die persönliche Stimme in myEcho haben 30 Sekunden gereicht.</span></p>
@@ -621,6 +643,15 @@
       return FR - 1;
     }
 
+    // progress dots + "scroll on" cue for the pinned scenes
+    function bindPager(id) { var el = document.getElementById(id); return { el: el, dots: el.querySelectorAll('.dots i'), idx: -1, st: '' }; }
+    function setPager(pg, idx, show, done) {
+      if (pg.idx !== idx) { pg.dots.forEach(function (d, i) { d.classList.toggle('on', i === idx); }); pg.idx = idx; }
+      var st = (show ? 's' : '') + (done ? 'd' : '');
+      if (pg.st !== st) { pg.el.classList.toggle('show', show); pg.el.classList.toggle('done', done); pg.st = st; }
+    }
+    var pagerHero = bindPager('pagerHero'), pagerVoice = bindPager('pagerVoice');
+
     var heroStage = document.querySelector('.hero-stage');
     var caps = Array.prototype.slice.call(document.querySelectorAll('.cap'));
     var chips = Array.prototype.slice.call(document.querySelectorAll('.side .chip'));
@@ -634,6 +665,7 @@
       var ranges = [[0.04, 0.12, 0.66, 0.74], [0.72, 0.78, 0.84, 0.88], [0.86, 0.92, 2, 3]];
       caps.forEach(function (c, i) { var r = ranges[i]; fade(c, p < 0.3 ? 0 : seg(q, r[0], r[1], r[2], r[3]), 26); });
       chips.forEach(function (c, i) { fade(c, clamp((q - 0.86 - i * 0.03) / 0.08), 16); });
+      setPager(pagerHero, q < 0.72 ? 0 : (q < 0.86 ? 1 : 2), p > 0.3, p >= 0.97);
     }
 
     // ---- personal voice scene
@@ -669,6 +701,7 @@
         else o = seg(p, 0.64, 0.76, 2, 3);
         fade(phases[j], o, 22);
       }
+      setPager(pagerVoice, p < 0.33 ? 0 : (p < 0.66 ? 1 : 2), p > 0.01, p >= 0.97);
     }
 
     // ---- recording-time bars
