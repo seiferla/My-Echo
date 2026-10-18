@@ -4,7 +4,7 @@ Status: proposed (2026-10-18). Related: goals G1, G2, G4, G5, G8; issue #208.
 
 ## Context
 
-myEcho must support 5–20 users with isolated data, login, and a measurable scaling behavior. Users have voice disorders, so login must be accessible. Time: about 11 engineering weeks. Budget: $100 in total. Data is sensitive (GDPR), so an EU region is required.
+myEcho must support 5–20 users with isolated data, login, and a measurable scaling behavior. Users have voice disorders, so login must be accessible. Data is sensitive (GDPR), so an EU region is required.
 
 ## Options
 
@@ -27,28 +27,11 @@ Not criteria: user limits (25,000 and 50,000 are far above 20 users) and "free".
 6. **Hosting of the backend:** Hetzner VM, Docker Compose, Caddy, Terraform, own domain (HTTPS is required by release Android builds, and passkeys need the domain).
 7. **Load tests:** E1 (backend + Postgres container) as baseline, E2 (backend + Supabase Postgres) as real setup, in a separate Supabase test project. Tokens are issued before the test.
 
-## Consequences
-
-- Ops work is lower than with Keycloak or a self-hosted database.
-- The database in E2 is shared hardware at a fixed plan size. Results vary, and the plan limits can be the tipping point. E1 keeps the attribution clean.
-- Switching provider later means a data export (`pg_dump`) and a new JWKS URL. No code rewrite, as long as the backend uses only standard JWT validation.
-- Passwords need a long session and a device unlock to stay accessible. Magic link and custom SMTP are postponed.
-
 ## Reversal triggers
 
 - Passkey spike fails after 2 days: ship password with paste, passkeys become future work. Supabase stays.
 - The EU region or data processing agreement is not available: switch to Keycloak or Auth0 for login plus a self-hosted Postgres.
 - Supabase terms forbid load tests on E2: run E2 at low levels only and state it in the report.
-- The free plan cannot meet the load levels: pay one month of a paid plan for the measurement window, within the budget.
-
-## To verify before status "accepted"
-
-- EU region (Frankfurt) and data processing agreement.
-- Free-plan rules: pausing, backups (point-in-time restore), rate limits.
-- Terms for load tests.
-- Local Supabase stack (CLI, Docker) for isolation tests in CI.
-- `react-native-passkeys` with the app's Expo SDK version.
-- Whether the JWT signing keys of the project are asymmetric (JWKS) or a shared secret.
 
 ## Sources
 
