@@ -66,7 +66,7 @@
   @media (max-width: 700px) { .links a.hide-s { display: none; } }
 
   /* ---------- hero: pinned product reveal ---------- */
-  .hero { position: relative; height: 340vh; }
+  .hero { position: relative; height: 230vh; }
   .hero-stage { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; display: grid; place-items: center; }
   .aurora { position: absolute; inset: -20%; pointer-events: none; opacity: calc(.9 - var(--a, 0) * .4);
     background: radial-gradient(38% 30% at 30% 30%, rgba(240, 201, 135, .16), transparent 70%), radial-gradient(40% 32% at 72% 38%, rgba(70, 100, 200, .22), transparent 70%), radial-gradient(50% 40% at 50% 85%, rgba(240, 201, 135, .10), transparent 70%);
@@ -112,13 +112,19 @@
     .side { display: none; }
   }
 
+  /* scroll hint: shows at the start, fades as soon as the scene begins */
+  .hint { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: clamp(18px, 4vh, 40px);
+    font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--gray-2); pointer-events: none; }
+  .hint i { width: 10px; height: 10px; border-right: 2px solid var(--gold); border-bottom: 2px solid var(--gold); transform: rotate(45deg); animation: nudge 1.6s var(--ease) infinite; }
+  @keyframes nudge { 0%, 100% { transform: translateY(0) rotate(45deg); opacity: .5; } 50% { transform: translateY(7px) rotate(45deg); opacity: 1; } }
+
   /* ---------- manifesto: words light up with the scroll ---------- */
   .manifesto { padding: clamp(110px, 18vh, 200px) 0 clamp(60px, 10vh, 120px); }
   .scrub { margin: 0 auto; max-width: 21em; font-size: clamp(32px, 5.2vw, 64px); line-height: 1.1; font-weight: 600; letter-spacing: -.03em; text-wrap: pretty; }
   .scrub .w { opacity: .16; }
 
   /* ---------- personal voice scene (pinned, scroll-scrubbed) ---------- */
-  .voice { position: relative; height: 440vh; }
+  .voice { position: relative; height: 280vh; }
   .stage { position: sticky; top: 0; height: 100vh; height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; overflow: hidden;
     background: radial-gradient(50% 45% at 50% 42%, rgba(240, 201, 135, calc(.04 + var(--p, 0) * .14)), transparent 70%); }
   .stage .eyebrow { margin-bottom: clamp(10px, 2.4vh, 24px); }
@@ -231,6 +237,7 @@
   footer .fl { display: flex; gap: 20px; flex-wrap: wrap; }
 
   /* ---------- reduced motion / no JS: calm, complete, static ---------- */
+  .no-js .hint, .reduce .hint { display: none; }
   .no-js .hero, .reduce .hero { height: auto; }
   .no-js .hero-stage, .reduce .hero-stage { position: relative; height: auto; display: block; padding-bottom: 80px; }
   .no-js .hero-copy, .reduce .hero-copy { position: relative; inset: auto; opacity: 1; transform: none; filter: none; padding-bottom: 50px; }
@@ -249,7 +256,7 @@
   .no-js .orb, .reduce .orb { width: auto; aspect-ratio: auto; }
   .no-js .rv, .reduce .rv { opacity: 1; transform: none; filter: none; transition: none; }
   .no-js .rise, .reduce .rise { transform: none; opacity: 1; }
-  .reduce .intro, .reduce .device-in, .reduce .aurora, .reduce .sweep, .reduce .in .eq i, .reduce .in .switch .sw, .reduce .in .switch .sw::after, .reduce .in .dot::after { animation: none; }
+  .reduce .hint i, .reduce .intro, .reduce .device-in, .reduce .aurora, .reduce .sweep, .reduce .in .eq i, .reduce .in .switch .sw, .reduce .in .switch .sw::after, .reduce .in .dot::after { animation: none; }
   .reduce .tile, .reduce .btn, .reduce .mini { transition: none; }
   .reduce { scroll-behavior: auto; }
 </style>
@@ -289,6 +296,7 @@
         <a class="btn" href="https://github.com/seiferla/My-Echo"><span lang="en">View on GitHub</span><span lang="de">Auf GitHub ansehen</span></a>
         <a class="more" href="#voice"><span lang="en">Hear the difference</span><span lang="de">Den Unterschied hören</span></a>
       </div>
+      <div class="hint intro" style="--n:6" aria-hidden="true"><span lang="en">Scroll</span><span lang="de">Scrollen</span><i></i></div>
     </div>
 
     <div class="device"><div class="device-in"><div class="screen">
@@ -318,8 +326,8 @@
 <!-- MANIFESTO: the words light up one by one as you scroll -->
 <section class="manifesto">
   <div class="wrap center">
-    <p class="scrub" lang="en">Your voice is how people know you. When it fades, a part of you goes quiet. <span class="gold">myEcho is here to bring it back.</span></p>
-    <p class="scrub" lang="de">An deiner Stimme erkennen dich die Menschen. Wenn sie schwindet, wird ein Teil von dir still. <span class="gold">myEcho ist da, um sie zurückzubringen.</span></p>
+    <p class="scrub" lang="en">Your voice is how people know you. When it fades, a part of you goes quiet. <span class="gold">myEcho is here to make it heard again.</span></p>
+    <p class="scrub" lang="de">An deiner Stimme erkennen dich die Menschen. Wenn sie schwindet, wird ein Teil von dir still. <span class="gold">myEcho ist da, um sie wieder hörbar werden zu lassen.</span></p>
   </div>
 </section>
 
@@ -674,12 +682,39 @@
     // ---- one scroll loop drives everything that is scrubbed
     var hero = document.getElementById('top');
     var enters = Array.prototype.slice.call(document.querySelectorAll('[data-p="enter"]'));
-    function pinP(el, vh) { var r = el.getBoundingClientRect(); return clamp(-r.top / Math.max(1, r.height - vh)); }
-    function frame() {
+    function pinRect(el, vh) {
+      var r = el.getBoundingClientRect();
+      return { sp: clamp(-r.top / Math.max(1, r.height - vh)), pinned: r.top <= 2 && r.bottom >= vh - 2 };
+    }
+    // Pinned scenes are scroll-driven, but they also play on their own once they are
+    // pinned, so nobody has to keep scrolling. Scrolling up scrubs back and pauses it.
+    //   dur: time for a full run, arm: scroll progress that starts the auto-play
+    var scenes = [
+      { el: hero,  run: heroFrame, dur: 9000,  arm: 0.02, auto: 0, paused: false },
+      { el: scene, run: voice,     dur: 10000, arm: 0,    auto: 0, paused: false }
+    ];
+    var lastY = window.scrollY, lastT = 0;
+    function frame(now) {
       ticking = false;
+      now = (typeof now === 'number') ? now : performance.now();
+      var dt = lastT ? Math.min(80, now - lastT) : 0; lastT = now;
       var vh = window.innerHeight || 800;
-      heroFrame(pinP(hero, vh));
-      var vp = pinP(scene, vh); scene.style.setProperty('--p', vp.toFixed(3)); voice(vp);
+      var y = window.scrollY, dy = y - lastY; lastY = y;
+      var animating = false;
+      scenes.forEach(function (s) {
+        var m = pinRect(s.el, vh);
+        if (dy < 0) s.paused = true;            // user scrolls up: follow the scroll, stop playing
+        else if (dy > 0) s.paused = false;      // scrolls down again: playing is allowed
+        if (s.paused || !m.pinned || m.sp < s.arm) {
+          s.auto = Math.min(s.auto, m.sp);
+        } else if (s.auto < 1) {
+          s.auto = Math.min(1, Math.max(s.auto, m.sp) + dt / s.dur);
+          animating = true;
+        }
+        var p = Math.max(m.sp, s.auto);
+        s.el.style.setProperty('--p', p.toFixed(3));
+        s.run(p);
+      });
       enters.forEach(function (el) {
         var r = el.getBoundingClientRect();
         var d = parseFloat(el.getAttribute('data-d') || '0');
@@ -695,6 +730,7 @@
         var n = s.words.length;
         s.words.forEach(function (w, i) { w.style.opacity = (0.16 + 0.84 * clamp(prog * (n + 2) - i)).toFixed(3); });
       });
+      if (animating && !ticking) { ticking = true; requestAnimationFrame(frame); }   // keep the auto-play running
     }
 
     if (reduce) {
