@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import {
     View,
     Text,
+    Image,
     TextInput,
     TouchableOpacity,
     ScrollView,
@@ -49,6 +50,13 @@ export default function LoginScreen() {
                     contentContainerStyle={styles.content}
                     keyboardShouldPersistTaps="handled"
                 >
+                    {/* Logo ist dekorativ: der Titel darunter sagt schon "myEcho". */}
+                    <Image
+                        source={require('../assets/login-logo.png')}
+                        style={styles.logo}
+                        accessible={false}
+                        importantForAccessibility="no"
+                    />
                     <Text style={styles.title} accessibilityRole="header">myEcho</Text>
                     <Text style={styles.subtitle}>Mit deinem Konto anmelden</Text>
 
@@ -140,6 +148,7 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f8fafc' },
     content: { flexGrow: 1, justifyContent: 'center', padding: 24 },
 
+    logo: { width: 120, height: 120, alignSelf: 'center', borderRadius: 28, marginBottom: 16 },
     title: { fontSize: 36, fontWeight: 'bold', color: '#111827', textAlign: 'center' },
     subtitle: { fontSize: 18, color: '#374151', textAlign: 'center', marginTop: 8, marginBottom: 28 },
 
