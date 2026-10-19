@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#14284a' },
     content: { flexGrow: 1, justifyContent: 'center', padding: 24 },
 
-    logo: { width: 120, height: 120, alignSelf: 'center', borderRadius: 28, marginBottom: 16 },
+    logo: { width: 120, height: 120, alignSelf: 'center', marginBottom: 16 },
     title: { fontSize: 36, fontWeight: 'bold', color: '#f2c94c', textAlign: 'center' },
     subtitle: { fontSize: 18, color: '#e2e8f0', textAlign: 'center', marginTop: 8, marginBottom: 28 },
 
