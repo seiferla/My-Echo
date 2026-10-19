@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
+    "@supabase/supabase-js": "^2.118.0",
     "expo": "57.0.26",
     "expo-asset": "~57.0.11",
     "expo-audio": "~57.0.5",
@@ -32,6 +33,7 @@
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.28.0",
     "react-native-svg": "15.15.5",
+    "react-native-url-polyfill": "^4.0.0",
     "react-native-web": "~0.21.3"
   },
   "devDependencies": {
