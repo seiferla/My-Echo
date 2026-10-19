@@ -12,6 +12,7 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 
@@ -42,6 +43,8 @@ export default function LoginScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
+            {/* Helle Statusleiste-Schrift, weil der Hintergrund jetzt dunkel ist. */}
+            <StatusBar style="light" />
             <KeyboardAvoidingView
                 style={styles.flex}
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -145,12 +148,13 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
     flex: { flex: 1 },
-    container: { flex: 1, backgroundColor: '#f8fafc' },
+    // Farben aus dem Logo: dunkles Navy + Gold. Gold nur auf Navy (auf Weiß zu blass).
+    container: { flex: 1, backgroundColor: '#14284a' },
     content: { flexGrow: 1, justifyContent: 'center', padding: 24 },
 
     logo: { width: 120, height: 120, alignSelf: 'center', borderRadius: 28, marginBottom: 16 },
-    title: { fontSize: 36, fontWeight: 'bold', color: '#111827', textAlign: 'center' },
-    subtitle: { fontSize: 18, color: '#374151', textAlign: 'center', marginTop: 8, marginBottom: 28 },
+    title: { fontSize: 36, fontWeight: 'bold', color: '#f2c94c', textAlign: 'center' },
+    subtitle: { fontSize: 18, color: '#e2e8f0', textAlign: 'center', marginTop: 8, marginBottom: 28 },
 
     card: {
         backgroundColor: '#ffffff',
@@ -191,17 +195,17 @@ const styles = StyleSheet.create({
     },
     errorText: { fontSize: 18, color: '#7f1d1d', fontWeight: '600' },
 
-    // Dunkleres Blau als sonst in der App: weißer Text braucht min. 4,5:1 Kontrast.
+    // Navy aus dem Logo: weißer Text hat ca. 11:1 Kontrast (WCAG AAA).
     button: {
         minHeight: 60,
         marginTop: 24,
         borderRadius: 14,
-        backgroundColor: '#0369a1',
+        backgroundColor: '#1e3a5f',
         alignItems: 'center',
         justifyContent: 'center',
     },
     buttonDisabled: { backgroundColor: '#6b7280' },
     buttonText: { fontSize: 20, fontWeight: 'bold', color: '#ffffff' },
 
-    hint: { fontSize: 16, color: '#374151', textAlign: 'center', marginTop: 24, lineHeight: 23 },
+    hint: { fontSize: 16, color: '#e2e8f0', textAlign: 'center', marginTop: 24, lineHeight: 23 },
 });
