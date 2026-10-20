@@ -2,27 +2,28 @@ import { File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { storage } from './storage';
 import { getShareableAudioUri } from './tts';
+import { scoped } from './localUser';
 
 const TAG = '[myEcho][Phrases]';
 
 // Wie in chatStorage.ts: im Web kein Dateisystem, also localStorage über den
 // storage-Helper. Die File-Instanz wird erst beim ersten Zugriff erzeugt.
 const isWeb = Platform.OS === 'web';
-const WEB_KEY = 'myEchoPhrases';
+const WEB_KEY_BASE = 'myEchoPhrases';
 
-let _phrasesFile: File | null = null;
+// Pro Konto eine eigene Datei (siehe localUser.ts). Nicht zwischenspeichern:
+// beim Kontowechsel ändert sich der Name.
 function phrasesFileRef(): File {
-    if (!_phrasesFile) _phrasesFile = new File(Paths.document, 'phrases.json');
-    return _phrasesFile;
+    return new File(Paths.document, `${scoped('phrases')}.json`);
 }
 
 async function readRaw(): Promise<string | null> {
-    if (isWeb) return storage.getItem(WEB_KEY);
+    if (isWeb) return storage.getItem(scoped(WEB_KEY_BASE));
     return phrasesFileRef().exists ? phrasesFileRef().textSync() : null;
 }
 
 async function writeRaw(json: string): Promise<void> {
-    if (isWeb) return storage.setItem(WEB_KEY, json);
+    if (isWeb) return storage.setItem(scoped(WEB_KEY_BASE), json);
     phrasesFileRef().write(json);
 }
 

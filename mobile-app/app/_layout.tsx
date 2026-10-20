@@ -39,6 +39,15 @@ function RootStack() {
   );
 }
 
+// Alles, was nutzerbezogene Daten im Speicher hält, wird beim Kontowechsel neu
+// aufgebaut (neuer key → neuer Provider → liest die Daten des neuen Kontos).
+function UserScope({ children }: { children: React.ReactNode }) {
+  const { session } = useAuth();
+  return (
+    <PhrasesProvider key={session?.user.id ?? 'signed-out'}>{children}</PhrasesProvider>
+  );
+}
+
 export default function Layout() {
   useEffect(() => {
     // Audio-Session einmalig einrichten, damit die Wiedergabe bei gesperrtem
@@ -50,9 +59,9 @@ export default function Layout() {
     <SafeAreaProvider>
       <AuthProvider>
       <CloudStatusProvider>
-      <PhrasesProvider>
+      <UserScope>
       <RootStack />
-      </PhrasesProvider>
+      </UserScope>
       </CloudStatusProvider>
       </AuthProvider>
     </SafeAreaProvider>

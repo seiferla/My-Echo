@@ -59,13 +59,17 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS: allow mobile app (Expo) and local dev origins
+# CORS: allow mobile app (Expo) and local dev origins.
+# Weitere Browser-Herkünfte (z. B. eine gehostete Web-Version) über
+# CORS_ORIGINS, kommagetrennt.
+EXTRA_CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:8081",   # Expo web
         "http://localhost:19006",  # Expo web (alt)
         "exp://*",                 # Expo Go (native)
+        *EXTRA_CORS_ORIGINS,
     ],
     allow_credentials=True,
     allow_methods=["*"],

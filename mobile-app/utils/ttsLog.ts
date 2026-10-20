@@ -1,4 +1,5 @@
 import { storage } from './storage';
+import { scoped } from './localUser';
 
 /**
  * Lokales Logging der Sprachausgaben (TTS).
@@ -14,7 +15,9 @@ import { storage } from './storage';
  * SecureStore-Eintrag dauerhaft klein bleibt.
  */
 
-const STORAGE_KEY = 'myEchoTtsStats';
+const STORAGE_KEY_BASE = 'myEchoTtsStats';
+// Pro Konto ein eigener Eintrag (siehe localUser.ts).
+const storageKey = () => scoped(STORAGE_KEY_BASE);
 
 export interface TtsDayStat {
     requests: number;
@@ -33,7 +36,7 @@ export function dayKey(ts: number): string {
 }
 
 export async function getTtsStats(): Promise<TtsStats> {
-    const raw = await storage.getItem(STORAGE_KEY);
+    const raw = await storage.getItem(storageKey());
     if (!raw) return {};
     try {
         return JSON.parse(raw) as TtsStats;
@@ -57,5 +60,5 @@ export async function recordTtsRequest(chars: number, durationMs: number): Promi
     bucket.durationMs += Math.max(0, durationMs);
 
     stats[key] = bucket;
-    await storage.setItem(STORAGE_KEY, JSON.stringify(stats));
+    await storage.setItem(storageKey(), JSON.stringify(stats));
 }
