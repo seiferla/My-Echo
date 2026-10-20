@@ -8,6 +8,8 @@ export const BACKEND_STREAM_URL  = `${BACKEND_BASE}/stream/tts`;
 export const BACKEND_HEALTH_URL  = `${BACKEND_BASE}/health`;
 export const BACKEND_WARMUP_URL  = `${BACKEND_BASE}/warmup`;
 export const BACKEND_CHATS_URL   = `${BACKEND_BASE}/chats`;
+export const BACKEND_PHRASES_URL = `${BACKEND_BASE}/phrases`;
+export const BACKEND_TTS_STATS_URL = `${BACKEND_BASE}/stats/tts`;
 
 // Supabase (Login). Projekt-URL und publishable/anon Key sind öffentlich
 // gedacht und dürfen in die App. Der secret/service_role Key gehört NIE hierher.

@@ -1,6 +1,6 @@
 
 import { readChats } from './chatStorage';
-import { getTtsStats, dayKey, TtsStats } from './ttsLog';
+import { getTtsStats, syncTtsStats, dayKey, TtsStats } from './ttsLog';
 import { Chat, ChatMessage } from './types';
 
 export type { Chat, ChatMessage };
@@ -253,6 +253,7 @@ export interface TtsSummary {
 }
 
 export async function loadTtsStats(): Promise<TtsStats> {
+    await syncTtsStats(); // gleicht mit dem Backend ab, wirft nicht
     return getTtsStats();
 }
 

@@ -7,6 +7,7 @@ dem geprüften Token (auth.py) und filtert jede Abfrage danach.
 Hinweis: Das Backend verbindet sich als Datenbank-Owner und umgeht damit RLS.
 Die Isolation hängt deshalb am WHERE user_id = ... in jeder Abfrage.
 """
+import json
 import os
 import time
 from typing import Any, Optional
@@ -123,3 +124,70 @@ async def delete_chat(user_id: str, chat_id: str) -> bool:
             "DELETE FROM chats WHERE user_id = $1 AND id = $2", user_id, chat_id
         )
     return result == "DELETE 1"
+
+
+# --- Phrasen ----------------------------------------------------------------
+
+async def get_phrase_store(user_id: str) -> Optional[dict[str, Any]]:
+    """Phrasen + Einstellungen dieses Nutzers, oder None wenn es noch keine gibt."""
+    async with pool().acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT data, updated_at FROM phrase_stores WHERE user_id = $1", user_id
+        )
+    if row is None:
+        return None
+    data = json.loads(row["data"])
+    return {**data, "updatedAt": row["updated_at"]}
+
+
+async def put_phrase_store(user_id: str, store: dict[str, Any]) -> bool:
+    """Speichert den Stand, aber nur wenn er nicht älter ist als der vorhandene.
+
+    So kann ein verspäteter Request (z. B. nach kurzem Netzausfall) einen
+    neueren Stand nicht überschreiben. Gibt False zurück, wenn er abgelehnt wurde.
+    """
+    data = json.dumps({"phrases": store["phrases"], "settings": store["settings"]})
+    async with pool().acquire() as conn:
+        result = await conn.execute(
+            """INSERT INTO phrase_stores (user_id, data, updated_at)
+               VALUES ($1, $2::jsonb, $3)
+               ON CONFLICT (user_id) DO UPDATE SET
+                   data = EXCLUDED.data,
+                   updated_at = EXCLUDED.updated_at
+               WHERE phrase_stores.updated_at <= EXCLUDED.updated_at""",
+            user_id, data, store["updatedAt"],
+        )
+    return result == "INSERT 0 1"
+
+
+# --- TTS-Statistik ----------------------------------------------------------
+
+async def get_tts_stats(user_id: str) -> dict[str, dict[str, int]]:
+    """Alle Tageswerte dieses Nutzers: {"2026-10-19": {requests, chars, durationMs}}."""
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT day, requests, chars, duration_ms FROM tts_daily_stats WHERE user_id = $1",
+            user_id,
+        )
+    return {
+        r["day"]: {"requests": r["requests"], "chars": r["chars"], "durationMs": r["duration_ms"]}
+        for r in rows
+    }
+
+
+async def merge_tts_stats(user_id: str, stats: dict[str, dict[str, int]]) -> None:
+    """Führt Tageswerte zusammen. Pro Feld gilt der größere Wert, die Zahlen
+    werden also nie kleiner (ein zweites Gerät mit älterem Stand schadet nicht)."""
+    async with pool().acquire() as conn:
+        await conn.executemany(
+            """INSERT INTO tts_daily_stats (user_id, day, requests, chars, duration_ms)
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT (user_id, day) DO UPDATE SET
+                   requests = GREATEST(tts_daily_stats.requests, EXCLUDED.requests),
+                   chars = GREATEST(tts_daily_stats.chars, EXCLUDED.chars),
+                   duration_ms = GREATEST(tts_daily_stats.duration_ms, EXCLUDED.duration_ms)""",
+            [
+                (user_id, day, s["requests"], s["chars"], s["durationMs"])
+                for day, s in stats.items()
+            ],
+        )

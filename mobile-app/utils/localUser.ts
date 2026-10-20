@@ -1,4 +1,4 @@
-import { File, Paths } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { storage } from './storage';
 
@@ -32,6 +32,14 @@ const LEGACY_KEYS = ['myEchoChatsFile', 'myEchoPhrases', 'myEchoTtsStats']; // s
  */
 export async function adoptLegacyData(userId: string): Promise<void> {
     if (!isWeb) {
+        // Der alte, gemeinsame Audio-Cache gehörte keinem Konto. Er ist nur ein
+        // Cache und lässt sich neu aufbauen: löschen. Jedes Konto bekommt einen
+        // eigenen Ordner (tts-cache.<user_id>, siehe ttsCache.ts).
+        const legacyCache = new Directory(Paths.document, 'tts-cache');
+        if (legacyCache.exists) {
+            console.log(`${TAG} Removing shared legacy audio cache`);
+            legacyCache.delete();
+        }
         for (const name of LEGACY_FILES) {
             const legacy = new File(Paths.document, `${name}.json`);
             const target = new File(Paths.document, `${name}.${userId}.json`);

@@ -7,6 +7,7 @@ import {
     MAX_VISIBLE_PHRASES,
     loadPhraseStore,
     savePhraseStore,
+    syncPhraseStore,
     newPhraseId,
     prewarmPhrases,
     reorder,
@@ -59,11 +60,24 @@ export function PhrasesProvider({ children }: { children: React.ReactNode }) {
     const prewarmedRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
+        let alive = true;
         loadPhraseStore().then((store) => {
+            if (!alive) return;
             setPhrases(store.phrases);
             setSettings(store.settings);
             setReady(true);
+
+            // Erst lokal anzeigen (sofort, auch offline), danach im Hintergrund
+            // mit dem Backend abgleichen. Ein neuerer Stand von dort ersetzt den lokalen.
+            syncPhraseStore(store).then((synced) => {
+                if (!alive || !synced) return;
+                setPhrases(synced.phrases);
+                setSettings(synced.settings);
+            });
         });
+        return () => {
+            alive = false;
+        };
     }, []);
 
     const visiblePhrases = phrases.slice(0, settings.visibleCount);
