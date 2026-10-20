@@ -252,8 +252,14 @@ export interface TtsSummary {
     perDay: TimeBucket[];
 }
 
+/** Lokale TTS-Statistik: sofort, ohne Netz. */
 export async function loadTtsStats(): Promise<TtsStats> {
-    await syncTtsStats(); // gleicht mit dem Backend ab, wirft nicht
+    return getTtsStats();
+}
+
+/** Gleicht mit dem Backend ab und liefert danach den aktuellen Stand. Wirft nicht. */
+export async function syncAndLoadTtsStats(): Promise<TtsStats> {
+    await syncTtsStats();
     return getTtsStats();
 }
 

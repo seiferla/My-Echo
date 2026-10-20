@@ -16,7 +16,7 @@ import { Sidebar } from '../components/Sidebar';
 import { ChatArea } from '../components/ChatArea';
 import { useCloudStatus } from '../context/CloudStatusContext';
 import { Chat, ChatMessage, withMessageIds } from '../utils/types';
-import { loadChats, pushChat, deleteChatRemote, persistLocal } from '../utils/chatSync';
+import { loadChatsForStart, mergeChats, pushChat, deleteChatRemote, persistLocal } from '../utils/chatSync';
 
 const { width } = Dimensions.get('window');
 
@@ -30,7 +30,9 @@ export default function ChatScreen() {
 
     // useEffect "Lade Chats" ersetzen:
     useEffect(() => {
-        loadChats().then((loaded) => {
+        let alive = true;
+        loadChatsForStart().then(({ chats: loaded, later }) => {
+            if (!alive) return;
             // "Neuer Chat für heute"-Logik bleibt — operiert jetzt auf den
             // geladenen Backend-Chats statt auf SecureStore-Rohdaten.
             const today = new Date().setHours(0, 0, 0, 0);
@@ -60,7 +62,18 @@ export default function ChatScreen() {
                 setChats([fresh]);
                 pushChat(fresh);
             }
+
+            // Kam das Backend erst nach der Wartezeit (langsames Netz), den
+            // Abgleich nachträglich dazumischen, ohne zu überschreiben, was der
+            // Nutzer inzwischen geändert hat (der reichere Stand gewinnt).
+            later?.then((merged) => {
+                if (!alive || !merged) return;
+                setChats((prev) => mergeChats(prev, merged));
+            });
         });
+        return () => {
+            alive = false;
+        };
     }, []);
 
     // useEffect "Speichere Chats" ersetzen — lokal + Backend parallel:
