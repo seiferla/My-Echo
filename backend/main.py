@@ -7,7 +7,7 @@ import httpx
 import websockets
 from contextlib import asynccontextmanager
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -16,6 +16,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+from auth import current_user
 from db import init_db, close_db, list_chats, upsert_chat, delete_chat
 
 logging.basicConfig(level=logging.INFO)
@@ -49,7 +50,8 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
-app = FastAPI(lifespan=lifespan)
+# Swagger-UI und OpenAPI-Datei sind aus: sie würden alle Routen öffentlich zeigen.
+app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 Instrumentator().instrument(app).expose(app)
 
 # Rate limiting: single-user app, generous limits to prevent API abuse
@@ -144,7 +146,7 @@ async def _take_warm_connection():
 
 
 @app.get("/warmup")
-async def warmup():
+async def warmup(user_id: str = Depends(current_user)):
     """
     Öffnet vorab eine Fish-Audio-Verbindung und sendet das start-Event.
     Vom Frontend aufgerufen sobald der User das Eingabefeld öffnet —
@@ -167,7 +169,7 @@ async def warmup():
 
 @app.get("/stream/tts")
 @limiter.limit("30/minute")
-async def stream_tts(request: Request, text: str):
+async def stream_tts(request: Request, text: str, user_id: str = Depends(current_user)):
     async def generate():
         t_start = time.monotonic()
 
@@ -257,7 +259,8 @@ async def health():
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return {**base, "status": "ok", "credits": response.json()}
+            # Guthaben nicht ausgeben: das Backend ist öffentlich erreichbar.
+            return {**base, "status": "ok"}
         except httpx.TimeoutException:
             return {**base, "status": "unavailable", "message": "Fish Audio API Timeout"}
         except httpx.HTTPStatusError as e:
@@ -269,23 +272,23 @@ async def health():
 # --- Endpoints (am Ende der Datei ergänzen) ---------------------------------
 
 @app.get("/chats", response_model=list[ChatModel])
-async def get_chats():
-    """Alle Chats laden — wird beim App-Start aufgerufen."""
-    return await list_chats()
+async def get_chats(user_id: str = Depends(current_user)):
+    """Alle Chats des angemeldeten Nutzers — wird beim App-Start aufgerufen."""
+    return await list_chats(user_id)
 
 
 @app.put("/chats/{chat_id}")
-async def put_chat(chat_id: str, chat: ChatModel):
-    """Chat anlegen oder komplett ersetzen."""
+async def put_chat(chat_id: str, chat: ChatModel, user_id: str = Depends(current_user)):
+    """Chat des angemeldeten Nutzers anlegen oder komplett ersetzen."""
     if chat.id != chat_id:
         raise HTTPException(400, "chat_id mismatch between URL and body")
-    await upsert_chat(chat.model_dump())
+    await upsert_chat(user_id, chat.model_dump())
     return {"status": "ok"}
 
 
 @app.delete("/chats/{chat_id}")
-async def remove_chat(chat_id: str):
-    deleted = await delete_chat(chat_id)
+async def remove_chat(chat_id: str, user_id: str = Depends(current_user)):
+    deleted = await delete_chat(user_id, chat_id)
     if not deleted:
         raise HTTPException(404, f"chat {chat_id} not found")
     return {"status": "deleted"}

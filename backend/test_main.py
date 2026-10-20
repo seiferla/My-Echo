@@ -211,7 +211,7 @@ class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
             response = await main.health()
 
         self.assertEqual(response["status"], "ok")
-        self.assertEqual(response["credits"], {"credit": 100})
+        self.assertNotIn("credits", response)  # Guthaben nicht öffentlich ausgeben
         self.assertEqual(response["voice"], "voice-abc")
         self.assertEqual(response["model"], "s2-pro")
 
