@@ -1,7 +1,8 @@
 import { createAudioPlayer, AudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as Speech from 'expo-speech';
-import { BACKEND_STREAM_URL } from './config';
+import { BACKEND_STREAM_URL, BACKEND_WARMUP_URL } from './config';
 import { getCachedUri, downloadAndCache } from './ttsCache';
+import { authHeaders } from './supabase';
 
 const TAG = '[myEcho][TTS]';
 const DOWNLOAD_TIMEOUT_MS = 15_000;
@@ -46,6 +47,15 @@ let activeSession = 0;
 let currentPlayer: AudioPlayer | null = null;
 let currentAbort: (() => void) | null = null;
 
+/** Hält die Fish-Verbindung im Backend warm. Ein Fehler ist egal (optional). */
+export async function warmBackend(): Promise<void> {
+    try {
+        await fetch(BACKEND_WARMUP_URL, { headers: await authHeaders() });
+    } catch {
+        // Warmup ist nur eine Optimierung.
+    }
+}
+
 export function stopSpeaking(): void {
     // 1. Session-Token invalidieren — beendet alles was an einem ensureActive()-
     //    Check vorbeikommt, auch noch laufende Downloads
@@ -68,6 +78,8 @@ export function stopSpeaking(): void {
 }
 
 async function playLocalAudio(uri: string, session: number): Promise<void> {
+    // Streams (http) brauchen den Token. Lokale Dateien nicht.
+    const headers = uri.startsWith('http') ? await authHeaders() : {};
     return new Promise((resolve, reject) => {
         // Vor Player-Erstellung prüfen — wenn schon abgebrochen, kein Player erstellen
         if (session !== activeSession) {
@@ -76,7 +88,8 @@ async function playLocalAudio(uri: string, session: number): Promise<void> {
         }
 
         const t0 = Date.now();
-        const player = createAudioPlayer({ uri });
+        const source = uri.startsWith('http') ? { uri, headers } : { uri };
+        const player = createAudioPlayer(source);
         currentPlayer = player;
 
         let playbackStarted = false;

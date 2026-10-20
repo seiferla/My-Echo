@@ -19,6 +19,18 @@ export const supabase = isSupabaseConfigured
       })
     : null;
 
+/**
+ * Authorization-Header für Backend-Aufrufe. getSession() erneuert einen
+ * abgelaufenen Token automatisch. Ohne Session liefert es {}: das Backend
+ * antwortet dann mit 401.
+ */
+export async function authHeaders(): Promise<Record<string, string>> {
+    if (!supabase) return {};
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 // Token nur im Vordergrund automatisch erneuern (Empfehlung für React Native).
 // Laufende Wiedergabe ist nicht betroffen: der Token wird nur beim Request geprüft.
 if (supabase) {

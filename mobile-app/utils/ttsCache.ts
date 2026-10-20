@@ -1,5 +1,6 @@
 import { File, Directory, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
+import { authHeaders } from './supabase';
 
 const TAG = '[myEcho][Cache]';
 const MAX_CACHE_BYTES = 100 * 1024 * 1024;   // 100 MB hard cap
@@ -237,7 +238,7 @@ export async function downloadAndCache(
         // File.downloadFileAsync throws UnableToDownload for non-2xx responses.
         // On failure, remove any partial bytes so they don't leak as untracked disk usage.
         try {
-            await File.downloadFileAsync(url, dest, { idempotent: true });
+            await File.downloadFileAsync(url, dest, { idempotent: true, headers: await authHeaders() });
         } catch (e) {
             try { dest.delete(); } catch {}
             throw e;

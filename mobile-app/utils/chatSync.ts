@@ -1,6 +1,7 @@
 import { Chat, withMessageIds } from './types';
 import { readChats, writeChats } from './chatStorage';
 import { BACKEND_CHATS_URL } from './config';
+import { authHeaders } from './supabase';
 
 const TAG = '[myEcho][Sync]';
 const FETCH_TIMEOUT_MS = 5_000;
@@ -56,6 +57,7 @@ export async function loadChats(): Promise<Chat[]> {
 
     try {
         const response = await fetch(BACKEND_CHATS_URL, {
+            headers: await authHeaders(),
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -97,7 +99,7 @@ export async function pushChat(chat: Chat): Promise<void> {
     try {
         const response = await fetch(`${BACKEND_CHATS_URL}/${chat.id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
             body: JSON.stringify(chat),
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
@@ -111,6 +113,7 @@ export async function deleteChatRemote(chatId: string): Promise<void> {
     try {
         await fetch(`${BACKEND_CHATS_URL}/${chatId}`, {
             method: 'DELETE',
+            headers: await authHeaders(),
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
     } catch (e) {
