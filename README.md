@@ -53,9 +53,7 @@ Type what you want to say — myEcho speaks it in your own voice.
 
 **myEcho is built for people who can no longer use their own voice.**
 
-The project started when my mother was diagnosed with ALS in its bulbar form. The muscles for speaking weaken first, so today she can hardly speak clearly. Most voice cloning solutions need several minutes of studio recordings — her voice was already too unstable for that. Because the TTS model works zero-shot, **30 seconds from old WhatsApp voice messages**, recorded long before her illness, were enough to recreate her voice.
-
-She has been using myEcho in her daily life for several months: she types what she wants to say, and the app speaks it in her old voice. The interface is calm and simple on purpose — no friction, no complexity.
+Speaking can be exhausting, painful, or impossible — and existing solutions are often too complicated. myEcho is the opposite: a calm, simple interface where you type what you want to say and the app speaks it back in a natural voice. No friction. No complexity.
 
 ---
 
