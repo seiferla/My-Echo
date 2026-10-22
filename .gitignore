@@ -23,7 +23,11 @@ mobile-app/.idea/
 # secrets
 .env
 .env.local
-.env.*.localFETCH_HEAD
+.env.*.local
+
+# Python
+__pycache__/
+*.pyc
 
 # generierte Datenschutz-Seite (GitHub Pages)
 /site/
