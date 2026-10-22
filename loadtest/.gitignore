@@ -1,0 +1,5 @@
+# Tokens sind nur eine Stunde gültig, gehören aber nie ins Repo.
+.tokens.json
+__pycache__/
+# Kurze Probeläufe (--quick) sind keine Ergebnisse. Nur echte Läufe werden eingecheckt.
+results/quick-*/

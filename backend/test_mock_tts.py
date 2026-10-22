@@ -75,6 +75,11 @@ class TestStreamEndpoint(MockMode):
         self.assertEqual(r.headers["x-tts-provider"], "mock")
         self.assertEqual(r.content, mock_tts.silent_mp3(mock_tts.audio_seconds("Hallo Welt")))
 
+    def test_response_names_the_configured_delay_for_the_load_test(self):
+        with patch.dict(os.environ, {"MOCK_TTS_FIRST_AUDIO_MS": "1234"}):
+            r = self.client.get("/stream/tts", params={"text": "Hallo"})
+        self.assertEqual(r.headers["x-tts-mock-first-audio-ms"], "1234")
+
     def test_longer_text_sends_more_bytes(self):
         short = self.client.get("/stream/tts", params={"text": "Hallo"}).content
         long = self.client.get("/stream/tts", params={"text": "Hallo " * 40}).content

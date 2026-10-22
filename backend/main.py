@@ -268,7 +268,12 @@ async def stream_tts(request: Request, text: str, user_id: str = Depends(current
         return StreamingResponse(
             mock_tts.stream(text),
             media_type="audio/mpeg",
-            headers={"Cache-Control": "no-cache", "X-TTS-Provider": "mock"},
+            headers={
+                "Cache-Control": "no-cache",
+                "X-TTS-Provider": "mock",
+                # Der Lasttest zieht diese Zeit von der Messung ab (Aufwand des eigenen Systems).
+                "X-TTS-Mock-First-Audio-Ms": str(int(mock_tts.first_audio_ms())),
+            },
         )
 
     async def generate():
