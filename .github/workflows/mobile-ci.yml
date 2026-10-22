@@ -56,6 +56,10 @@ jobs:
       - name: TypeScript typecheck
         run: npx tsc --noEmit
 
+      # Unit tests for the sync logic (chats, phrases, TTS stats, login storage).
+      - name: Unit tests
+        run: npm test -- --ci
+
       # Ersatz für den nativen Build bei reinen JS-Änderungen (android-pr-build.yml
       # läuft dann nicht): Metro bündelt das JS genau wie im Gradle-Build — fängt
       # kaputte Imports, fehlende Module und Babel-Fehler in Sekunden statt Minuten.
