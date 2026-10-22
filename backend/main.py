@@ -16,7 +16,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from auth import current_user
+from auth import current_user, require_metrics_token
 from db import (
     init_db, close_db, list_chats, upsert_chat, delete_chat,
     get_phrase_store, put_phrase_store, get_tts_stats, merge_tts_stats,
@@ -85,7 +85,10 @@ async def lifespan(app: FastAPI):
 
 # Swagger-UI und OpenAPI-Datei sind aus: sie würden alle Routen öffentlich zeigen.
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
-Instrumentator().instrument(app).expose(app)
+# /metrics nur für Prometheus mit eigenem Token (METRICS_TOKEN), nicht öffentlich.
+Instrumentator().instrument(app).expose(
+    app, include_in_schema=False, dependencies=[Depends(require_metrics_token)]
+)
 
 # Rate limiting: single-user app, generous limits to prevent API abuse
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])

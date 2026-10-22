@@ -26,6 +26,7 @@ Not criteria: user limits (25,000 and 50,000 are far above 20 users) and "free".
 5. **Passkeys:** added after the first password login, as a time-boxed spike (2 days). Needs a development build, `react-native-passkeys`, and a domain with Digital Asset Links.
 6. **Hosting of the backend:** Hetzner VM, Docker Compose, Caddy, Terraform, own domain (HTTPS is required by release Android builds, and passkeys need the domain).
 7. **Load tests:** E1 (backend + Postgres container) as baseline, E2 (backend + Supabase Postgres) as real setup, in a separate Supabase test project. Tokens are issued before the test.
+8. **Session lifetime:** The access token lives 1 hour (`jwt_expiry = 3600`). The app renews it with a rotating refresh token (`enable_refresh_token_rotation = true`). Sessions have no time limit and no inactivity limit (`timebox` and `inactivity_timeout` are not set), so a user stays signed in until they sign out. This keeps the login screen rare, which matters for accessibility. Trade-off: a lost phone stays signed in. The admin can ban or delete the account in Supabase; an issued access token still works for up to 1 hour. The values come from `supabase/config.toml`; the cloud project must use the same values (Dashboard → Authentication).
 
 ## Reversal triggers
 

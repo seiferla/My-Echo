@@ -13,6 +13,7 @@ services:
       TTS_CHUNK_LENGTH: ${TTS_CHUNK_LENGTH:-50}
       SUPABASE_URL: ${SUPABASE_URL}
       DATABASE_URL: ${DATABASE_URL}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4444/health', timeout=2)"]
       interval: 30s

@@ -10,13 +10,15 @@ services:
       - prometheus_data:/prometheus
     environment:
       - BACKEND_HOST=${BACKEND_HOST:-192.168.178.21}
-    # Substituiert __BACKEND_HOST__ im Config-Template mit der echten IP / Hostname
+      - METRICS_TOKEN=${METRICS_TOKEN:?METRICS_TOKEN must be set}
+    # Substituiert __BACKEND_HOST__ und __METRICS_TOKEN__ im Config-Template
     # und startet Prometheus dann mit der generierten Config.
     entrypoint:
       - "/bin/sh"
       - "-c"
       - |
-        sed "s/__BACKEND_HOST__/$${BACKEND_HOST}/g" \
+        sed -e "s/__BACKEND_HOST__/$${BACKEND_HOST}/g" \
+            -e "s/__METRICS_TOKEN__/$${METRICS_TOKEN}/g" \
           /etc/prometheus/prometheus.yml > /tmp/prometheus.yml && \
         exec /bin/prometheus \
           --config.file=/tmp/prometheus.yml \

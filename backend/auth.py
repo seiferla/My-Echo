@@ -6,6 +6,7 @@ Die App meldet sich direkt bei Supabase an und schickt den Token als
 der URL oder dem Body.
 """
 import os
+import secrets
 
 import jwt
 from jwt import PyJWKClient
@@ -46,3 +47,16 @@ def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(_bea
     except jwt.PyJWTError:
         raise HTTPException(401, "invalid token")
     return claims["sub"]
+
+
+def require_metrics_token(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> None:
+    """FastAPI-Dependency für /metrics: nur mit dem eigenen Prometheus-Token.
+
+    Ein Nutzer-Token reicht hier nicht. Ist METRICS_TOKEN nicht gesetzt, bleibt
+    /metrics komplett zu (sicherer Standard).
+    """
+    expected = os.getenv("METRICS_TOKEN", "")
+    if not expected or credentials is None or not secrets.compare_digest(
+        credentials.credentials.encode(), expected.encode()
+    ):
+        raise HTTPException(401, "not authenticated")
