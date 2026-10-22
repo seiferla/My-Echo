@@ -111,8 +111,26 @@ Instrumentator().instrument(app).expose(
     app, include_in_schema=False, dependencies=[Depends(require_metrics_token)]
 )
 
-# Rate limiting: single-user app, generous limits to prevent API abuse
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+# Rate limiting: pro Nutzer (siehe rate_limit_key), schützt vor Missbrauch und Kosten.
+def rate_limit_key(request: Request) -> str:
+    """Ein Zähler pro angemeldetem Nutzer, nicht pro IP-Adresse.
+
+    Hinter einem Proxy (Caddy) oder in einem Lasttest sähe das Backend sonst für alle
+    Nutzer dieselbe IP und sie teilten sich ein Limit. Ohne geprüften Nutzer (die
+    user_id setzt auth.current_user) bleibt es bei der IP.
+    """
+    user_id = getattr(request.state, "user_id", None)
+    return f"user:{user_id}" if user_id else f"ip:{get_remote_address(request)}"
+
+
+def _tts_rate_limit() -> str:
+    """Pro Nutzer, wird bei jeder Anfrage gelesen (RATE_LIMIT_TTS, z. B. "100/minute")."""
+    return os.getenv("RATE_LIMIT_TTS", "30/minute")
+
+
+# Nur /stream/tts ist begrenzt (jede Anfrage kostet Geld). Die anderen Routen haben
+# kein Limit; die frühere Angabe default_limits=["60/minute"] hat nie gegriffen.
+limiter = Limiter(key_func=rate_limit_key)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -244,7 +262,7 @@ async def warmup(user_id: str = Depends(current_user)):
 
 
 @app.get("/stream/tts")
-@limiter.limit("30/minute")
+@limiter.limit(_tts_rate_limit)
 async def stream_tts(request: Request, text: str, user_id: str = Depends(current_user)):
     if TTS_PROVIDER == "mock":
         return StreamingResponse(

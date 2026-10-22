@@ -10,7 +10,7 @@ import secrets
 
 import jwt
 from jwt import PyJWKClient
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
@@ -30,8 +30,14 @@ def _jwk_client() -> PyJWKClient:
     return _jwks
 
 
-def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> str:
-    """FastAPI-Dependency: liefert die user_id oder antwortet mit 401."""
+def current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> str:
+    """FastAPI-Dependency: liefert die user_id oder antwortet mit 401.
+
+    Die geprüfte user_id wird auch in request.state abgelegt: das Rate-Limit
+    (main.rate_limit_key) zählt damit pro Nutzer statt pro IP-Adresse."""
     if credentials is None:
         raise HTTPException(401, "not authenticated")
     try:
@@ -46,6 +52,7 @@ def current_user(credentials: HTTPAuthorizationCredentials | None = Depends(_bea
         )
     except jwt.PyJWTError:
         raise HTTPException(401, "invalid token")
+    request.state.user_id = claims["sub"]  # erst NACH der Prüfung: ein gefälschter Token zählt nie
     return claims["sub"]
 
 
