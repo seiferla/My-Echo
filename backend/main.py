@@ -16,6 +16,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+import mock_tts
 from auth import current_user, require_metrics_token
 from db import (
     init_db, close_db, list_chats, upsert_chat, delete_chat,
@@ -96,6 +97,8 @@ class TtsDayStatModel(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if TTS_PROVIDER == "mock":
+        logger.warning("TTS_PROVIDER=mock: there is NO real speech. For load tests only.")
     await init_db()
     yield
     await close_db()
@@ -134,6 +137,19 @@ FISH_API_KEY = os.getenv("TTS_API_KEY", "")
 WS_URL = "wss://api.fish.audio/v1/tts/live"
 AUDIO_MODEL = os.getenv("TTS_MODEL", "s2-pro")
 AUDIO_REFERENCE_ID = os.getenv("TTS_VOICE", "")
+
+
+def _resolve_provider(value: str) -> str:
+    """"fish" (Standard) oder "mock". Ein Tippfehler bricht den Start ab: er darf nie still
+    echte, kostenpflichtige Sprachausgabe einschalten oder ausschalten."""
+    value = (value or "fish").strip().lower()
+    if value not in ("fish", "mock"):
+        raise RuntimeError(f"TTS_PROVIDER must be 'fish' or 'mock', got {value!r}")
+    return value
+
+
+# "mock" = stumme Test-MP3 statt Fish Audio, nur für Lasttests (siehe mock_tts.py).
+TTS_PROVIDER = _resolve_provider(os.getenv("TTS_PROVIDER", "fish"))
 
 # Standard hier: "balanced" — bester TTFA/Qualitäts-Kompromiss fürs Streaming
 AUDIO_LATENCY = os.getenv("TTS_LATENCY", "balanced")
@@ -210,6 +226,8 @@ async def warmup(user_id: str = Depends(current_user)):
     Vom Frontend aufgerufen sobald der User das Eingabefeld öffnet —
     spart beim späteren Senden den Handshake + start-Roundtrip.
     """
+    if TTS_PROVIDER == "mock":
+        return {"status": "warm"}  # nichts vorzuwärmen, es gibt keine Verbindung zu Fish
     async with _warm_lock:
         if _warm["ws"] is not None:
             try:
@@ -228,6 +246,13 @@ async def warmup(user_id: str = Depends(current_user)):
 @app.get("/stream/tts")
 @limiter.limit("30/minute")
 async def stream_tts(request: Request, text: str, user_id: str = Depends(current_user)):
+    if TTS_PROVIDER == "mock":
+        return StreamingResponse(
+            mock_tts.stream(text),
+            media_type="audio/mpeg",
+            headers={"Cache-Control": "no-cache", "X-TTS-Provider": "mock"},
+        )
+
     async def generate():
         t_start = time.monotonic()
 
@@ -311,7 +336,10 @@ async def health():
     url = "https://api.fish.audio/wallet/self/api-credit"
     headers = {"Authorization": f"Bearer {FISH_API_KEY}", "model": AUDIO_MODEL}
 
-    base = {"voice": AUDIO_REFERENCE_ID, "model": AUDIO_MODEL}
+    base = {"voice": AUDIO_REFERENCE_ID, "model": AUDIO_MODEL, "provider": TTS_PROVIDER}
+
+    if TTS_PROVIDER == "mock":
+        return {**base, "status": "ok"}  # kein Aufruf bei Fish: so läuft der Mock ohne Key
 
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:

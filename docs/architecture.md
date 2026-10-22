@@ -96,7 +96,8 @@ refreshes the token itself.
 | Passkeys | Sign-in without typing | `react-native-passkeys`, Supabase passkeys | app, Supabase | planned, 2-day spike (G1) | ADR 0002 |
 | Own voice | Voice clone per user | Fish Audio voice clone | Fish Audio cloud | planned (G3) | |
 | Usage metering | Cost per user | table with one row per TTS request | Postgres | planned (G7) | |
-| Load test | Scaling evidence | Locust, mock TTS | separate VM | planned (G5, G6) | |
+| Mock TTS | Stands in for Fish Audio in load tests (silent MP3, set delay) | `TTS_PROVIDER=mock` in the backend | backend | done (G5) | |
+| Load test | Scaling evidence | Locust | separate VM | planned (G5, G6) | |
 
 ## How to keep this current
 

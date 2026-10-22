@@ -7,6 +7,10 @@ services:
       - "4444:4444"
     environment:
       TTS_API_KEY: ${TTS_API_KEY}
+      TTS_PROVIDER: ${TTS_PROVIDER:-fish}
+      MOCK_TTS_FIRST_AUDIO_MS: ${MOCK_TTS_FIRST_AUDIO_MS:-1500}
+      MOCK_TTS_CHUNK_MS: ${MOCK_TTS_CHUNK_MS:-20}
+      MOCK_TTS_CHARS_PER_SECOND: ${MOCK_TTS_CHARS_PER_SECOND:-15}
       TTS_MODEL: ${TTS_MODEL:-s2-pro}
       TTS_VOICE: ${TTS_VOICE:-}
       TTS_LATENCY: ${TTS_LATENCY:-balanced}
