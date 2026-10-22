@@ -222,4 +222,4 @@ docker compose -f monitoring/docker-compose.yml up -d
 myEcho wird von einer Person täglich genutzt und aktiv weiterentwickelt. Nächster Schritt: die App auch für andere Betroffene nutzbar machen, die noch tippen, aber nicht mehr sprechen können — zum Beispiel nach einem Schlaganfall.
 
 ---
-Dieses Projekt wird mit Hilfe von Claude und anderen KI-Tools entwickelt.
+Dieses Projekt wird mit Hilfe von Deepseek und anderen KI-Tools entwickelt.
