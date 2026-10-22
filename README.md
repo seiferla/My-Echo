@@ -57,8 +57,6 @@ The project started when my mother was diagnosed with ALS in its bulbar form. Th
 
 She has been using myEcho in her daily life for several months: she types what she wants to say, and the app speaks it in her old voice. The interface is calm and simple on purpose — no friction, no complexity.
 
-The models behind this were compared in a separate university project: [als-voice-cloning-evaluation](https://github.com/seiferla/als-voice-cloning-evaluation).
-
 ---
 
 ## Demo
