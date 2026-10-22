@@ -222,4 +222,5 @@ docker compose -f monitoring/docker-compose.yml up -d
 myEcho is used every day by one person and is in active development. Next step: making the app usable for other people who can type but no longer speak — for example after a stroke.
 
 ---
-This project is being developed with the help of Claude and other AI tools.
+
+This project is being developed with the help of Deepseek and other AI tools. 
