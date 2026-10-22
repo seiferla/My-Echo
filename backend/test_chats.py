@@ -358,6 +358,84 @@ class TestSchemaSecurity(_ChatTestCase):
         self.assertEqual([tuple(r) for r in rows], [])
 
 
+SECRET_A = "Geheim-von-A"
+STATS_A = {"2026-10-19": {"requests": 7, "chars": 70, "durationMs": 700}}
+
+# Berechtigungsmatrix (G2): Ressource × Aktion × Akteur. Jede Zeile ist ein Testfall.
+# Akteur "other" = angemeldeter Nutzer B, "none" = ohne Token.
+# Erwartung: "other" sieht nichts von A und ändert nichts an A; "none" bekommt 401.
+# Nicht in der Matrix: "usage" (G7) und "voice" (G3) gibt es noch nicht.
+# Ein einzelnes Lesen gibt es nur über die Liste (GET /chats), daher read = list.
+MATRIX = [
+    # (Ressource, Aktion, Methode, Pfad, Body)
+    ("chat", "list", "GET", "/chats", None),
+    ("chat", "write", "PUT", "/chats/c1", "chat"),
+    ("chat", "delete", "DELETE", "/chats/c1", None),
+    ("message", "list", "GET", "/chats", None),
+    ("message", "write", "PUT", "/chats/c1", "chat"),
+    ("phrases", "read", "GET", "/phrases", None),
+    ("phrases", "write", "PUT", "/phrases", "phrases"),
+    ("statistics", "read", "GET", "/stats/tts", None),
+    ("statistics", "write", "POST", "/stats/tts", "stats"),
+]
+
+
+class TestAuthorizationMatrix(_ChatTestCase):
+    def _seed_user_a(self):
+        chat = self._chat(title=f"Titel {SECRET_A}")
+        chat["messages"][0]["content"] = f"Nachricht {SECRET_A}"
+        self.client.put("/chats/c1", json=chat)
+        self.client.put("/phrases", json=_phrase_store(text=f"Phrase {SECRET_A}", updated_at=100))
+        self.client.post("/stats/tts", json=STATS_A)
+
+    def _snapshot_a(self):
+        self.as_user(USER_A)
+        return (
+            self.client.get("/chats").json(),
+            self.client.get("/phrases").json(),
+            self.client.get("/stats/tts").json(),
+        )
+
+    def _body(self, kind):
+        # Angriffs-Payloads: neuer, größer, "wichtiger" als die Daten von A.
+        if kind == "chat":
+            chat = self._chat(title="von B")
+            chat["messages"][0]["content"] = "von B"
+            return chat
+        if kind == "phrases":
+            return _phrase_store(text="von B", updated_at=999_999)
+        if kind == "stats":
+            return {"2026-10-19": {"requests": 999, "chars": 999, "durationMs": 999}}
+        return None
+
+    def _run(self, actor):
+        self._seed_user_a()
+        before = self._snapshot_a()
+        self.assertIn(SECRET_A, str(before))  # A hat wirklich Daten, sonst wäre der Test wertlos
+
+        for resource, action, method, path, body in MATRIX:
+            with self.subTest(resource=resource, action=action, actor=actor):
+                if actor == "other":
+                    self.as_user(USER_B)
+                else:
+                    main.app.dependency_overrides.pop(current_user, None)
+                r = self.client.request(method, path, json=self._body(body))
+
+                if actor == "none":
+                    self.assertEqual(r.status_code, 401)
+                else:
+                    self.assertNotIn(SECRET_A, r.text)  # B sieht nichts von A
+                    self.assertNotIn(r.status_code, (401, 403, 500), r.text)
+
+                self.assertEqual(self._snapshot_a(), before)  # A ist unverändert
+
+    def test_other_user_cannot_see_or_change_user_a_data(self):
+        self._run("other")
+
+    def test_no_user_gets_401_and_changes_nothing(self):
+        self._run("none")
+
+
 class TestNoMessageTextInLogs(_ChatTestCase):
     """G8: Texte aus Chats und Phrasen dürfen in keinem Log stehen."""
 
