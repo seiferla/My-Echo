@@ -4,7 +4,7 @@ import { storage } from './storage';
 import { getShareableAudioUri } from './tts';
 import { scoped } from './localUser';
 import { BACKEND_PHRASES_URL } from './config';
-import { authHeaders } from './supabase';
+import { backendFetch } from './backend';
 
 const TAG = '[myEcho][Phrases]';
 
@@ -13,8 +13,7 @@ const TAG = '[myEcho][Phrases]';
 const isWeb = Platform.OS === 'web';
 const WEB_KEY_BASE = 'myEchoPhrases';
 
-// Pro Konto eine eigene Datei (siehe localUser.ts). Nicht zwischenspeichern:
-// beim Kontowechsel ändert sich der Name.
+// One file per account (see localUser.ts). Not cached: the name changes when the account changes.
 function phrasesFileRef(): File {
     return new File(Paths.document, `${scoped('phrases')}.json`);
 }
@@ -49,8 +48,7 @@ export interface PhraseSettings {
 export interface PhraseStore {
     phrases: Phrase[];
     settings: PhraseSettings;
-    // Zeitpunkt der letzten Änderung (ms). 0 = unveränderte Startbelegung.
-    // Beim Abgleich mit dem Backend gewinnt der neuere Stand.
+    // Last change in ms; the newer store wins on sync. 0 = untouched default phrases.
     updatedAt?: number;
 }
 
@@ -104,6 +102,10 @@ function normalizePhrase(p: Phrase): Phrase {
     };
 }
 
+function normalizePhrases(raw: unknown): Phrase[] {
+    return Array.isArray(raw) ? raw.filter((p: Phrase) => p?.text).map(normalizePhrase) : [];
+}
+
 function normalizeSettings(s: Partial<PhraseSettings> | undefined): PhraseSettings {
     const count = Number(s?.visibleCount);
     return {
@@ -123,7 +125,7 @@ export async function loadPhraseStore(): Promise<PhraseStore> {
     }
 
     if (raw === null) {
-        // updatedAt 0: die Startbelegung darf nie einen echten Stand aus dem Backend überschreiben.
+        // updatedAt 0: the default phrases must never overwrite a real store from the backend.
         const initial: PhraseStore = { phrases: seed(), settings: { ...DEFAULT_SETTINGS }, updatedAt: 0 };
         await writeLocalStore(initial);
         console.log(`${TAG} Seeded ${initial.phrases.length} default phrases`);
@@ -137,7 +139,7 @@ export async function loadPhraseStore(): Promise<PhraseStore> {
         // Struktur mit Einstellungen überführen, ohne Phrasen zu verlieren.
         if (Array.isArray(parsed)) {
             const migrated: PhraseStore = {
-                phrases: parsed.filter((p) => p?.text).map(normalizePhrase),
+                phrases: normalizePhrases(parsed),
                 settings: { ...DEFAULT_SETTINGS },
                 updatedAt: Date.now(),
             };
@@ -147,9 +149,7 @@ export async function loadPhraseStore(): Promise<PhraseStore> {
         }
 
         return {
-            phrases: Array.isArray(parsed?.phrases)
-                ? parsed.phrases.filter((p: Phrase) => p?.text).map(normalizePhrase)
-                : [],
+            phrases: normalizePhrases(parsed?.phrases),
             settings: normalizeSettings(parsed?.settings),
             updatedAt: Number(parsed?.updatedAt) || 0,
         };
@@ -167,48 +167,30 @@ async function writeLocalStore(store: PhraseStore): Promise<void> {
     }
 }
 
-const SYNC_TIMEOUT_MS = 5_000;
-
-/** Schickt den Stand ins Backend. Wirft NICHT: der lokale Stand ist der UI-Stand. */
+/** Never throws: the local store is what the UI shows. */
 async function pushPhraseStore(store: PhraseStore): Promise<void> {
     try {
-        const response = await fetch(BACKEND_PHRASES_URL, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-            body: JSON.stringify(store),
-            signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        await backendFetch(BACKEND_PHRASES_URL, { method: 'PUT', json: store });
     } catch (e) {
         console.warn(`${TAG} Push failed:`, e);
     }
 }
 
-/**
- * Speichert eine Änderung des Nutzers: lokal sofort, danach im Hintergrund im
- * Backend. Der Zeitstempel entscheidet beim Abgleich, welcher Stand neuer ist.
- */
+/** Saves a user change locally now and in the backend in the background. */
 export async function savePhraseStore(store: PhraseStore): Promise<void> {
     const stamped: PhraseStore = { ...store, updatedAt: Date.now() };
     await writeLocalStore(stamped);
-    pushPhraseStore(stamped);
+    void pushPhraseStore(stamped);
 }
 
 /**
- * Gleicht den lokalen Stand mit dem Backend ab (nach dem Laden, im Hintergrund):
- *  - Backend leer oder älter  → lokalen Stand hochladen
- *  - Backend neuer            → übernehmen und lokal speichern (wird zurückgegeben)
- * Gibt nur dann einen Stand zurück, wenn die UI ihn übernehmen soll. Offline
- * oder bei Fehlern: null, der lokale Stand bleibt unverändert.
+ * Syncs with the backend: the newer store wins. Returns the backend store only
+ * when the UI should show it; otherwise (or offline) null.
  */
 export async function syncPhraseStore(local: PhraseStore): Promise<PhraseStore | null> {
     try {
-        const response = await fetch(BACKEND_PHRASES_URL, {
-            headers: await authHeaders(),
-            signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const remote = await response.json(); // null, wenn noch nichts gespeichert ist
+        const response = await backendFetch(BACKEND_PHRASES_URL);
+        const remote = await response.json(); // null if nothing is stored yet
 
         const localAt = local.updatedAt ?? 0;
         const remoteAt = Number(remote?.updatedAt) || 0;
@@ -217,16 +199,14 @@ export async function syncPhraseStore(local: PhraseStore): Promise<PhraseStore |
             await pushPhraseStore({ ...local, updatedAt: localAt });
             return null;
         }
-        if (remoteAt <= localAt) return null;
+        if (remoteAt === localAt) return null;
 
-        // Hat der Nutzer während des Abrufs etwas geändert, nicht überschreiben.
+        // Do not overwrite a change the user made while we waited.
         const current = await loadPhraseStore();
         if ((current.updatedAt ?? 0) !== localAt) return null;
 
         const adopted: PhraseStore = {
-            phrases: Array.isArray(remote.phrases)
-                ? remote.phrases.filter((p: Phrase) => p?.text).map(normalizePhrase)
-                : [],
+            phrases: normalizePhrases(remote.phrases),
             settings: normalizeSettings(remote.settings),
             updatedAt: remoteAt,
         };

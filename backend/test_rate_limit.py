@@ -1,7 +1,6 @@
-"""Rate-Limit pro Nutzer (G5): Nutzer hinter derselben IP teilen sich kein Limit.
+"""Rate limit per user: users behind the same IP do not share a limit.
 
-Läuft mit echter Token-Prüfung (eigenes Schlüsselpaar wie in test_auth.py) und dem
-Mock-TTS, braucht also weder Datenbank noch Fish Audio.
+Uses the real token check and the mock TTS, so no database and no Fish Audio.
 """
 import os
 import time
@@ -14,15 +13,7 @@ from fastapi.testclient import TestClient
 
 import auth
 import main
-import mock_tts
-from test_auth import ISS, KEY, _claims, _FakeJwks
-
-FAST_MOCK = {"MOCK_TTS_FIRST_AUDIO_MS": "0", "MOCK_TTS_CHUNK_MS": "0"}
-
-
-def _token(user_id: str) -> dict:
-    token = jwt.encode(_claims(sub=user_id), KEY, algorithm="ES256")
-    return {"Authorization": f"Bearer {token}"}
+from testutils import FAST_MOCK, ISS, FakeJwks, bearer, make_claims
 
 
 class RateLimitCase(unittest.TestCase):
@@ -32,7 +23,7 @@ class RateLimitCase(unittest.TestCase):
         patches = [
             patch.object(main, "TTS_PROVIDER", "mock"),
             patch.object(auth, "SUPABASE_URL", ISS.removesuffix("/auth/v1")),
-            patch.object(auth, "_jwk_client", lambda: _FakeJwks()),
+            patch.object(auth, "_jwk_client", FakeJwks),
             patch.dict(os.environ, {**FAST_MOCK, "RATE_LIMIT_TTS": self.LIMIT}),
         ]
         for p in patches:
@@ -42,14 +33,14 @@ class RateLimitCase(unittest.TestCase):
         self.addCleanup(main.limiter.reset)
 
     def speak(self, client, user_id):
-        return client.get("/stream/tts", params={"text": "Hallo"}, headers=_token(user_id)).status_code
+        return client.get("/stream/tts", params={"text": "Hallo"}, headers=bearer(user_id)).status_code
 
 
 class TestPerUser(RateLimitCase):
     def test_users_behind_the_same_ip_have_separate_limits(self):
-        client = TestClient(main.app)  # beide Nutzer kommen von derselben IP
+        client = TestClient(main.app)  # both users come from the same IP
         self.assertEqual([self.speak(client, "user-a") for _ in range(4)], [200, 200, 200, 429])
-        # Nutzer A ist am Limit, Nutzer B merkt nichts davon.
+        # User A is at the limit, user B is not affected.
         self.assertEqual([self.speak(client, "user-b") for _ in range(4)], [200, 200, 200, 429])
 
     def test_the_same_user_on_two_ips_shares_one_limit(self):
@@ -63,12 +54,12 @@ class TestPerUser(RateLimitCase):
         bad = [client.get("/stream/tts", params={"text": "x"}).status_code for _ in range(6)]
         fake = [client.get("/stream/tts", params={"text": "x"},
                            headers={"Authorization": "Bearer fake"}).status_code for _ in range(6)]
-        self.assertEqual(set(bad + fake), {401})  # nie 429
-        self.assertEqual(self.speak(client, "user-a"), 200)  # und nichts verbraucht
+        self.assertEqual(set(bad + fake), {401})  # never 429
+        self.assertEqual(self.speak(client, "user-a"), 200)  # and nothing used up
 
     def test_a_forged_token_cannot_use_up_another_users_limit(self):
         client = TestClient(main.app)
-        forged = jwt.encode(_claims(sub="user-a"), "not-the-real-key", algorithm="HS256")
+        forged = jwt.encode(make_claims(sub="user-a"), "not-the-real-key", algorithm="HS256")
         for _ in range(6):
             client.get("/stream/tts", params={"text": "x"}, headers={"Authorization": f"Bearer {forged}"})
         self.assertEqual([self.speak(client, "user-a") for _ in range(3)], [200, 200, 200])

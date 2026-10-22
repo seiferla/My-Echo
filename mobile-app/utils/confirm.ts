@@ -1,9 +1,6 @@
 import { Alert, Platform } from 'react-native';
 
-/**
- * Ja/Nein-Abfrage. Alert.alert gibt es im Web nicht (react-native-web macht
- * daraus nichts), dort window.confirm.
- */
+/** Yes/no dialog. Alert.alert does nothing on web, so web uses window.confirm. */
 export function confirmAction(
     title: string,
     message: string,

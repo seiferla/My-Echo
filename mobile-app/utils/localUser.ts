@@ -5,36 +5,31 @@ import { storage } from './storage';
 const TAG = '[myEcho][LocalUser]';
 const isWeb = Platform.OS === 'web';
 
-// Lokale Daten (Chats, Phrasen, Statistik) liegen pro Konto in eigenen
-// Dateien bzw. Keys: "chats.<user_id>.json", "myEchoTtsStats.<user_id>" usw.
-// So sieht ein zweites Konto auf demselben Gerät nie die Daten des ersten,
-// und ein Logout löscht nichts (Phrasen und Statistik gibt es nur lokal).
-// AuthContext setzt die ID, BEVOR die App-Screens Daten lesen.
+// Local data has one file/key per account, e.g. "chats.<user_id>.json", so a second
+// account on the same device never sees the first one's data and logout deletes nothing.
+// AuthContext sets the id BEFORE the app screens read data.
 let currentUserId: string | null = null;
 
 export function setLocalUser(userId: string | null): void {
     currentUserId = userId;
 }
 
-/** "chats" → "chats.<user_id>". Ohne Anmeldung "chats.signed-out" (wird nie angezeigt). */
+/** "chats" → "chats.<user_id>", or "chats.signed-out" without a session. */
 export function scoped(name: string): string {
     return `${name}.${currentUserId ?? 'signed-out'}`;
 }
 
-// Namen der Daten aus der Zeit vor den Konten (ein Gerät, eine Person).
-const LEGACY_FILES = ['chats', 'phrases'];        // <name>.json im Document-Ordner
-const LEGACY_KEYS = ['myEchoChatsFile', 'myEchoPhrases', 'myEchoTtsStats']; // storage-Keys (Web + Statistik)
+// Names from before accounts existed (one device, one person).
+const LEGACY_FILES = ['chats', 'phrases'];
+const LEGACY_KEYS = ['myEchoChatsFile', 'myEchoPhrases', 'myEchoTtsStats'];
 
 /**
- * Übernimmt Daten einer älteren Installation für das ERSTE Konto, das sich
- * anmeldet: Die alten Dateien gehörten der einen Person, die das Gerät bisher
- * allein genutzt hat. Danach sind sie weg, ein weiteres Konto bekommt sie nie.
+ * Gives the data of an old single-user install to the FIRST account that signs in.
+ * After that the old files are gone, so no other account can get them.
  */
 export async function adoptLegacyData(userId: string): Promise<void> {
     if (!isWeb) {
-        // Der alte, gemeinsame Audio-Cache gehörte keinem Konto. Er ist nur ein
-        // Cache und lässt sich neu aufbauen: löschen. Jedes Konto bekommt einen
-        // eigenen Ordner (tts-cache.<user_id>, siehe ttsCache.ts).
+        // The old shared audio cache belongs to no account. It is only a cache: delete it.
         const legacyCache = new Directory(Paths.document, 'tts-cache');
         if (legacyCache.exists) {
             console.log(`${TAG} Removing shared legacy audio cache`);

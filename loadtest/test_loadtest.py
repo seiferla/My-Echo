@@ -1,7 +1,4 @@
-"""Tests für die Rechenschritte des Lasttests (Texte, Auswertung). Laufen ohne Server:
-
-    pytest loadtest
-"""
+"""Tests for the load test logic (texts, summary). No server needed: pytest loadtest"""
 import csv
 import json
 import os
@@ -29,8 +26,8 @@ class TestMessageTexts(unittest.TestCase):
         t = self.texts()
         short = sum(len(x) <= 20 for x in t) / len(t)
         long = sum(len(x) > 80 for x in t) / len(t)
-        self.assertAlmostEqual(short, 0.50, delta=0.06)  # 50 % kurz
-        self.assertAlmostEqual(long, 0.15, delta=0.05)   # 15 % lang
+        self.assertAlmostEqual(short, 0.50, delta=0.06)
+        self.assertAlmostEqual(long, 0.15, delta=0.05)
 
     def test_same_seed_gives_the_same_texts(self):
         self.assertEqual(self.texts(seed=7, n=50), self.texts(seed=7, n=50))
@@ -55,9 +52,10 @@ class TestSummary(unittest.TestCase):
         with open(os.path.join(d, "resources.csv"), "w") as f:
             f.write("seconds,backend_cpu_pct,backend_rss_mb,locust_cpu_pct,locust_rss_mb\n")
             f.write(f"5,10,90,{generator_cpu},70\n")
-        json.dump({"users": users, "run": run, "locust_exit_code": exit_code}, open(os.path.join(d, "meta.json"), "w"))
-        json.dump({"users_checked": users if checked is None else checked, "violations": list(violations)},
-                  open(os.path.join(d, "isolation.json"), "w"))
+        with open(os.path.join(d, "meta.json"), "w") as f:
+            json.dump({"users": users, "run": run, "locust_exit_code": exit_code}, f)
+        with open(os.path.join(d, "isolation.json"), "w") as f:
+            json.dump({"users_checked": users if checked is None else checked, "violations": list(violations)}, f)
         return d
 
     def test_a_clean_run_has_no_problems(self):
@@ -71,7 +69,7 @@ class TestSummary(unittest.TestCase):
     def test_error_rate_counts_only_real_requests(self):
         with tempfile.TemporaryDirectory() as root:
             r = summarize.one_run(self.make_run(root, 5, 1, failures=3))
-        self.assertAlmostEqual(r["error_rate_pct"], 100 * 3 / 300)  # 3 von 300 echten Anfragen
+        self.assertAlmostEqual(r["error_rate_pct"], 100 * 3 / 300)  # 3 of 300 real requests
 
     def test_busy_load_generator_makes_the_run_invalid(self):
         with tempfile.TemporaryDirectory() as root:
@@ -88,7 +86,7 @@ class TestSummary(unittest.TestCase):
         self.assertEqual(summarize.verdict([good] * 3), "PASS")
         slow = {**good, "chats_p95_ms": 400}
         self.assertIn("chats_p95_ms", summarize.verdict([slow] * 3))
-        # ein Ausreißer unter drei Läufen kippt das Urteil nicht (Median)
+        # one outlier in three runs does not change the verdict (median)
         self.assertEqual(summarize.verdict([good, good, slow]), "PASS")
         self.assertIn("isolation", summarize.verdict([good, good, {**good, "isolation_violations": 1}]))
 

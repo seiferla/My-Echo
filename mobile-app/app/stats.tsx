@@ -91,8 +91,7 @@ export default function StatsScreen() {
             setTtsStats(t);
             setCacheStats(cs);
             setLoading(false);
-            // Erst die lokalen Zahlen zeigen, danach mit dem Backend abgleichen
-            // (ein langsames Netz soll die Seite nicht blockieren).
+            // Show local numbers first, so a slow network does not block the page.
             syncAndLoadTtsStats().then(setTtsStats);
         })();
     }, []);

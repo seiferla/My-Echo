@@ -1,6 +1,4 @@
--- Chats und Nachrichten pro Nutzer (G2).
--- user_id kommt aus dem Login (auth.users). Löscht der Admin einen Nutzer,
--- verschwinden seine Zeilen automatisch (G8: ON DELETE CASCADE).
+-- Chats and messages per user. Deleting a user in auth.users deletes their rows (CASCADE).
 
 create table public.chats (
     user_id     uuid    not null references auth.users (id) on delete cascade,
@@ -28,11 +26,11 @@ create table public.messages (
 
 create index idx_messages_chat on public.messages (user_id, chat_id, seq);
 
--- RLS an, ohne Policies: die Tabellen sind für die öffentliche API gesperrt.
--- Der Zugriff läuft nur über das Backend (Service-Verbindung, filtert nach user_id).
+-- RLS on and no policies: the public Supabase API cannot read these tables.
+-- Only the backend has access, and it filters every query by user_id.
 alter table public.chats enable row level security;
 alter table public.messages enable row level security;
 
--- Zusätzlich: die API-Rollen dürfen die Tabellen nicht einmal sehen.
+-- Defense in depth: the API roles get no table privileges at all.
 revoke all on public.chats from anon, authenticated;
 revoke all on public.messages from anon, authenticated;

@@ -1,7 +1,7 @@
 import { storage } from './storage';
 import { scoped } from './localUser';
 import { BACKEND_TTS_STATS_URL } from './config';
-import { authHeaders } from './supabase';
+import { backendFetch } from './backend';
 
 /**
  * Lokales Logging der Sprachausgaben (TTS).
@@ -17,8 +17,9 @@ import { authHeaders } from './supabase';
  * SecureStore-Eintrag dauerhaft klein bleibt.
  */
 
+const TAG = '[myEcho][TtsLog]';
 const STORAGE_KEY_BASE = 'myEchoTtsStats';
-// Pro Konto ein eigener Eintrag (siehe localUser.ts).
+// One entry per account (see localUser.ts).
 const storageKey = () => scoped(STORAGE_KEY_BASE);
 
 export interface TtsDayStat {
@@ -63,13 +64,10 @@ export async function recordTtsRequest(chars: number, durationMs: number): Promi
 
     stats[key] = bucket;
     await storage.setItem(storageKey(), JSON.stringify(stats));
-    pushTtsStats({ [key]: bucket });
+    void pushTtsStats({ [key]: bucket });
 }
 
-const TAG = '[myEcho][TtsLog]';
-const SYNC_TIMEOUT_MS = 5_000;
-
-/** Pro Tag und Feld gilt der größere Wert (wie im Backend): die Zahlen werden nie kleiner. */
+/** Per day and field the larger value wins (same as the backend), so numbers never go down. */
 function mergeStats(a: TtsStats, b: TtsStats): TtsStats {
     const merged: TtsStats = { ...a };
     for (const [day, s] of Object.entries(b)) {
@@ -88,37 +86,22 @@ function mergeStats(a: TtsStats, b: TtsStats): TtsStats {
 const sameStat = (a?: TtsDayStat, b?: TtsDayStat) =>
     !!a && !!b && a.requests === b.requests && a.chars === b.chars && a.durationMs === b.durationMs;
 
-/** Schickt Tageswerte ins Backend. Wirft NICHT: lokal gespeichert ist bereits. */
+/** Never throws: the values are already stored locally. */
 async function pushTtsStats(days: TtsStats): Promise<void> {
     try {
-        const response = await fetch(BACKEND_TTS_STATS_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-            body: JSON.stringify(days),
-            signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        await backendFetch(BACKEND_TTS_STATS_URL, { method: 'POST', json: days });
     } catch (e) {
         console.warn(`${TAG} Push failed:`, e);
     }
 }
 
-/**
- * Gleicht die lokale Statistik mit dem Backend ab (z. B. beim Öffnen der
- * Statistikseite): Backend-Tage übernehmen, lokal Neueres hochschicken.
- * Wirft NICHT. Offline bleibt einfach der lokale Stand.
- */
+/** Merges local and backend stats in both directions. Never throws; offline keeps local stats. */
 export async function syncTtsStats(): Promise<void> {
     try {
-        const response = await fetch(BACKEND_TTS_STATS_URL, {
-            headers: await authHeaders(),
-            signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const response = await backendFetch(BACKEND_TTS_STATS_URL);
         const remote = (await response.json()) as TtsStats;
 
-        // Lokalen Stand erst NACH dem Abruf lesen: so geht eine Sprachausgabe,
-        // die währenddessen protokolliert wurde, nicht verloren.
+        // Read local stats only after the fetch, so a request logged meanwhile is not lost.
         const local = await getTtsStats();
         const merged = mergeStats(local, remote);
         if (JSON.stringify(merged) !== JSON.stringify(local)) {

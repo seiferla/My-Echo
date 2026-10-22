@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
         color: '#374151',
         fontWeight: '500',
     },
-    // Mindestens 48 px Tippfläche, wie bei den anderen Knöpfen.
+    // At least 48 px touch target, like the other buttons.
     logoutButton: {
         minWidth: 48,
         minHeight: 48,

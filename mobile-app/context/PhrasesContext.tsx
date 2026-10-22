@@ -67,8 +67,7 @@ export function PhrasesProvider({ children }: { children: React.ReactNode }) {
             setSettings(store.settings);
             setReady(true);
 
-            // Erst lokal anzeigen (sofort, auch offline), danach im Hintergrund
-            // mit dem Backend abgleichen. Ein neuerer Stand von dort ersetzt den lokalen.
+            // Show local phrases at once (also offline), then sync in the background.
             syncPhraseStore(store).then((synced) => {
                 if (!alive || !synced) return;
                 setPhrases(synced.phrases);

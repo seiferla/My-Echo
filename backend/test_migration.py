@@ -1,8 +1,4 @@
-"""Tests für scripts/migrate_sqlite_to_postgres.py (Issue #234).
-
-Baut eine SQLite-Datei mit dem Schema der Einzelnutzer-Version (main) und
-überträgt sie in die Test-Postgres (wie test_chats.py, nur gegen localhost).
-"""
+"""Tests for scripts/migrate_sqlite_to_postgres.py against the local test Postgres."""
 import asyncio
 import contextlib
 import hashlib
@@ -15,9 +11,7 @@ import tempfile
 import unittest
 import uuid
 
-import asyncpg
-
-from test_chats import TEST_DB, USER_A, _clear_chats, _prepare_schema
+from testutils import TEST_DB, USER_A, clear_user_data, prepare_schema, with_test_db
 
 _spec = importlib.util.spec_from_file_location(
     "migrate_sqlite_to_postgres",
@@ -26,7 +20,7 @@ _spec = importlib.util.spec_from_file_location(
 mig = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(mig)
 
-# Schema der Einzelnutzer-Version, wie in backend/db.py auf main.
+# Schema of the single-user version (backend/db.py on main).
 OLD_SCHEMA = """
 CREATE TABLE chats (id TEXT PRIMARY KEY, title TEXT NOT NULL, timestamp INTEGER NOT NULL,
                     pinned INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL);
@@ -34,7 +28,7 @@ CREATE TABLE messages (id TEXT PRIMARY KEY, chat_id TEXT NOT NULL REFERENCES cha
                        seq INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL,
                        timestamp INTEGER, via TEXT, edit_count INTEGER NOT NULL DEFAULT 0);
 """
-SECRET = "Text-der-nie-im-Log-steht"
+SECRET = "Text-that-is-never-printed"
 
 
 def _make_sqlite(path):
@@ -48,31 +42,25 @@ def _make_sqlite(path):
         ("a1", "a", 0, "user", f"Hallo {SECRET}", 1, "send", 0),
         ("a2", "a", 1, "user", "Wie geht's?", 2, "save", 1),
         ("b1", "b", 0, "user", "Danke", 3, None, 0),
-        ("bad-role", "a", 2, "system", "von einer alten Version", 4, "send", 0),
+        ("bad-role", "a", 2, "system", "from an old version", 4, "send", 0),
     ])
-    # Verwaiste Nachricht (Chat fehlt). SQLite prüft Fremdschlüssel nur mit PRAGMA, also geht das.
+    # Orphan message. SQLite checks foreign keys only with a PRAGMA, so this insert works.
     conn.execute("INSERT INTO messages VALUES ('orphan', 'gone', 0, 'user', 'x', 5, 'send', 0)")
     conn.commit()
     conn.close()
 
 
 def _count(sql, *args):
-    async def run():
-        conn = await asyncpg.connect(TEST_DB)
-        try:
-            return await conn.fetchval(sql, *args)
-        finally:
-            await conn.close()
-    return asyncio.run(run())
+    return with_test_db(lambda conn: conn.fetchval(sql, *args))
 
 
 class TestMigration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        asyncio.run(_prepare_schema())
+        prepare_schema()
 
     def setUp(self):
-        asyncio.run(_clear_chats())
+        clear_user_data()
         self.tmp = tempfile.TemporaryDirectory()
         self.sqlite = os.path.join(self.tmp.name, "chats-copy.db")
         _make_sqlite(self.sqlite)
@@ -113,29 +101,29 @@ class TestMigration(unittest.TestCase):
         self.assertEqual(_count("SELECT count(*) FROM messages WHERE user_id = $1", USER_A), 3)
 
     def test_chat_already_synced_by_the_app_is_left_unchanged(self):
-        async def app_already_synced_chat_a():
-            conn = await asyncpg.connect(TEST_DB)
-            try:
-                await conn.execute(
-                    "INSERT INTO chats (user_id, id, title, timestamp, pinned, updated_at) "
-                    "VALUES ($1, 'a', 'Neuer Titel aus der App', 1, false, 99)", USER_A)
-            finally:
-                await conn.close()
-        asyncio.run(app_already_synced_chat_a())
+        with_test_db(lambda conn: conn.execute(
+            "INSERT INTO chats (user_id, id, title, timestamp, pinned, updated_at) "
+            "VALUES ($1, 'a', 'New title from the app', 1, false, 99)", USER_A))
 
         report = self._run(apply=True)
         self.assertEqual(report.chats_already_present, ["a"])
         self.assertEqual(
             _count("SELECT title FROM chats WHERE user_id = $1 AND id = 'a'", USER_A),
-            "Neuer Titel aus der App",
+            "New title from the app",
         )
-        # Keine alten Nachrichten in den Chat der App gemischt, Chat b kam neu dazu.
+        # No old messages mixed into the app's chat; chat b is new.
         self.assertEqual(_count("SELECT count(*) FROM messages WHERE user_id = $1 AND chat_id = 'a'", USER_A), 0)
         self.assertEqual(_count("SELECT count(*) FROM messages WHERE user_id = $1 AND chat_id = 'b'", USER_A), 1)
 
     def test_unknown_user_is_refused(self):
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(mig.UnknownUserError):
             self._run(apply=True, user_id=str(uuid.uuid4()))
+
+    def test_cli_returns_an_error_code_for_an_unknown_user(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            code = mig.main(["--sqlite", self.sqlite, "--user-id", str(uuid.uuid4()),
+                             "--database-url", TEST_DB, "--apply"])
+        self.assertEqual(code, 2)
 
     def test_output_never_contains_message_text(self):
         out = io.StringIO()

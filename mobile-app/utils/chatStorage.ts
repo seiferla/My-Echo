@@ -16,8 +16,7 @@ const TAG = '[myEcho][ChatStorage]';
 const isWeb = Platform.OS === 'web';
 const WEB_KEY_BASE = 'myEchoChatsFile';
 
-// Pro Konto eine eigene Datei (siehe localUser.ts). Nicht zwischenspeichern:
-// beim Kontowechsel ändert sich der Name.
+// One file per account (see localUser.ts). Not cached: the name changes when the account changes.
 function chatsFileRef(): File {
     return new File(Paths.document, `${scoped('chats')}.json`);
 }

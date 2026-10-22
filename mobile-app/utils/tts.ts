@@ -54,13 +54,11 @@ const preparedPlayers = new Set<AudioPlayer>();
 let lastFinishAt = 0;
 let currentAbort: (() => void) | null = null;
 
-/** Hält die Fish-Verbindung im Backend warm. Ein Fehler ist egal (optional). */
+/** Keeps the backend's Fish connection warm. Errors are ignored: it is only an optimization. */
 export async function warmBackend(): Promise<void> {
     try {
         await fetch(BACKEND_WARMUP_URL, { headers: await authHeaders() });
-    } catch {
-        // Warmup ist nur eine Optimierung.
-    }
+    } catch {}
 }
 
 export function stopSpeaking(): void {
@@ -100,7 +98,7 @@ async function playLocalAudio(
     onFirstAudio?: () => void,
     preloaded?: AudioPlayer,
 ): Promise<number> {
-    // Streams (http) brauchen den Token. Lokale Dateien nicht.
+    // Only backend streams need the token, local files do not.
     const headers = uri.startsWith('http') ? await authHeaders() : {};
     return new Promise((resolve, reject) => {
         // Vor Player-Erstellung prüfen — wenn schon abgebrochen, kein Player erstellen

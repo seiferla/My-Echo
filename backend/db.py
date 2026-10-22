@@ -1,24 +1,19 @@
-"""Postgres-Persistenz für Chats und Messages (Supabase).
+"""Postgres access (Supabase). The schema lives in supabase/migrations/.
 
-Das Schema kommt aus den Migrationen unter supabase/migrations/ und wird hier
-NICHT angelegt. Jede Funktion bekommt die user_id als Parameter. Sie kommt aus
-dem geprüften Token (auth.py) und filtert jede Abfrage danach.
-
-Hinweis: Das Backend verbindet sich als Datenbank-Owner und umgeht damit RLS.
-Die Isolation hängt deshalb am WHERE user_id = ... in jeder Abfrage.
+The backend connects as the database owner and so bypasses RLS. Data isolation
+depends on the "WHERE user_id = ..." in EVERY query below.
 """
 import json
 import os
 import time
-from typing import Any, Optional
+from typing import Any
 
 import asyncpg
 
-_pool: Optional[asyncpg.Pool] = None
+_pool: asyncpg.Pool | None = None
 
 
 async def init_db() -> asyncpg.Pool:
-    """Beim App-Start aus dem lifespan aufrufen."""
     global _pool
     _pool = await asyncpg.create_pool(
         os.environ["DATABASE_URL"],
@@ -41,10 +36,8 @@ def pool() -> asyncpg.Pool:
     return _pool
 
 
-# --- Public API -------------------------------------------------------------
-
 async def list_chats(user_id: str) -> list[dict[str, Any]]:
-    """Alle Chats dieses Nutzers inkl. Messages, neueste zuerst."""
+    """All chats of the user with their messages; pinned first, then newest first."""
     async with pool().acquire() as conn:
         chat_rows = await conn.fetch(
             "SELECT id, title, timestamp, pinned FROM chats "
@@ -81,44 +74,41 @@ async def list_chats(user_id: str) -> list[dict[str, Any]]:
 
 
 async def upsert_chat(user_id: str, chat: dict[str, Any]) -> None:
-    """Chat dieses Nutzers komplett ersetzen (inkl. Messages). Idempotent.
+    """Creates or fully replaces a chat with its messages. Idempotent.
 
-    Der Primary Key ist (user_id, id). Eine gleiche Chat-ID bei einem anderen
-    Nutzer ist daher ein eigener Chat und überschreibt nichts.
+    The primary key is (user_id, id), so the same chat id of another user is a different chat.
     """
     now = int(time.time() * 1000)
-    async with pool().acquire() as conn:
-        async with conn.transaction():
-            await conn.execute(
-                """INSERT INTO chats (user_id, id, title, timestamp, pinned, updated_at)
-                   VALUES ($1, $2, $3, $4, $5, $6)
-                   ON CONFLICT (user_id, id) DO UPDATE SET
-                       title = EXCLUDED.title,
-                       timestamp = EXCLUDED.timestamp,
-                       pinned = EXCLUDED.pinned,
-                       updated_at = EXCLUDED.updated_at""",
-                user_id, chat["id"], chat["title"], chat["timestamp"],
-                bool(chat.get("pinned")), now,
-            )
-            # Messages komplett austauschen — einfacher als Diff
-            await conn.execute(
-                "DELETE FROM messages WHERE user_id = $1 AND chat_id = $2",
-                user_id, chat["id"],
-            )
-            await conn.executemany(
-                """INSERT INTO messages
-                       (user_id, id, chat_id, seq, role, content, timestamp, via, edit_count)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
-                [
-                    (user_id, m["id"], chat["id"], seq, m["role"], m["content"],
-                     m.get("timestamp"), m.get("via"), m.get("editCount", 0))
-                    for seq, m in enumerate(chat.get("messages", []))
-                ],
-            )
+    async with pool().acquire() as conn, conn.transaction():
+        await conn.execute(
+            """INSERT INTO chats (user_id, id, title, timestamp, pinned, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6)
+               ON CONFLICT (user_id, id) DO UPDATE SET
+                   title = EXCLUDED.title,
+                   timestamp = EXCLUDED.timestamp,
+                   pinned = EXCLUDED.pinned,
+                   updated_at = EXCLUDED.updated_at""",
+            user_id, chat["id"], chat["title"], chat["timestamp"],
+            bool(chat.get("pinned")), now,
+        )
+        # Replace all messages: simpler than a diff.
+        await conn.execute(
+            "DELETE FROM messages WHERE user_id = $1 AND chat_id = $2",
+            user_id, chat["id"],
+        )
+        await conn.executemany(
+            """INSERT INTO messages
+                   (user_id, id, chat_id, seq, role, content, timestamp, via, edit_count)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+            [
+                (user_id, m["id"], chat["id"], seq, m["role"], m["content"],
+                 m.get("timestamp"), m.get("via"), m.get("editCount", 0))
+                for seq, m in enumerate(chat.get("messages", []))
+            ],
+        )
 
 
 async def delete_chat(user_id: str, chat_id: str) -> bool:
-    """Löscht nur einen Chat dieses Nutzers. Fremde Chats bleiben unberührt."""
     async with pool().acquire() as conn:
         result = await conn.execute(
             "DELETE FROM chats WHERE user_id = $1 AND id = $2", user_id, chat_id
@@ -126,10 +116,9 @@ async def delete_chat(user_id: str, chat_id: str) -> bool:
     return result == "DELETE 1"
 
 
-# --- Phrasen ----------------------------------------------------------------
+# --- Phrases -------------------------------------------------------------------
 
-async def get_phrase_store(user_id: str) -> Optional[dict[str, Any]]:
-    """Phrasen + Einstellungen dieses Nutzers, oder None wenn es noch keine gibt."""
+async def get_phrase_store(user_id: str) -> dict[str, Any] | None:
     async with pool().acquire() as conn:
         row = await conn.fetchrow(
             "SELECT data, updated_at FROM phrase_stores WHERE user_id = $1", user_id
@@ -141,29 +130,29 @@ async def get_phrase_store(user_id: str) -> Optional[dict[str, Any]]:
 
 
 async def put_phrase_store(user_id: str, store: dict[str, Any]) -> bool:
-    """Speichert den Stand, aber nur wenn er nicht älter ist als der vorhandene.
+    """Saves the store only if it is not older than the saved one. Returns False if it was older.
 
-    So kann ein verspäteter Request (z. B. nach kurzem Netzausfall) einen
-    neueren Stand nicht überschreiben. Gibt False zurück, wenn er abgelehnt wurde.
+    So a late request (e.g. after a short network outage) cannot overwrite newer data.
     """
     data = json.dumps({"phrases": store["phrases"], "settings": store["settings"]})
     async with pool().acquire() as conn:
-        result = await conn.execute(
+        saved = await conn.fetchval(
             """INSERT INTO phrase_stores (user_id, data, updated_at)
                VALUES ($1, $2::jsonb, $3)
                ON CONFLICT (user_id) DO UPDATE SET
                    data = EXCLUDED.data,
                    updated_at = EXCLUDED.updated_at
-               WHERE phrase_stores.updated_at <= EXCLUDED.updated_at""",
+               WHERE phrase_stores.updated_at <= EXCLUDED.updated_at
+               RETURNING true""",
             user_id, data, store["updatedAt"],
         )
-    return result == "INSERT 0 1"
+    return saved is not None
 
 
-# --- TTS-Statistik ----------------------------------------------------------
+# --- TTS statistics ------------------------------------------------------------
 
 async def get_tts_stats(user_id: str) -> dict[str, dict[str, int]]:
-    """Alle Tageswerte dieses Nutzers: {"2026-10-19": {requests, chars, durationMs}}."""
+    """Returns {"2026-10-19": {"requests": ..., "chars": ..., "durationMs": ...}, ...}."""
     async with pool().acquire() as conn:
         rows = await conn.fetch(
             "SELECT day, requests, chars, duration_ms FROM tts_daily_stats WHERE user_id = $1",
@@ -176,8 +165,7 @@ async def get_tts_stats(user_id: str) -> dict[str, dict[str, int]]:
 
 
 async def merge_tts_stats(user_id: str, stats: dict[str, dict[str, int]]) -> None:
-    """Führt Tageswerte zusammen. Pro Feld gilt der größere Wert, die Zahlen
-    werden also nie kleiner (ein zweites Gerät mit älterem Stand schadet nicht)."""
+    """Per field the larger value wins, so a second device with older numbers does no harm."""
     async with pool().acquire() as conn:
         await conn.executemany(
             """INSERT INTO tts_daily_stats (user_id, day, requests, chars, duration_ms)

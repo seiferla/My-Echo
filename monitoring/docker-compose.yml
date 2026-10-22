@@ -11,8 +11,8 @@ services:
     environment:
       - BACKEND_HOST=${BACKEND_HOST:-192.168.178.21}
       - METRICS_TOKEN=${METRICS_TOKEN:?METRICS_TOKEN must be set}
-    # Substituiert __BACKEND_HOST__ und __METRICS_TOKEN__ im Config-Template
-    # und startet Prometheus dann mit der generierten Config.
+    # Fills __BACKEND_HOST__ and __METRICS_TOKEN__ into the config template,
+    # then starts Prometheus with the generated config.
     entrypoint:
       - "/bin/sh"
       - "-c"

@@ -1,15 +1,13 @@
-"""Führt die Lasttest-Läufe nach docs/goals.md aus (Issue #218).
+"""Runs the load test levels as described in docs/goals.md.
 
-    python loadtest/run_baseline.py                      # Stufen 5, 10, 20, je 3 Läufe, 1 min Anlauf + 5 min Messung
-    python loadtest/run_baseline.py --quick              # Probelauf zum Testen des Ablaufs (wird nicht eingecheckt)
-    python loadtest/run_baseline.py --users 40 80 160    # Stresstest
+    python loadtest/run_baseline.py                      # levels 5, 10, 20, 3 runs each, 1 min ramp-up + 5 min measurement
+    python loadtest/run_baseline.py --quick              # short run to test the setup (not committed)
+    python loadtest/run_baseline.py --users 40 80 160    # stress test
 
-Pro Lauf: frisches Backend im Mock-Modus starten, Testnutzer vorbereiten und Tokens
-ausstellen, Locust laufen lassen, Backend beenden. Währenddessen werden CPU und Speicher
-von Backend und Lastgenerator mitgeschrieben (Lastgenerator über 70 % CPU = Lauf ungültig).
-
-Benötigt: laufender Supabase-Stack (lokal `npx supabase start`) oder SUPABASE_*/DATABASE_URL
-in der Umgebung, und ein Venv mit backend/requirements.txt und loadtest/requirements.txt.
+Per run: start a fresh backend in mock mode, prepare users and tokens, run Locust, stop the
+backend. CPU and memory of backend and Locust are logged; a run is invalid if Locust uses
+more than 70 % CPU. Needs a running Supabase stack (`npx supabase start`) or SUPABASE_* and
+DATABASE_URL in the environment.
 """
 import argparse
 import datetime
@@ -25,6 +23,16 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import prepare  # noqa: E402
+
+
+def read_json(path: str):
+    with open(path) as f:
+        return json.load(f)
+
+
+def write_json(path: str, data) -> None:
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
 
 
 def sh(*cmd) -> str:
@@ -51,7 +59,7 @@ def ps(pid: int) -> tuple[float, float]:
 
 
 class ResourceLog(threading.Thread):
-    """Schreibt alle 5 s CPU (% eines Kerns) und Speicher (MB) von Backend und Locust."""
+    """Writes CPU (% of one core) and memory (MB) of backend and Locust every 5 s."""
 
     def __init__(self, path: str, backend_pid: int):
         super().__init__(daemon=True)
@@ -69,18 +77,19 @@ class ResourceLog(threading.Thread):
 
 
 def verify_isolation(run_dir: str, tokens_path: str, port: int) -> dict:
-    """Jeder Nutzer fragt seine Chats ab. Er darf nur seinen Chat sehen, nur Nachrichten mit
-    seiner Markierung, und genau so viele, wie er gespeichert hat (nichts verloren, nichts fremd)."""
+    """Each user reads their chats. They must see only their own chat, only messages with
+    their own marker, and exactly as many as they saved (nothing lost, nothing foreign)."""
     violations = []
-    tokens = json.load(open(tokens_path))
+    tokens = read_json(tokens_path)
     for user in tokens:
         index = user["index"]
         state_path = os.path.join(run_dir, "state", f"user-{index:03d}.json")
-        saved = json.load(open(state_path))["saved_messages"] if os.path.exists(state_path) else None
+        saved = read_json(state_path)["saved_messages"] if os.path.exists(state_path) else None
         request = urllib.request.Request(f"http://127.0.0.1:{port}/chats",
                                          headers={"Authorization": f"Bearer {user['token']}"})
         try:
-            chats = json.loads(urllib.request.urlopen(request, timeout=15).read())
+            with urllib.request.urlopen(request, timeout=15) as response:
+                chats = json.loads(response.read())
         except OSError as e:
             violations.append(f"user {index}: could not read chats ({e})")
             continue
@@ -95,13 +104,13 @@ def verify_isolation(run_dir: str, tokens_path: str, port: int) -> dict:
         elif stored != saved:
             violations.append(f"user {index}: {stored} messages stored, {saved} saved")
     result = {"users_checked": len(tokens), "violations": violations}
-    json.dump(result, open(os.path.join(run_dir, "isolation.json"), "w"), indent=2)
+    write_json(os.path.join(run_dir, "isolation.json"), result)
     return result
 
 
 def run_once(args, settings, users: int, run_no: int, run_dir: str) -> None:
     os.makedirs(run_dir, exist_ok=True)
-    tokens_path = os.path.join(run_dir, ".tokens.json")  # nicht eingecheckt (.gitignore)
+    tokens_path = os.path.join(run_dir, ".tokens.json")
     prepare.prepare(settings, users, tokens_path)
 
     backend_env = {
@@ -113,38 +122,38 @@ def run_once(args, settings, users: int, run_no: int, run_dir: str) -> None:
         "DATABASE_URL": settings["DATABASE_URL"],
         "SUPABASE_URL": settings["SUPABASE_URL"],
     }
-    backend_env.pop("TTS_API_KEY", None)  # beweist: es wird kein Fish-Key gebraucht
-    backend_log = open(os.path.join(run_dir, "backend.log"), "w")
-    backend = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "main:app", "--port", str(args.port)],
-        cwd=os.path.join(ROOT, "backend"), env=backend_env, stdout=backend_log, stderr=subprocess.STDOUT)
-    resources = ResourceLog(os.path.join(run_dir, "resources.csv"), backend.pid)
-    try:
-        wait_for(f"http://127.0.0.1:{args.port}/health")
-        resources.start()
-        spawn_rate = users / args.ramp
-        locust = subprocess.Popen(
-            [sys.executable, "-m", "locust", "-f", os.path.join(ROOT, "loadtest", "locustfile.py"),
-             "--headless", "-u", str(users), "-r", f"{spawn_rate:.4f}",
-             "--run-time", f"{args.ramp + args.measure}s", "--reset-stats", "--stop-timeout", "30",
-             "--csv", os.path.join(run_dir, "locust"), "--csv-full-history",
-             "--host", f"http://127.0.0.1:{args.port}", "--loglevel", "WARNING"],
-            cwd=ROOT, env={**os.environ, "LOADTEST_TOKENS": tokens_path, "LOADTEST_SEED": str(args.seed),
-                           "LOADTEST_STATE_DIR": os.path.join(run_dir, "state")},
-            stdout=open(os.path.join(run_dir, "locust.log"), "w"), stderr=subprocess.STDOUT)
-        resources.locust_pid = locust.pid
-        code = locust.wait()
-        isolation = verify_isolation(run_dir, tokens_path, args.port)
-    finally:
-        resources.stop.set()
-        backend.terminate()
+    backend_env.pop("TTS_API_KEY", None)  # proves that the mock needs no Fish key
+    with open(os.path.join(run_dir, "backend.log"), "w") as backend_log, \
+         open(os.path.join(run_dir, "locust.log"), "w") as locust_log:
+        backend = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "main:app", "--port", str(args.port)],
+            cwd=os.path.join(ROOT, "backend"), env=backend_env, stdout=backend_log, stderr=subprocess.STDOUT)
+        resources = ResourceLog(os.path.join(run_dir, "resources.csv"), backend.pid)
         try:
-            backend.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            backend.kill()
-        backend_log.close()
-        if os.path.exists(tokens_path):
-            os.remove(tokens_path)
+            wait_for(f"http://127.0.0.1:{args.port}/health")
+            resources.start()
+            spawn_rate = users / args.ramp
+            locust = subprocess.Popen(
+                [sys.executable, "-m", "locust", "-f", os.path.join(ROOT, "loadtest", "locustfile.py"),
+                 "--headless", "-u", str(users), "-r", f"{spawn_rate:.4f}",
+                 "--run-time", f"{args.ramp + args.measure}s", "--reset-stats", "--stop-timeout", "30",
+                 "--csv", os.path.join(run_dir, "locust"), "--csv-full-history",
+                 "--host", f"http://127.0.0.1:{args.port}", "--loglevel", "WARNING"],
+                cwd=ROOT, env={**os.environ, "LOADTEST_TOKENS": tokens_path, "LOADTEST_SEED": str(args.seed),
+                               "LOADTEST_STATE_DIR": os.path.join(run_dir, "state")},
+                stdout=locust_log, stderr=subprocess.STDOUT)
+            resources.locust_pid = locust.pid
+            code = locust.wait()
+            isolation = verify_isolation(run_dir, tokens_path, args.port)
+        finally:
+            resources.stop.set()
+            backend.terminate()
+            try:
+                backend.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                backend.kill()
+            if os.path.exists(tokens_path):
+                os.remove(tokens_path)
 
     meta = {
         "tag": args.tag, "users": users, "run": run_no,
@@ -157,7 +166,7 @@ def run_once(args, settings, users: int, run_no: int, run_dir: str) -> None:
         "python": sys.version.split()[0], "platform": platform.platform(), "cpu_count": os.cpu_count(),
         "setup": "backend (1 uvicorn worker) + local Supabase Postgres container + load generator on the SAME machine",
     }
-    json.dump(meta, open(os.path.join(run_dir, "meta.json"), "w"), indent=2)
+    write_json(os.path.join(run_dir, "meta.json"), meta)
     print(f"  users={users} run={run_no}: locust exit code {code}, "
           f"isolation violations {len(isolation['violations'])}", flush=True)
 

@@ -7,8 +7,7 @@ import { CloudStatusProvider } from '../context/CloudStatusContext';
 import { PhrasesProvider } from '../context/PhrasesContext';
 import { configureAudioSession } from '../utils/tts';
 
-// Route-Guard: ohne Session ist nur "login" erreichbar, mit Session nur die
-// App-Screens. Nach Login/Logout wechselt expo-router automatisch.
+// Route guard: signed out only "login" is reachable, signed in only the app screens.
 function RootStack() {
   const { session, isLoading } = useAuth();
 
@@ -39,8 +38,7 @@ function RootStack() {
   );
 }
 
-// Alles, was nutzerbezogene Daten im Speicher hält, wird beim Kontowechsel neu
-// aufgebaut (neuer key → neuer Provider → liest die Daten des neuen Kontos).
+// A new key on account change remounts the provider, so it loads the new account's data.
 function UserScope({ children }: { children: React.ReactNode }) {
   const { session } = useAuth();
   return (

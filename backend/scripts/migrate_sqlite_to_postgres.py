@@ -1,20 +1,8 @@
-"""Überträgt die Chats der Einzelnutzer-Version (SQLite auf dem Pi) nach Postgres (Issue #234).
+"""Copies the chats of the single-user version (SQLite) to Postgres for one user.
 
-Arbeitet immer auf einer KOPIE von chats.db (die Datei wird nur lesend geöffnet).
-Ohne --apply ist es ein Probelauf: alles wird in einer Transaktion geschrieben
-und am Ende zurückgerollt. Die Zahlen sind also genau die eines echten Laufs.
+Without --apply it is a dry run: everything is written in a transaction and rolled back.
 
-    python scripts/migrate_sqlite_to_postgres.py --sqlite chats-copy.db --user-id <uuid>
-    python scripts/migrate_sqlite_to_postgres.py --sqlite chats-copy.db --user-id <uuid> --apply
-
-DATABASE_URL kommt aus der Umgebung oder aus --database-url.
-
-Regeln:
-- Ein Chat, den es für diesen Nutzer in Postgres schon gibt, bleibt unverändert,
-  auch seine Nachrichten. Die App hat ihn dann schon übernommen.
-- Zeilen, die die Regeln in Postgres verletzen (role, via, fehlender Chat),
-  werden gemeldet und übersprungen, nie still verworfen.
-- Es werden nie Nachrichtentexte ausgegeben, nur IDs und Zahlen.
+    python scripts/migrate_sqlite_to_postgres.py --sqlite chats-copy.db --user-id <uuid> [--apply]
 """
 import argparse
 import asyncio
@@ -29,6 +17,10 @@ import asyncpg
 
 ROLES = {"user", "assistant"}
 VIAS = {None, "send", "save"}
+
+
+class UnknownUserError(Exception):
+    pass
 
 
 @dataclass
@@ -46,7 +38,6 @@ class Report:
 
 
 def read_sqlite(path: str) -> tuple[list[dict], list[dict]]:
-    """Liest Chats und Nachrichten nur lesend aus der SQLite-Datei."""
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     try:
@@ -63,7 +54,7 @@ def read_sqlite(path: str) -> tuple[list[dict], list[dict]]:
 
 
 def validate(chats: list[dict], messages: list[dict]) -> tuple[list[dict], list[str]]:
-    """Gibt die gültigen Nachrichten zurück und eine Liste der übersprungenen."""
+    """Splits messages into valid ones and a list of reasons for the skipped ones."""
     chat_ids = {c["id"] for c in chats}
     good, rejected = [], []
     for m in messages:
@@ -88,7 +79,7 @@ async def migrate(database_url: str, user_id: str, chats: list[dict],
     conn = await asyncpg.connect(database_url)
     try:
         if not await conn.fetchval("SELECT EXISTS (SELECT 1 FROM auth.users WHERE id = $1)", user_id):
-            raise SystemExit(f"User {user_id} does not exist in auth.users. Create the account first.")
+            raise UnknownUserError(f"User {user_id} does not exist in auth.users. Create the account first.")
 
         tx = conn.transaction()
         await tx.start()
@@ -107,22 +98,23 @@ async def migrate(database_url: str, user_id: str, chats: list[dict],
                     inserted_chats.add(c["id"])
             report.chats_inserted = len(inserted_chats)
 
-            # Nachrichten nur für neu angelegte Chats, damit kein fremder Verlauf gemischt wird.
-            for m in messages:
-                if m["chat_id"] not in inserted_chats:
-                    continue
-                await conn.execute(
-                    """INSERT INTO messages
-                           (user_id, id, chat_id, seq, role, content, timestamp, via, edit_count)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
-                    user_id, m["id"], m["chat_id"], m["seq"], m["role"], m["content"],
-                    m["timestamp"], m["via"], m["edit_count"],
-                )
-                report.messages_inserted += 1
+            # A chat that already exists was synced by the app: never mix old messages into it.
+            new_messages = [m for m in messages if m["chat_id"] in inserted_chats]
+            await conn.executemany(
+                """INSERT INTO messages
+                       (user_id, id, chat_id, seq, role, content, timestamp, via, edit_count)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                [
+                    (user_id, m["id"], m["chat_id"], m["seq"], m["role"], m["content"],
+                     m["timestamp"], m["via"], m["edit_count"])
+                    for m in new_messages
+                ],
+            )
+            report.messages_inserted = len(new_messages)
 
-            # Kontrolle: jeder neu angelegte Chat hat in Postgres so viele Nachrichten wie in SQLite.
+            # Check: every new chat has as many messages in Postgres as in SQLite.
             for chat_id in sorted(inserted_chats):
-                expected = sum(1 for m in messages if m["chat_id"] == chat_id)
+                expected = sum(1 for m in new_messages if m["chat_id"] == chat_id)
                 actual = await conn.fetchval(
                     "SELECT count(*) FROM messages WHERE user_id = $1 AND chat_id = $2", user_id, chat_id
                 )
@@ -163,7 +155,7 @@ def print_report(report: Report, target: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Copy single-user chats from SQLite to Postgres (issue #234).")
+    parser = argparse.ArgumentParser(description="Copy single-user chats from SQLite to Postgres.")
     parser.add_argument("--sqlite", required=True, help="path to a COPY of chats.db")
     parser.add_argument("--user-id", required=True, help="Supabase user id (uuid) that gets the chats")
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"), help="default: $DATABASE_URL")
@@ -180,7 +172,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"file not found: {args.sqlite}")
 
     chats, messages = read_sqlite(args.sqlite)
-    report = asyncio.run(migrate(args.database_url, user_id, chats, messages, args.apply))
+    try:
+        report = asyncio.run(migrate(args.database_url, user_id, chats, messages, args.apply))
+    except UnknownUserError as e:
+        print(e, file=sys.stderr)
+        return 2
     target = urlparse(args.database_url).hostname or "?"
     print_report(report, target)
     return 1 if report.mismatches else 0

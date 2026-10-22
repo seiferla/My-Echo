@@ -1,34 +1,26 @@
-"""Mock-Sprachsynthese für Lasttests (Issue #217, Ziel G5).
+"""Fake TTS for load tests (TTS_PROVIDER=mock): silent MP3, no Fish Audio, no cost.
 
-Ersetzt Fish Audio, wenn TTS_PROVIDER=mock gesetzt ist. So misst ein Lasttest nur
-das eigene System, kostet nichts und läuft ohne API-Key.
-
-Das Audio ist eine gültige MP3 aus Stille (128 kbit/s, 44,1 kHz, mono). Zwei
-Größen sind einstellbar, damit der Mock wie der echte Dienst aussieht:
-  - Wartezeit bis zum ersten Byte (beim echten Dienst die Synthesezeit)
-  - Länge des Audios, abhängig von der Textlänge (also auch die Datenmenge)
-
-Einstellungen (Umgebungsvariablen, werden bei jedem Aufruf gelesen):
-  MOCK_TTS_FIRST_AUDIO_MS    Wartezeit bis zum ersten Byte        Standard 1500
-  MOCK_TTS_CHUNK_MS          Pause zwischen zwei Datenstücken     Standard 20
-  MOCK_TTS_CHARS_PER_SECOND  Zeichen pro Sekunde gesprochen       Standard 15
+Settings (env, read on every call):
+  MOCK_TTS_FIRST_AUDIO_MS    delay until the first byte     default 1500
+  MOCK_TTS_CHUNK_MS          pause between two chunks       default 20
+  MOCK_TTS_CHARS_PER_SECOND  sets the audio length          default 15
 """
 import asyncio
 import logging
 import math
 import os
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 logger = logging.getLogger("myecho.tts")
 
-# MPEG-1 Layer III, 128 kbit/s, 44,1 kHz, mono, ohne CRC, ohne Padding.
-# Kopf FF FB 90 C0, danach lauter Nullen: ein gültiges Bild, das als Stille klingt.
-FRAME_BYTES = 417                      # 144 * 128000 / 44100, abgerundet
-FRAME_SECONDS = 1152 / 44100           # ein Bild dauert etwa 26 ms
+# One MPEG-1 Layer III frame (128 kbit/s, 44.1 kHz, mono): header FF FB 90 C0,
+# then zeros. A valid frame that sounds like silence.
+FRAME_BYTES = 417                      # 144 * 128000 / 44100, rounded down
+FRAME_SECONDS = 1152 / 44100           # about 26 ms
 SILENT_FRAME = bytes([0xFF, 0xFB, 0x90, 0xC0]) + bytes(FRAME_BYTES - 4)
 
-CHUNK_BYTES = 4096                     # Größe der gestreamten Stücke
-MIN_SECONDS = 0.5                      # auch sehr kurze Texte ergeben etwas Audio
+CHUNK_BYTES = 4096
+MIN_SECONDS = 0.5                      # very short texts still get some audio
 
 
 def _env_number(name: str, default: float) -> float:
@@ -52,12 +44,11 @@ def audio_seconds(text: str) -> float:
 
 
 def silent_mp3(seconds: float) -> bytes:
-    """Eine MP3 aus Stille mit (ungefähr) der gewünschten Länge."""
     return SILENT_FRAME * math.ceil(seconds / FRAME_SECONDS)
 
 
 async def stream(text: str) -> AsyncIterator[bytes]:
-    """Liefert das Audio wie der echte Dienst: erst warten, dann Stück für Stück."""
+    """Behaves like the real service: wait first, then send the audio chunk by chunk."""
     await asyncio.sleep(first_audio_ms() / 1000)
     data = silent_mp3(audio_seconds(text))
     pause = chunk_ms() / 1000
@@ -70,5 +61,5 @@ async def stream(text: str) -> AsyncIterator[bytes]:
             if pause:
                 await asyncio.sleep(pause)
     finally:
-        # Nur Längen loggen, nie den Text (G8).
+        # Log lengths only, never the text.
         logger.info("TTS (mock) finished: chars=%d, bytes=%d", len(text), sent)

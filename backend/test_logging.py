@@ -1,9 +1,4 @@
-"""Nachrichtentexte dürfen in keinem Log landen (G8).
-
-Ein eindeutiges Markierungswort wird durch die Endpunkte geschickt; danach darf
-es in keiner Logzeile stehen. Die Chat- und Phrasen-Endpunkte brauchen die
-Datenbank und werden in test_chats.py geprüft (TestNoMessageTextInLogs).
-"""
+"""Message texts must never appear in a log. The chat and phrase routes are checked in test_chats.py."""
 import logging
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -13,37 +8,12 @@ from fastapi.testclient import TestClient
 
 import main
 from auth import current_user
-
-MARKER = "GEHEIMNIS-7f3a"
-
-
-class LogCapture(logging.Handler):
-    """Sammelt alle Logzeilen außer denen des Test-Clients (httpx loggt die volle URL)."""
-
-    def __init__(self):
-        super().__init__(logging.DEBUG)
-        self.lines: list[str] = []
-
-    def emit(self, record):
-        if not record.name.startswith("httpx"):
-            self.lines.append(f"{record.name}: {record.getMessage()}")
-
-    def __enter__(self):
-        root = logging.getLogger()
-        self._old_level = root.level
-        root.setLevel(logging.DEBUG)
-        root.addHandler(self)
-        return self
-
-    def __exit__(self, *exc):
-        root = logging.getLogger()
-        root.removeHandler(self)
-        root.setLevel(self._old_level)
+from testutils import MARKER, LogCapture
 
 
 class TestAccessLogFilter(unittest.TestCase):
     def test_query_string_is_removed_from_the_access_log(self):
-        # Genau so baut Uvicorn die Zeile: (client, method, path?query, http_version, status)
+        # The same arguments Uvicorn uses: (client, method, path?query, http_version, status)
         record = logging.LogRecord(
             "uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
             ("127.0.0.1:5000", "GET", f"/stream/tts?text={MARKER}", "1.1", 200), None,

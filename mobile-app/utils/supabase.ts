@@ -4,8 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_KEY } from './config';
 import { authStorage } from './authStorage';
 
-// Ohne URL/Key (z. B. Build ohne .env) kein Client — createClient würde sonst
-// schon beim App-Start werfen. Der Login-Screen zeigt dann einen Hinweis.
+// No client without URL/key (e.g. a build without .env): createClient would throw at app start.
 export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_KEY);
 
 export const supabase = isSupabaseConfigured
@@ -14,16 +13,12 @@ export const supabase = isSupabaseConfigured
               storage: authStorage,
               autoRefreshToken: true,
               persistSession: true,
-              detectSessionInUrl: false, // kein Browser-Redirect in einer nativen App
+              detectSessionInUrl: false, // no browser redirect in a native app
           },
       })
     : null;
 
-/**
- * Authorization-Header für Backend-Aufrufe. getSession() erneuert einen
- * abgelaufenen Token automatisch. Ohne Session liefert es {}: das Backend
- * antwortet dann mit 401.
- */
+/** Auth header for backend calls; getSession() refreshes an expired token. Empty when signed out. */
 export async function authHeaders(): Promise<Record<string, string>> {
     if (!supabase) return {};
     const { data } = await supabase.auth.getSession();
@@ -31,8 +26,7 @@ export async function authHeaders(): Promise<Record<string, string>> {
     return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// Token nur im Vordergrund automatisch erneuern (Empfehlung für React Native).
-// Laufende Wiedergabe ist nicht betroffen: der Token wird nur beim Request geprüft.
+// Refresh tokens only in the foreground, as Supabase recommends for React Native.
 if (supabase) {
     AppState.addEventListener('change', (state) => {
         if (state === 'active') supabase.auth.startAutoRefresh();

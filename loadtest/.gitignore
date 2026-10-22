@@ -1,5 +1,5 @@
-# Tokens sind nur eine Stunde gültig, gehören aber nie ins Repo.
+# Tokens expire after an hour, but they never belong in the repo.
 .tokens.json
 __pycache__/
-# Kurze Probeläufe (--quick) sind keine Ergebnisse. Nur echte Läufe werden eingecheckt.
+# Quick runs (--quick) only test the setup. Only real runs are committed.
 results/quick-*/

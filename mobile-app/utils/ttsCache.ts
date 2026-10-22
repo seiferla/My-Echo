@@ -40,8 +40,7 @@ const isWeb = Platform.OS === 'web';
 
 let _cacheDir: Directory | null = null;
 let _indexFile: File | null = null;
-// Cache-Ordner, für den der Zustand unten gerade gilt. Jedes Konto hat einen
-// eigenen Ordner (tts-cache.<user_id>, siehe localUser.ts).
+// Account folder the cached paths and index belong to right now.
 let _ownerName: string | null = null;
 
 function cacheDirRef(): Directory {
@@ -99,15 +98,13 @@ function cacheFile(hash: string): File {
     return new File(cacheDirRef(), `${hash}.mp3`);
 }
 
-// Beim Kontowechsel den Zustand verwerfen und mit dem Ordner des neuen Kontos
-// neu starten. Sonst würde Konto B Audio von Konto A finden und abspielen.
+// On account change reset the state, so account B never plays audio of account A.
 function switchAccountIfNeeded(): void {
     const name = scoped('tts-cache');
     if (name === _ownerName) return;
     if (_ownerName !== null) {
-        // Den ausstehenden Index noch in den Ordner des bisherigen Kontos schreiben
-        // (_indexFile zeigt hier noch auf ihn), dann laufende Downloads des
-        // bisherigen Kontos entwerten: sie verwerfen ihr Ergebnis selbst.
+        // Save the old account's index first (_indexFile still points there),
+        // then invalidate its running downloads.
         try {
             persistNow();
         } catch (e) {

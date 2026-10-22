@@ -10,7 +10,7 @@ const TAG = '[myEcho][Auth]';
 interface AuthContextType {
     session: Session | null;
     isLoading: boolean;
-    /** Liefert eine Fehlermeldung für den Nutzer, oder null bei Erfolg. */
+    /** Returns an error message for the user, or null on success. */
     signIn: (email: string, password: string) => Promise<string | null>;
     signOut: () => Promise<void>;
 }
@@ -36,20 +36,15 @@ function toMessage(error: AuthError): string {
     }
 }
 
-/**
- * Hält die Supabase-Session und stellt signIn/signOut bereit. Der Login läuft
- * direkt App → Supabase; das Backend sieht später nur den Access-Token.
- * In _layout.tsx einbinden.
- */
+/** Holds the Supabase session. Login goes straight to Supabase; the backend only sees the access token. */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const queue = useRef<Promise<void>>(Promise.resolve());
 
-    // Setzt das aktive Konto für die lokalen Daten (Chats, Phrasen, Statistik),
-    // BEVOR die Session gesetzt wird. Erst danach mounten die App-Screens und
-    // lesen Daten — immer nur die des angemeldeten Kontos. Die Aufrufe laufen
-    // nacheinander, weil Supabase mehrere Events kurz hintereinander sendet.
+    // Set the local data owner BEFORE the session: the app screens mount only after
+    // that, so they read the data of this account only. Queued because Supabase
+    // can send several events right after each other.
     const applySession = (next: Session | null): Promise<void> => {
         queue.current = queue.current.then(async () => {
             try {
@@ -57,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 if (next) await adoptLegacyData(next.user.id);
                 setSession(next);
             } catch (e) {
-                // Lieber abgemeldet bleiben als Daten eines anderen Kontos zu zeigen.
+                // Better signed out than showing data of another account.
                 console.error(`${TAG} Could not prepare local data, staying signed out:`, e);
                 setLocalUser(null);
                 setSession(null);
@@ -94,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             password,
         });
         if (error) {
-            // Weder E-Mail noch Passwort loggen.
+            // Never log the email or password.
             console.warn(`${TAG} Sign-in failed: code=${error.code ?? '?'} status=${error.status ?? '?'}`);
             return toMessage(error);
         }
@@ -103,8 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const signOut = async () => {
         if (!supabase) return;
-        // Laufende Sprachausgabe beenden. Lokale Daten bleiben bewusst erhalten:
-        // sie liegen pro Konto in eigenen Dateien (siehe utils/localUser.ts).
+        // Local data stays on purpose: every account has its own files (see localUser.ts).
         stopSpeaking();
         const { error } = await supabase.auth.signOut();
         if (error) console.warn(`${TAG} Sign-out failed: ${error.message}`);

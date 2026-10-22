@@ -16,10 +16,8 @@ import { StatusBar } from 'expo-status-bar';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 
-// Anmeldung nur mit E-Mail + Passwort. Kein Registrieren, kein CAPTCHA, kein
-// Zeitlimit — Konten legt der Admin an. Einfügen und Autofill (Passwort-
-// Manager) sind ausdrücklich erlaubt. Große Felder und feste Beschriftungen,
-// damit TalkBack alles vorliest.
+// Email + password only; the admin creates accounts. Paste and password-manager
+// autofill must keep working. Big fields and fixed labels for TalkBack.
 export default function LoginScreen() {
     const { signIn } = useAuth();
     const passwordRef = useRef<React.ComponentRef<typeof TextInput>>(null);
@@ -36,14 +34,13 @@ export default function LoginScreen() {
         setBusy(true);
         setError(null);
         const message = await signIn(email, password);
-        // Bei Erfolg wechselt der Route-Guard in _layout.tsx von selbst zu den Chats.
+        // On success the route guard in _layout.tsx opens the chats.
         if (message) setError(message);
         setBusy(false);
     };
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Helle Statusleiste-Schrift, weil der Hintergrund jetzt dunkel ist. */}
             <StatusBar style="light" />
             <KeyboardAvoidingView
                 style={styles.flex}
@@ -53,7 +50,7 @@ export default function LoginScreen() {
                     contentContainerStyle={styles.content}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {/* Logo ist dekorativ: der Titel darunter sagt schon "myEcho". */}
+                    {/* Decorative: the title below already says "myEcho". */}
                     <Image
                         source={require('../assets/login-logo.png')}
                         style={styles.logo}
@@ -148,7 +145,7 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
     flex: { flex: 1 },
-    // Farben aus dem Logo: dunkles Navy + Gold. Gold nur auf Navy (auf Weiß zu blass).
+    // Logo colors: navy + gold. Gold only on navy, it is too pale on white.
     container: { flex: 1, backgroundColor: '#14284a' },
     content: { flexGrow: 1, justifyContent: 'center', padding: 24 },
 
@@ -195,7 +192,7 @@ const styles = StyleSheet.create({
     },
     errorText: { fontSize: 18, color: '#7f1d1d', fontWeight: '600' },
 
-    // Navy aus dem Logo: weißer Text hat ca. 11:1 Kontrast (WCAG AAA).
+    // White on this navy is about 11:1 contrast (WCAG AAA).
     button: {
         minHeight: 60,
         marginTop: 24,

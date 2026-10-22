@@ -1,12 +1,11 @@
-"""Prüft das Supabase-Access-Token und gibt die User-ID (sub) zurück.
+"""Checks the Supabase access token and returns the user id (sub).
 
-Die App meldet sich direkt bei Supabase an und schickt den Token als
-"Authorization: Bearer ..." mit. Das Backend prüft die Signatur offline mit den
-öffentlichen Schlüsseln (JWKS). Die user_id kommt NUR aus dem Token, nie aus
-der URL oder dem Body.
+The signature is checked offline with Supabase's public keys (JWKS).
+The user id comes ONLY from the token, never from the URL or the body.
 """
 import os
 import secrets
+from typing import Annotated
 
 import jwt
 from jwt import PyJWKClient
@@ -15,12 +14,13 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 
-# Nur asymmetrische Verfahren. HS256 (geteiltes Geheimnis) und "none" sind
-# absichtlich nicht erlaubt.
+# Asymmetric only. HS256 (shared secret) and "none" are not allowed on purpose.
 ALLOWED_ALGORITHMS = ["ES256", "RS256"]
 
 _bearer = HTTPBearer(auto_error=False)
 _jwks: PyJWKClient | None = None
+
+BearerToken = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 
 
 def _jwk_client() -> PyJWKClient:
@@ -30,14 +30,11 @@ def _jwk_client() -> PyJWKClient:
     return _jwks
 
 
-def current_user(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> str:
-    """FastAPI-Dependency: liefert die user_id oder antwortet mit 401.
+def current_user(request: Request, credentials: BearerToken) -> str:
+    """FastAPI dependency: returns the user id or answers 401.
 
-    Die geprüfte user_id wird auch in request.state abgelegt: das Rate-Limit
-    (main.rate_limit_key) zählt damit pro Nutzer statt pro IP-Adresse."""
+    Also stores the id in request.state, so the rate limit counts per user.
+    """
     if credentials is None:
         raise HTTPException(401, "not authenticated")
     try:
@@ -51,16 +48,19 @@ def current_user(
             options={"require": ["exp", "sub", "iss", "aud"]},
         )
     except jwt.PyJWTError:
-        raise HTTPException(401, "invalid token")
-    request.state.user_id = claims["sub"]  # erst NACH der Prüfung: ein gefälschter Token zählt nie
+        raise HTTPException(401, "invalid token") from None
+    # Set only AFTER the check, so a forged token never counts for anyone.
+    request.state.user_id = claims["sub"]
     return claims["sub"]
 
 
-def require_metrics_token(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> None:
-    """FastAPI-Dependency für /metrics: nur mit dem eigenen Prometheus-Token.
+CurrentUser = Annotated[str, Depends(current_user)]
 
-    Ein Nutzer-Token reicht hier nicht. Ist METRICS_TOKEN nicht gesetzt, bleibt
-    /metrics komplett zu (sicherer Standard).
+
+def require_metrics_token(credentials: BearerToken) -> None:
+    """FastAPI dependency for /metrics: only the Prometheus token works, not a user token.
+
+    Without METRICS_TOKEN, /metrics stays closed.
     """
     expected = os.getenv("METRICS_TOKEN", "")
     if not expected or credentials is None or not secrets.compare_digest(

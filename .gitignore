@@ -1,5 +1,11 @@
 # dependencies
 node_modules/
+__pycache__/
+.venv/
+
+# test output
+.coverage
+coverage.json
 mobile-app/node_modules/
 
 # Expo / React Native
@@ -23,7 +29,8 @@ mobile-app/.idea/
 # secrets
 .env
 .env.local
-.env.*.localFETCH_HEAD
+.env.*.local
+FETCH_HEAD
 
 # generierte Datenschutz-Seite (GitHub Pages)
 /site/

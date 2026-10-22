@@ -28,7 +28,6 @@ export default function ChatScreen() {
     const [currentChatId, setCurrentChatId] = useState('1');
     const [chats, setChats] = useState<Chat[]>([]);
 
-    // useEffect "Lade Chats" ersetzen:
     useEffect(() => {
         let alive = true;
         loadChatsForStart().then(({ chats: loaded, later }) => {
@@ -63,9 +62,7 @@ export default function ChatScreen() {
                 pushChat(fresh);
             }
 
-            // Kam das Backend erst nach der Wartezeit (langsames Netz), den
-            // Abgleich nachträglich dazumischen, ohne zu überschreiben, was der
-            // Nutzer inzwischen geändert hat (der reichere Stand gewinnt).
+            // Slow backend: merge its result later without losing changes made meanwhile.
             later?.then((merged) => {
                 if (!alive || !merged) return;
                 setChats((prev) => mergeChats(prev, merged));
@@ -76,7 +73,6 @@ export default function ChatScreen() {
         };
     }, []);
 
-    // useEffect "Speichere Chats" ersetzen — lokal + Backend parallel:
     useEffect(() => {
         if (chats.length === 0) return;
         persistLocal(chats);                                       // lokaler Cache

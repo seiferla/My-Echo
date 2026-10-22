@@ -1,10 +1,9 @@
 import { Chat, withMessageIds } from './types';
 import { readChats, writeChats } from './chatStorage';
 import { BACKEND_CHATS_URL } from './config';
-import { authHeaders } from './supabase';
+import { backendFetch } from './backend';
 
 const TAG = '[myEcho][Sync]';
-const FETCH_TIMEOUT_MS = 5_000;
 
 function parseChats(raw: string | null): Chat[] {
     if (!raw) return [];
@@ -15,7 +14,7 @@ function parseChats(raw: string | null): Chat[] {
     }
 }
 
-/** Bei gleichem Chat gewinnt der "reichere" (mehr Nachrichten), sonst der neuere. */
+/** For the same chat the one with more messages wins, otherwise the newer one. */
 function pickRicher(a: Chat, b: Chat): Chat {
     if (a.messages.length !== b.messages.length) {
         return a.messages.length > b.messages.length ? a : b;
@@ -23,11 +22,7 @@ function pickRicher(a: Chat, b: Chat): Chat {
     return (a.timestamp ?? 0) >= (b.timestamp ?? 0) ? a : b;
 }
 
-/**
- * Vereinigt lokale und Backend-Chats nach id. Ein lokal vorhandener Chat geht
- * NIE verloren — selbst wenn das Backend ihn (noch) nicht kennt oder leer ist.
- * Sortiert absteigend nach timestamp (neuester zuerst), wie index.tsx erwartet.
- */
+/** Joins local and backend chats by id, newest first. A local chat is never lost. */
 export function mergeChats(local: Chat[], remote: Chat[]): Chat[] {
     const byId = new Map<string, Chat>();
     for (const c of remote) byId.set(c.id, c);
@@ -40,37 +35,22 @@ export function mergeChats(local: Chat[], remote: Chat[]): Chat[] {
     );
 }
 
-/** Der lokale Verlauf dieses Kontos. Schnell: kein Netz nötig. */
 export async function loadLocalChats(): Promise<Chat[]> {
     return parseChats(await readChats());
 }
 
 /**
- * Gleicht lokale Chats mit dem Backend ab. Der lokale Verlauf ist immer der
- * Sockel: das Backend kann ihn nur ergänzen, niemals löschen.
- *
- *  - Backend-Chats, die lokal fehlen, werden dazugenommen (id-basiert).
- *  - Lokale Chats, die das Backend noch nicht (oder nur ärmer) kennt, werden
- *    hochgepusht (verlustfreie Seed-Migration in die Backend-DB).
- *
- * Gibt den vereinigten Stand zurück, oder null offline / bei Fehlern.
- * Schreibt NICHT in den lokalen Cache: das macht der Aufrufer mit seinem
- * aktuellen Stand, damit ein spät eintreffender Abgleich Änderungen des
- * Nutzers nicht mit einem veralteten Stand überschreibt.
+ * Merges local chats with the backend and pushes what the backend is missing.
+ * Returns null when offline. Does not write the local cache: the caller does
+ * that with its current state, so a late result cannot overwrite newer edits.
  */
 export async function syncChats(local: Chat[]): Promise<Chat[] | null> {
     try {
-        const response = await fetch(BACKEND_CHATS_URL, {
-            headers: await authHeaders(),
-            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const response = await backendFetch(BACKEND_CHATS_URL);
         const remote = withMessageIds((await response.json()) as Chat[]);
 
         const merged = mergeChats(local, remote);
 
-        // Alles, was das Backend nicht oder nur ärmer/anders kennt, nach oben
-        // schreiben. Identische Remote-Chats werden nicht erneut gepusht.
         const remoteById = new Map(remote.map((c) => [c.id, c]));
         for (const c of merged) {
             const r = remoteById.get(c.id);
@@ -93,7 +73,7 @@ export async function syncChats(local: Chat[]): Promise<Chat[] | null> {
     }
 }
 
-/** Lokal lesen, abgleichen und den Cache aktualisieren (für Stellen ohne eigenen State). */
+/** Load, sync and update the local cache (for callers without their own state). */
 export async function loadChats(): Promise<Chat[]> {
     const local = await loadLocalChats();
     const merged = await syncChats(local);
@@ -102,18 +82,15 @@ export async function loadChats(): Promise<Chat[]> {
     return merged;
 }
 
-// So lange wartet der App-Start höchstens auf das Backend, wenn lokale Chats da
-// sind. Danach werden sie sofort gezeigt und der Abgleich folgt nachträglich.
+// Max wait for the backend at app start when local chats exist.
 const START_GRACE_MS = 600;
 const GRACE_EXPIRED = Symbol('grace expired');
 
 /**
- * Chats für den App-Start, ohne dass ein langsames Netz die Anzeige blockiert.
- *  - Lokale Chats vorhanden: Antwortet das Backend schnell (< 0,6 s), kommt der
- *    abgeglichene Stand zurück. Sonst die lokalen Chats sofort, und `later`
- *    liefert den Abgleich nachträglich.
- *  - Nichts lokal (neues Gerät): auf das Backend warten. Sonst würde eine leere
- *    Begrüßungs-Hülle einen vorhandenen Chat mit gleicher ID überschreiben.
+ * Chats for app start, so a slow network does not block the screen.
+ * If the backend is slow, the local chats come now and `later` brings the sync.
+ * On a new device (nothing local) we wait: otherwise an empty welcome chat
+ * could overwrite an existing chat with the same id.
  */
 export async function loadChatsForStart(): Promise<{
     chats: Chat[];
@@ -137,19 +114,10 @@ export async function loadChatsForStart(): Promise<{
     return { chats: first ?? local, later: null };
 }
 
-/**
- * Schreibt einen Chat ins Backend. Wirft NICHT — Fehler werden geloggt,
- * der lokale Cache ist die Wahrheit für die UI.
- */
+/** Saves a chat in the backend. Never throws: the local cache is the source for the UI. */
 export async function pushChat(chat: Chat): Promise<void> {
     try {
-        const response = await fetch(`${BACKEND_CHATS_URL}/${chat.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-            body: JSON.stringify(chat),
-            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        await backendFetch(`${BACKEND_CHATS_URL}/${chat.id}`, { method: 'PUT', json: chat });
     } catch (e) {
         console.warn(`${TAG} Push failed for chat ${chat.id}:`, e);
     }
@@ -157,20 +125,12 @@ export async function pushChat(chat: Chat): Promise<void> {
 
 export async function deleteChatRemote(chatId: string): Promise<void> {
     try {
-        await fetch(`${BACKEND_CHATS_URL}/${chatId}`, {
-            method: 'DELETE',
-            headers: await authHeaders(),
-            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        });
+        await backendFetch(`${BACKEND_CHATS_URL}/${chatId}`, { method: 'DELETE' });
     } catch (e) {
         console.warn(`${TAG} Delete failed for chat ${chatId}:`, e);
     }
 }
 
-/**
- * Persistiert alle Chats lokal (SecureStore-Cache). Wird parallel zum
- * Backend-Push aufgerufen — der lokale Cache ist immer der UI-Stand.
- */
 export async function persistLocal(chats: Chat[]): Promise<void> {
     await writeChats(JSON.stringify(chats));
 }

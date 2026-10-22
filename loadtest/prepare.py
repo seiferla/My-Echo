@@ -1,11 +1,10 @@
-"""Testnutzer und Tokens für den Lasttest (Issue #218).
+"""Test users and tokens for the load test.
 
-Legt Nutzer `lt-user-001@loadtest.local` ... an (falls es sie noch nicht gibt),
-löscht ihre Chats (sauberer Start pro Lauf) und stellt ihre Tokens VOR dem Test aus.
-Während des Tests gibt es dadurch keine Anmeldungen bei Supabase (siehe ADR 0002).
+Creates users lt-user-001@loadtest.local ... if missing, clears their data and issues their
+tokens BEFORE the test, so there are no logins during the run (ADR 0002).
 
-Gebraucht werden: SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY, DATABASE_URL.
-`load_settings()` liest sie aus der Umgebung oder, lokal, aus `supabase status`.
+    python loadtest/prepare.py [count]     # default 5, tokens go to loadtest/.tokens.json
+    python loadtest/prepare.py cleanup     # deletes all test users and their data
 """
 import asyncio
 import json
@@ -15,16 +14,18 @@ import sys
 import urllib.error
 import urllib.request
 
+import asyncpg
+
 DOMAIN = "loadtest.local"
-PASSWORD = "lt-password-Do-Not-Use-123"  # nur für Wegwerf-Nutzer im Testprojekt
+PASSWORD = "lt-password-Do-Not-Use-123"  # only for throwaway users in a test project
 
 
 def load_settings(repo_root: str) -> dict:
+    """Reads the settings from the environment, or locally from `supabase status`."""
     keys = ["SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY", "DATABASE_URL"]
     settings = {k: os.getenv(k) for k in keys}
     if all(settings.values()):
         return settings
-    # Lokal: den Supabase-Stack fragen (npx supabase start muss laufen).
     out = subprocess.run(["npx", "--yes", "supabase", "status", "-o", "env"], cwd=repo_root,
                          capture_output=True, text=True, check=True).stdout
     status = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
@@ -50,8 +51,18 @@ def _post(url: str, headers: dict, body: dict) -> tuple[int, dict]:
         return e.code, json.loads(e.read() or b"{}")
 
 
+def _with_db(settings: dict, action):
+    """Runs `action(conn)` on the database and closes the connection afterwards."""
+    async def run():
+        conn = await asyncpg.connect(settings["DATABASE_URL"])
+        try:
+            return await action(conn)
+        finally:
+            await conn.close()
+    return asyncio.run(run())
+
+
 def ensure_users(settings: dict, count: int) -> None:
-    """Legt fehlende Nutzer an. Gibt es einen schon, ist das in Ordnung."""
     secret = settings["SUPABASE_SECRET_KEY"]
     for i in range(1, count + 1):
         status, body = _post(
@@ -59,12 +70,11 @@ def ensure_users(settings: dict, count: int) -> None:
             {"apikey": secret, "Authorization": f"Bearer {secret}"},
             {"email": email(i), "password": PASSWORD, "email_confirm": True},
         )
-        if status not in (200, 201, 422):  # 422 = gibt es schon
+        if status not in (200, 201, 422):  # 422 = user exists already
             raise SystemExit(f"could not create {email(i)}: HTTP {status} {body}")
 
 
 def issue_tokens(settings: dict, count: int) -> list[dict]:
-    """Meldet jeden Nutzer einmal an und gibt Token + user_id zurück."""
     tokens = []
     for i in range(1, count + 1):
         status, body = _post(
@@ -79,38 +89,24 @@ def issue_tokens(settings: dict, count: int) -> list[dict]:
 
 
 def clean_data(settings: dict) -> int:
-    """Löscht Chats, Phrasen und Statistik der Testnutzer. Gibt die Zahl gelöschter Chats zurück."""
-    import asyncpg
-
-    async def run():
-        conn = await asyncpg.connect(settings["DATABASE_URL"])
-        try:
-            ids = [r["id"] for r in await conn.fetch(
-                "SELECT id FROM auth.users WHERE email LIKE $1", f"%@{DOMAIN}")]
-            deleted = await conn.fetchval(
-                "WITH d AS (DELETE FROM public.chats WHERE user_id = ANY($1::uuid[]) RETURNING 1) "
-                "SELECT count(*) FROM d", ids)
-            await conn.execute("DELETE FROM public.phrase_stores WHERE user_id = ANY($1::uuid[])", ids)
-            await conn.execute("DELETE FROM public.tts_daily_stats WHERE user_id = ANY($1::uuid[])", ids)
-            return deleted
-        finally:
-            await conn.close()
-    return asyncio.run(run())
+    """Deletes chats, phrases and stats of the test users. Returns the number of deleted chats."""
+    async def action(conn):
+        ids = [r["id"] for r in await conn.fetch(
+            "SELECT id FROM auth.users WHERE email LIKE $1", f"%@{DOMAIN}")]
+        deleted = await conn.fetchval(
+            "WITH d AS (DELETE FROM public.chats WHERE user_id = ANY($1::uuid[]) RETURNING 1) "
+            "SELECT count(*) FROM d", ids)
+        await conn.execute("DELETE FROM public.phrase_stores WHERE user_id = ANY($1::uuid[])", ids)
+        await conn.execute("DELETE FROM public.tts_daily_stats WHERE user_id = ANY($1::uuid[])", ids)
+        return deleted
+    return _with_db(settings, action)
 
 
 def delete_users(settings: dict) -> int:
-    """Entfernt alle Testnutzer samt Daten (ON DELETE CASCADE)."""
-    import asyncpg
-
-    async def run():
-        conn = await asyncpg.connect(settings["DATABASE_URL"])
-        try:
-            return await conn.fetchval(
-                "WITH d AS (DELETE FROM auth.users WHERE email LIKE $1 RETURNING 1) SELECT count(*) FROM d",
-                f"%@{DOMAIN}")
-        finally:
-            await conn.close()
-    return asyncio.run(run())
+    """Deletes all test users. Their data goes with them (ON DELETE CASCADE)."""
+    return _with_db(settings, lambda conn: conn.fetchval(
+        "WITH d AS (DELETE FROM auth.users WHERE email LIKE $1 RETURNING 1) SELECT count(*) FROM d",
+        f"%@{DOMAIN}"))
 
 
 def prepare(settings: dict, count: int, tokens_path: str) -> None:

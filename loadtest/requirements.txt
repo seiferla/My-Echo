@@ -1,5 +1,4 @@
-# Lasttest (Issue #218). Zusammen mit backend/requirements.txt in EINEM Venv installieren,
-# denn der Lauf startet das Backend selbst:
+# Install in the SAME venv as backend/requirements.txt, because the run starts the backend:
 #   pip install -r backend/requirements.txt -r loadtest/requirements.txt
 locust~=2.47.0
 asyncpg~=0.32.0

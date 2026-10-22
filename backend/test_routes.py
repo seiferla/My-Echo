@@ -1,8 +1,6 @@
-"""Prüft, dass jede Route ohne gültigen Token 401 liefert (G1).
+"""Every route without a valid token answers 401.
 
-Die Routen werden direkt aus der App gelesen, nicht aus einer festen Liste:
-kommt eine neue Route ohne Token-Prüfung dazu, schlägt dieser Test fehl.
-Braucht keine Datenbank, denn die Token-Prüfung läuft vor jedem Datenbankzugriff.
+The routes are read from the app itself, so a new route without a token check fails this test.
 """
 import os
 import re
@@ -14,7 +12,7 @@ from fastapi.testclient import TestClient
 
 import main
 
-# Bewusst öffentlich: Erreichbarkeit für App und Docker-Healthcheck, ohne Nutzerdaten.
+# Public on purpose: used by the app and the Docker health check, has no user data.
 PUBLIC_ROUTES = {("GET", "/health")}
 
 
@@ -26,15 +24,15 @@ def _all_routes():
 
 
 def _url(path: str) -> str:
-    return re.sub(r"\{[^}]+\}", "x", path)  # Pfad-Parameter mit einem Platzhalter füllen
+    return re.sub(r"\{[^}]+\}", "x", path)  # fill path parameters with a placeholder
 
 
 class TestEveryRouteNeedsAToken(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(main.app)  # ohne "with": kein Lifespan, keine Datenbank
+        self.client = TestClient(main.app)  # no "with": no lifespan, so no database
 
     def test_route_list_is_read_correctly(self):
-        # Schutz davor, dass der Test still eine leere oder falsche Liste prüft.
+        # Makes sure the tests below do not silently check an empty list.
         found = set(_all_routes())
         for expected in [
             ("GET", "/chats"), ("PUT", "/chats/{chat_id}"), ("DELETE", "/chats/{chat_id}"),

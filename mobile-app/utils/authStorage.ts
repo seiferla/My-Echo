@@ -3,9 +3,8 @@ import { Platform } from 'react-native';
 
 const TAG = '[myEcho][AuthStorage]';
 
-// Die Supabase-Session (JWT + Refresh-Token + User) ist größer als die ~2 KB,
-// die SecureStore pro Wert verträgt. Deshalb wird sie in Stücken gespeichert:
-// <key>.0, <key>.1, ... plus <key>.count. Im Web übernimmt localStorage.
+// The Supabase session is bigger than the ~2 KB SecureStore allows per value,
+// so it is stored in chunks: <key>.0, <key>.1, ... plus <key>.count.
 const CHUNK_SIZE = 1500;
 
 const countKey = (key: string) => `${key}.count`;
@@ -28,7 +27,7 @@ export const authStorage = {
             const parts: string[] = [];
             for (let i = 0; i < count; i++) {
                 const part = await SecureStore.getItemAsync(chunkKey(key, i));
-                if (part === null) return null; // unvollständig → wie "nicht angemeldet"
+                if (part === null) return null; // incomplete = signed out
                 parts.push(part);
             }
             return parts.join('');
@@ -50,8 +49,8 @@ export const authStorage = {
             chunks.push(value.slice(i, i + CHUNK_SIZE));
         }
 
-        // Erst die neuen Stücke und den Zähler schreiben, dann Reste löschen.
-        // Bricht die App dazwischen ab, bleibt höchstens ein alter, ganzer Stand.
+        // Write chunks and count first, then delete old extra chunks,
+        // so a crash in between never leaves a broken session.
         for (let i = 0; i < chunks.length; i++) {
             await SecureStore.setItemAsync(chunkKey(key, i), chunks[i]);
         }
