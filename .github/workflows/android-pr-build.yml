@@ -20,9 +20,20 @@ name: Android PR Build
 # released wird, und die Lücke von oben öffnet sich wieder.
 on:
   pull_request:
+    # Nur Dateien, die den NATIVEN Build beeinflussen. Reine JS/TS-Änderungen
+    # (app/, components/, utils/ …) brauchen keinen ~10-min-Gradle-Lauf — die
+    # prüft mobile-ci.yml mit tsc + JS-Bundle-Export in unter einer Minute.
     # Workflow-Datei selbst mit im Filter, sonst validiert eine Änderung an
     # diesem Workflow sich nicht selbst.
-    paths: ["mobile-app/**", ".github/workflows/android-pr-build.yml"]
+    paths:
+      - "mobile-app/package.json"
+      - "mobile-app/package-lock.json"
+      - "mobile-app/app.json"
+      - "mobile-app/plugins/**"
+      - "mobile-app/patches/**"
+      - "mobile-app/assets/**"
+      - ".github/workflows/android-pr-build.yml"
+      - ".github/scripts/**"
 
 concurrency:
   group: android-pr-build-${{ github.ref }}
@@ -45,10 +56,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -63,7 +74,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Set up JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -78,7 +89,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: mobile-app/android
-          key: prebuild-${{ runner.os }}-${{ hashFiles('mobile-app/app.json', 'mobile-app/package-lock.json', 'mobile-app/app/**', 'mobile-app/assets/**') }}
+          key: prebuild-${{ runner.os }}-${{ hashFiles('mobile-app/app.json', 'mobile-app/package-lock.json', 'mobile-app/plugins/**', 'mobile-app/patches/**', 'mobile-app/assets/**') }}
 
       - name: Expo prebuild (Android)
         if: steps.prebuild-cache.outputs.cache-hit != 'true'
@@ -98,7 +109,6 @@ jobs:
           path: |
             mobile-app/android/.gradle
             mobile-app/android/app/.cxx
-            mobile-app/node_modules/react-native/ReactAndroid/build
           key: native-${{ runner.os }}-${{ hashFiles('mobile-app/package-lock.json', 'mobile-app/android/build.gradle', 'mobile-app/android/app/build.gradle') }}
           restore-keys: |
             native-${{ runner.os }}-

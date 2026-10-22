@@ -1,0 +1,77 @@
+{
+  "timestamp": "2026-10-09T18:44:16.195Z",
+  "mode": "single-stream",
+  "run": "warm",
+  "corpus": "ten-30-words",
+  "voice": "daaad6c2df01439cae59d4f8e3a08284",
+  "model": "s2-pro",
+  "summary": {
+    "n": 10,
+    "avg": 85,
+    "median": 85,
+    "p95": 100,
+    "max": 100
+  },
+  "results": [
+    {
+      "text": "Guten Morgen zusammen. Ich wollte euch kurz sagen, dass es mir heute sehr gut geht und ich gut geschlafen habe. Nachher kommt Besuch, und ich freue mich schon darauf.",
+      "chars": 166,
+      "cached": true,
+      "ttfaMs": 100
+    },
+    {
+      "text": "Könntest du bitte beim Arzt anrufen und fragen, ob ich nächste Woche einen Termin bekommen kann? Am liebsten am Vormittag, weil ich dann noch fitter bin und mehr Kraft habe.",
+      "chars": 173,
+      "cached": true,
+      "ttfaMs": 76
+    },
+    {
+      "text": "Vielen Dank für das leckere Essen gestern Abend. Es hat wirklich wunderbar geschmeckt, und ich habe mich bei euch sehr wohlgefühlt. Bitte grüßt auch die Kinder ganz herzlich von mir.",
+      "chars": 182,
+      "cached": true,
+      "ttfaMs": 67
+    },
+    {
+      "text": "Ich möchte heute gerne ein bisschen an die frische Luft gehen, wenn das Wetter mitspielt. Kannst du mich bitte begleiten, oder hast du heute Nachmittag schon etwas anderes vor?",
+      "chars": 176,
+      "cached": true,
+      "ttfaMs": 80
+    },
+    {
+      "text": "Der Fernseher im Wohnzimmer funktioniert seit heute Morgen nicht mehr richtig. Das Bild flackert, und der Ton ist ganz leise. Kannst du dir das später bitte einmal anschauen?",
+      "chars": 174,
+      "cached": true,
+      "ttfaMs": 91
+    },
+    {
+      "text": "Bitte erinnere mich daran, dass ich heute Abend meine Tabletten nehme. Ich vergesse es sonst immer wieder, und der Arzt hat gesagt, dass es sehr wichtig für mich ist.",
+      "chars": 166,
+      "cached": true,
+      "ttfaMs": 78
+    },
+    {
+      "text": "Hallo, hier ist Lars. Ich rufe an, weil ich mich nach dem Paket erkundigen möchte, das eigentlich gestern ankommen sollte. Können Sie mir bitte sagen, wo es gerade ist?",
+      "chars": 168,
+      "cached": true,
+      "ttfaMs": 86
+    },
+    {
+      "text": "Ich bin heute leider etwas müde und möchte mich nach dem Mittagessen kurz hinlegen. Weck mich bitte in einer Stunde, damit ich am Abend noch gut einschlafen kann.",
+      "chars": 162,
+      "cached": true,
+      "ttfaMs": 92
+    },
+    {
+      "text": "Am Wochenende kommt meine Schwester zu Besuch, und ich würde gerne etwas Schönes kochen. Hast du eine Idee, was wir einkaufen sollten, damit es allen richtig gut schmeckt?",
+      "chars": 171,
+      "cached": true,
+      "ttfaMs": 90
+    },
+    {
+      "text": "Danke, dass du dir so viel Zeit für mich nimmst. Das bedeutet mir wirklich viel, und ich weiß, dass es nicht selbstverständlich ist. Ich wünsche dir einen schönen Abend.",
+      "chars": 169,
+      "cached": true,
+      "ttfaMs": 85
+    }
+  ]
+}

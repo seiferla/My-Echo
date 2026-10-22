@@ -47,10 +47,10 @@ jobs:
       EXPO_PUBLIC_BACKEND_URL: ${{ vars.EXPO_PUBLIC_BACKEND_URL || 'http://192.168.178.21:4444' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -64,7 +64,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Set up JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
@@ -84,7 +84,8 @@ jobs:
       # ----------------------------------------------------------------------
       # Prebuild-Cache:
       # `expo prebuild` ist deterministisch bezogen auf app.json + lockfile +
-      # die App-Sourcen. Wenn nichts davon sich geändert hat, sparen wir uns
+      # Config-Plugins + Patches + Assets (JS-Sourcen fließen nicht ein). Wenn
+      # nichts davon sich geändert hat, sparen wir uns
       # die Generierung des android/-Ordners komplett.
       #
       # Wichtig: Restore/Save sind getrennt, damit der NACHHER generierte
@@ -95,7 +96,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: mobile-app/android
-          key: prebuild-${{ runner.os }}-${{ hashFiles('mobile-app/app.json', 'mobile-app/package-lock.json', 'mobile-app/app/**', 'mobile-app/assets/**') }}
+          key: prebuild-${{ runner.os }}-${{ hashFiles('mobile-app/app.json', 'mobile-app/package-lock.json', 'mobile-app/plugins/**', 'mobile-app/patches/**', 'mobile-app/assets/**') }}
 
       - name: Expo prebuild (Android)
         if: steps.prebuild-cache.outputs.cache-hit != 'true'
@@ -120,7 +121,6 @@ jobs:
           path: |
             mobile-app/android/.gradle
             mobile-app/android/app/.cxx
-            mobile-app/node_modules/react-native/ReactAndroid/build
           key: native-${{ runner.os }}-${{ hashFiles('mobile-app/package-lock.json', 'mobile-app/android/build.gradle', 'mobile-app/android/app/build.gradle') }}
           restore-keys: |
             native-${{ runner.os }}-
@@ -154,13 +154,18 @@ jobs:
       - name: Gradle-Build
         working-directory: mobile-app/android
         env:
-          # Monoton steigender versionCode pro Lauf; Versionsname aus Tag/app.json.
-          ANDROID_VERSION_CODE: ${{ github.run_number }}
+          # Versionsname aus Tag/app.json. Der versionCode kommt aus dem gemeinsamen
+          # Script (siehe unten), nicht aus github.run_number.
           ANDROID_VERSION_NAME: ${{ steps.version.outputs.name }}
           # Mehr Heap fürs Gradle-Daemon-JVM. ubuntu-latest hat 7 GB RAM;
           # 4 GB für Gradle verhindert GC-Thrashing bei großen RN-Builds.
           GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
+          # Gemeinsame Formel mit android-merge-build.yml (zeitbasiert, workflow-
+          # übergreifend monoton) — getrennte run_number-Zähler liefen auseinander.
+          export ANDROID_VERSION_CODE=$("$GITHUB_WORKSPACE/.github/scripts/android-version-code.sh")
+          echo "versionCode=$ANDROID_VERSION_CODE"
+
           # --no-daemon weggelassen: gradle/actions/setup-gradle managed den Daemon
           # und spart so pro Aufruf ~10s JVM-Startup.
           # --parallel: parallele Modul-Builds (RN/Expo verträgt das in aktuellen Versionen).
@@ -195,7 +200,7 @@ jobs:
 
       - name: GitHub-Release erstellen (nur bei Tag)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ steps.artifact.outputs.path }}
           generate_release_notes: true

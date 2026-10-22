@@ -3,6 +3,7 @@ import {
     View,
     Text,
     ScrollView,
+    ScrollViewInstance,
     TouchableOpacity,
     TextInput,
     StyleSheet,
@@ -13,12 +14,15 @@ import {
     NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, X, Save, Check, ChevronDown } from 'lucide-react-native';
+import { Send, X, Save, Check, ChevronDown, Zap, Leaf } from 'lucide-react-native';
 import { Message } from './Message';
 import { PhraseBar } from './PhraseBar';
 import { usePhrases } from '../context/PhrasesContext';
 import { Phrase } from '../utils/phrases';
 import { warmBackend } from '../utils/tts';
+import { useCloudStatus } from '../context/CloudStatusContext';
+import { onTypingChanged, resetTypingPrefetch } from '../utils/typingPrefetch';
+import { useFastMode } from '../utils/speedMode';
 import { ChatMessage, newMessageId } from '../utils/types';
 
 // Muss unter dem Backend-Timeout WARM_TTL_SECONDS (25 s) bleiben, sonst
@@ -36,14 +40,16 @@ interface ChatAreaProps {
 
 export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     const { visiblePhrases, settings, recordUse } = usePhrases();
+    const { isAvailable, voice, model } = useCloudStatus();
+    const [fastMode, setFastMode] = useFastMode();
     const [input, setInput] = useState('');
     const [lastSentIndex, setLastSentIndex] = useState<number | null>(null);
     const [isComposing, setIsComposing] = useState(false);
     // Wenn editingIndex !== null, zeigt der Modal den Edit-Modus (Check + X statt Save + Send).
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editInput, setEditInput] = useState('');
-    const scrollViewRef = useRef<ScrollView>(null);
-    const composeScrollRef = useRef<ScrollView>(null);
+    const scrollViewRef = useRef<ScrollViewInstance>(null);
+    const composeScrollRef = useRef<ScrollViewInstance>(null);
     const insets = useSafeAreaInsets();
     // true wenn der User nahe genug am unteren Ende der Liste ist.
     // Startet true → Pfeil bleibt initial verborgen, Auto-Scroll aktiv.
@@ -95,6 +101,17 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
 
         return () => clearInterval(interval);
     }, [isComposing]);
+
+    // Satz-Vorab-Synthese (Schnell-Modus): Während getippt wird, fertige Sätze (und
+    // nach 1 s Tipppause den Rest) schon im Hintergrund synthetisieren. Im
+    // Eco-Modus und beim Bearbeiten (wird nur gespeichert, nicht gesprochen) aus.
+    useEffect(() => {
+        if (!isComposing || isEditMode || !isAvailable || !fastMode) {
+            resetTypingPrefetch();
+            return;
+        }
+        onTypingChanged(input, voice, model);
+    }, [input, isComposing, isEditMode, isAvailable, fastMode, voice, model]);
 
     // Beim Chat-Wechsel autoPlay zurücksetzen — sonst würde nach dem Wechsel
     // die Nachricht an gleicher Position vorgelesen, obwohl sie nicht neu gesendet wurde.
@@ -189,6 +206,21 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                         <TouchableOpacity onPress={handleCloseModal} style={styles.modalButton}>
                             <X size={32} color="#4b5563" />
                         </TouchableOpacity>
+                        {!isEditMode && (
+                            // Nur Icon, feste Größe wie die anderen Header-Buttons: ein
+                            // breiter Text/Switch schob auf schmalen Handys den Sende-Button
+                            // aus dem Bild. Blitz = Schnell, Blatt = Eco.
+                            <TouchableOpacity
+                                onPress={() => setFastMode(!fastMode)}
+                                style={[styles.modalButton, { backgroundColor: fastMode ? '#e0f2fe' : '#dcfce7' }]}
+                                activeOpacity={0.7}
+                                accessibilityRole="switch"
+                                accessibilityState={{ checked: fastMode }}
+                                accessibilityLabel={fastMode ? 'Schnell-Modus an' : 'Eco-Modus an'}
+                            >
+                                {fastMode ? <Zap size={32} color="#0ea5e9" /> : <Leaf size={32} color="#16a34a" />}
+                            </TouchableOpacity>
+                        )}
                         <View style={{ flexDirection: 'row', gap: 10 }}>
                             {isEditMode ? (
                                 // Edit-Modus: nur Check (Speichern)

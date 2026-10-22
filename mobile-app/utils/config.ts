@@ -15,3 +15,7 @@ export const BACKEND_TTS_STATS_URL = `${BACKEND_BASE}/stats/tts`;
 // gedacht und dürfen in die App. Der secret/service_role Key gehört NIE hierher.
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 export const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_KEY || '';
+
+// Satzweise Sprachausgabe (erster Satz sofort, Rest im Hintergrund). Standardmäßig
+// an; zum A/B-Vergleich mit EXPO_PUBLIC_SENTENCE_STREAMING=0 abschaltbar.
+export const SENTENCE_STREAMING = process.env.EXPO_PUBLIC_SENTENCE_STREAMING !== '0';

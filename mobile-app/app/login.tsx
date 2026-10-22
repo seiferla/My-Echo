@@ -22,7 +22,7 @@ import { useAuth } from '../context/AuthContext';
 // damit TalkBack alles vorliest.
 export default function LoginScreen() {
     const { signIn } = useAuth();
-    const passwordRef = useRef<TextInput>(null);
+    const passwordRef = useRef<React.ComponentRef<typeof TextInput>>(null);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
