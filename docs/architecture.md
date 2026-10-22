@@ -23,7 +23,7 @@ flowchart TB
         speech["Offline speech<br/><i>expo-speech</i>"]:::done
     end
 
-    subgraph supa["Supabase · managed, Frankfurt"]
+    subgraph supa["Supabase · managed, Ireland (eu-west-1)"]
         sauth["Auth<br/><i>Supabase Auth</i>"]:::done
         pg[("Postgres<br/><i>RLS, SQL migrations</i>")]:::done
     end
@@ -84,10 +84,10 @@ refreshes the token itself.
 | Component | Role | Technology / product | Where it runs | Status | Decision |
 |---|---|---|---|---|---|
 | Mobile app | UI, offline use | React Native 0.86, Expo SDK 57, expo-router | Android | done | |
-| Login | Sign-in, session | Supabase Auth (managed), `supabase-js` | Supabase, Frankfurt | done | [ADR 0002](adr/0002-supabase-auth-and-database.md) |
+| Login | Sign-in, session | Supabase Auth (managed), `supabase-js` | Supabase, Ireland | done | [ADR 0002](adr/0002-supabase-auth-and-database.md) |
 | Token check | Verify the JWT, get `user_id` | PyJWT, ES256 / RS256 via JWKS | in the backend | done | ADR 0002 |
 | Backend API | Chats, phrases, statistics, TTS proxy | FastAPI, Uvicorn, asyncpg | local / Docker | done | ADR 0002 |
-| Database | Data per user | Supabase Postgres, RLS on every table | Supabase, Frankfurt | done | ADR 0002 |
+| Database | Data per user | Supabase Postgres, RLS on every table | Supabase, Ireland | done | ADR 0002 |
 | Schema | Versioned database changes | Supabase CLI, SQL files in `supabase/migrations/` | repo | done | |
 | Speech | Text to speech | Fish Audio API, model `s2-pro` | Fish Audio cloud | done | |
 | CI | Tests, Android builds | GitHub Actions, Postgres 17 for backend tests | GitHub | done | |

@@ -314,6 +314,68 @@ class TestTtsStats(_ChatTestCase):
         self.assertEqual(self.client.get("/stats/tts").json()[self.DAY]["requests"], 7)
 
 
+def _fetch(sql: str):
+    async def run():
+        conn = await asyncpg.connect(TEST_DB)
+        try:
+            return await conn.fetch(sql)
+        finally:
+            await conn.close()
+    return asyncio.run(run())
+
+
+# Über Objekt-IDs statt Namen: Postgres darf Bedingungen in beliebiger Reihenfolge
+# prüfen, ein Name aus einem anderen Schema darf also nie zu "public.<name>" werden.
+PUBLIC_TABLES = (
+    "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+    " WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')"
+)
+
+
+class TestSchemaSecurity(_ChatTestCase):
+    """Sicherheitsnetz für G2: gilt automatisch auch für Tabellen, die später dazukommen."""
+
+    def test_there_are_tables_to_check(self):
+        # Schutz davor, dass die beiden Tests unten still eine leere Liste prüfen.
+        rows = _fetch(PUBLIC_TABLES)
+        self.assertGreaterEqual(len(rows), 4)
+
+    def test_every_public_table_has_rls_on(self):
+        rows = _fetch(PUBLIC_TABLES + " AND NOT c.relrowsecurity")
+        self.assertEqual([r["relname"] for r in rows], [])
+
+    def test_api_roles_have_no_table_privileges(self):
+        # anon und authenticated sind die Rollen der öffentlichen Supabase-API.
+        rows = _fetch(
+            """SELECT c.relname, r.role, p.priv
+               FROM pg_class c
+               JOIN pg_namespace n ON n.oid = c.relnamespace
+               CROSS JOIN (VALUES ('anon'), ('authenticated')) AS r(role)
+               CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE')) AS p(priv)
+               WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
+                 AND has_table_privilege(r.role, c.oid, p.priv)"""
+        )
+        self.assertEqual([tuple(r) for r in rows], [])
+
+
+class TestNoMessageTextInLogs(_ChatTestCase):
+    """G8: Texte aus Chats und Phrasen dürfen in keinem Log stehen."""
+
+    def test_chats_and_phrases_never_log_their_text(self):
+        from test_logging import LogCapture, MARKER
+
+        chat = self._chat()
+        chat["title"] = f"Titel {MARKER}"
+        chat["messages"][0]["content"] = f"Nachricht {MARKER}"
+        with LogCapture() as logs:
+            self.client.put("/chats/c1", json=chat)
+            self.client.get("/chats")
+            self.client.put("/phrases", json=_phrase_store(text=f"Phrase {MARKER}"))
+            self.client.get("/phrases")
+            self.client.delete("/chats/c1")
+        self.assertFalse([line for line in logs.lines if MARKER in line])
+
+
 class TestAccountDeletion(_ChatTestCase):
     def test_deleting_auth_user_removes_all_their_data(self):
         self.client.put("/chats/c1", json=self._chat())

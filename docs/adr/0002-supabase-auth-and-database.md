@@ -19,7 +19,7 @@ Not criteria: user limits (25,000 and 50,000 are far above 20 users) and "free".
 
 ## Decision
 
-1. **Auth:** Supabase Auth, managed, region Frankfurt. The FastAPI backend validates the access token with the project's public keys (JWKS), checks `exp`, `iss`, `aud`, pins the algorithms, and takes `user_id` from `sub`. The backend never handles refresh tokens.
+1. **Auth:** Supabase Auth, managed, region Ireland (`eu-west-1`, inside the EU). The FastAPI backend validates the access token with the project's public keys (JWKS), checks `exp`, `iss`, `aud`, pins the algorithms, and takes `user_id` from `sub`. The backend never handles refresh tokens.
 2. **Data:** Supabase managed Postgres. **All chat CRUD goes through the FastAPI backend** (option X). The app does not use the Supabase data API.
 3. **RLS:** enabled on every table, no public policies (deny by default). The backend filters by `user_id` in every query. A test fails if a table has RLS off.
 4. **Accounts:** public sign-ups off. The admin creates users with a password and a confirmed email. Passwords are reset by the admin. No SMTP is needed.

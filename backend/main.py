@@ -25,6 +25,24 @@ from db import (
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("myecho.tts")
 
+
+class StripQueryFromAccessLog(logging.Filter):
+    """Entfernt den Query-String aus dem Uvicorn-Zugriffslog (G8).
+
+    /stream/tts?text=... würde sonst den Nachrichtentext ins Log schreiben,
+    solange der Text noch in der URL steht. Uvicorn übergibt den Pfad mit
+    Query-String als drittes Argument der Logzeile.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str):
+            record.args = (*args[:2], args[2].split("?", 1)[0], *args[3:])
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(StripQueryFromAccessLog())
+
 # --- Pydantic-Modelle (vor app = FastAPI(...) einfügen) ---------------------
 
 class MessageModel(BaseModel):
