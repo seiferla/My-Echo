@@ -10,7 +10,9 @@
 
 **Assistive Kommunikations-App für Menschen mit Stimmstörungen.**
 
-Tippe, was du sagen möchtest — myEcho spricht es mit einer natürlichen KI-Stimme aus.
+Tippe, was du sagen möchtest — myEcho spricht es mit deiner eigenen Stimme aus.
+
+[**Website**](https://seiferla.github.io/My-Echo/app/) · [**Evaluation Voice Cloning**](https://github.com/seiferla/als-voice-cloning-evaluation)
 
 <br/>
 
@@ -18,7 +20,7 @@ Tippe, was du sagen möchtest — myEcho spricht es mit einer natürlichen KI-St
 ![React Native](https://img.shields.io/badge/React%20Native-0.88-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7.0-3178C6?logo=typescript&logoColor=white)
 ![Node](https://img.shields.io/badge/Node-24_LTS-339933?logo=node.js&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.143-009688?logo=fastapi&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.146-009688?logo=fastapi&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)
 ![Pydantic](https://img.shields.io/badge/Pydantic-2.14-E92063?logo=pydantic&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)
@@ -38,11 +40,11 @@ Tippe, was du sagen möchtest — myEcho spricht es mit einer natürlichen KI-St
 - [Über das Projekt](#über-das-projekt)
 - [Demo](#demo)
 - [So funktioniert es](#so-funktioniert-es)
+- [Performance](#performance)
 - [Projektstruktur](#projektstruktur)
 - [Mobile App](#mobile-app)
 - [Backend](#backend)
 - [Monitoring](#monitoring)
-- [CI/CD](#cicd)
 - [Status](#status)
 
 ---
@@ -51,7 +53,11 @@ Tippe, was du sagen möchtest — myEcho spricht es mit einer natürlichen KI-St
 
 **myEcho wurde für Menschen entwickelt, die ihre eigene Stimme nicht mehr nutzen können.**
 
-Sprechen kann anstrengend, schmerzhaft oder unmöglich sein — und bestehende Lösungen sind oft zu kompliziert. myEcho ist das Gegenteil: eine ruhige, einfache Oberfläche, in der du tippst, was du sagen möchtest, und die App es mit einer natürlichen Stimme ausspricht. Keine Hürden. Keine Komplexität.
+Das Projekt begann, als meine Mutter an ALS in der bulbären Form erkrankte. Dabei werden zuerst die Muskeln zum Sprechen schwächer, deshalb kann sie heute kaum noch deutlich sprechen. Die meisten Voice-Cloning-Lösungen brauchen mehrere Minuten Studioaufnahmen — dafür war ihre Stimme schon zu instabil. Weil das TTS-Modell zero-shot arbeitet, haben **30 Sekunden aus alten WhatsApp-Sprachnachrichten**, aufgenommen lange vor ihrer Erkrankung, gereicht, um ihre Stimme nachzubilden.
+
+Sie nutzt myEcho seit mehreren Monaten im Alltag: Sie tippt, was sie sagen möchte, und die App spricht es mit ihrer alten Stimme aus. Die Oberfläche ist bewusst ruhig und einfach — keine Hürden, keine Komplexität.
+
+Die Modelle dahinter wurden in einer eigenen Projektarbeit an der Hochschule verglichen: [als-voice-cloning-evaluation](https://github.com/seiferla/als-voice-cloning-evaluation).
 
 ---
 
@@ -77,17 +83,37 @@ Sprechen kann anstrengend, schmerzhaft oder unmöglich sein — und bestehende L
 
 1. Der Nutzer öffnet das Eingabefeld → das Backend wärmt die Fish-Audio-Verbindung vor
 2. Im Modus **Schnell** (Standard) werden fertige Sätze schon während des Tippens synthetisiert; im Modus **Eco** erst beim Senden
-3. Der Nutzer tippt und drückt auf Senden → der erste Satz startet sofort; die restlichen Sätze werden während der Wiedergabe vorbereitet
+3. Der Nutzer drückt auf Senden → der erste Satz startet sofort; die restlichen Sätze werden während der Wiedergabe vorbereitet
 4. Die App prüft den Audio-Cache auf dem Gerät → bei einem Treffer wird sofort aus der lokalen Datei abgespielt
 5. Cache-Miss: Die App fordert das Audio per HTTP-Streaming vom selbst gehosteten Backend an
 6. Das Backend leitet den Text an Fish Audio weiter und streamt MP3-Chunks in Echtzeit zurück
 7. Die MP3 wird im Geräte-Cache gespeichert, sodass dieselbe Phrase beim nächsten Mal sofort abgespielt wird
 8. Ist das Backend nicht erreichbar, wechselt die App automatisch auf lokale Sprachsynthese
 
-Chats werden unabhängig vom Audio synchronisiert:
+Chats werden unabhängig vom Audio synchronisiert: Beim Start **führt** die App Backend- und lokale Chats **zusammen**, der Verlauf wird also nie überschrieben und übersteht eine Neuinstallation. Offline-Änderungen werden beim nächsten erreichbaren Start synchronisiert.
 
-- Beim Start lädt die App die Chats vom Backend und **führt sie zusammen** mit der lokalen Kopie — nichts wird überschrieben, der bestehende Verlauf geht nie verloren und übersteht eine Neuinstallation
-- Wenn sich ein Chat ändert, wird er lokal gespeichert und an das Backend gesendet; ist das Backend offline, wird die lokale Kopie genutzt und beim nächsten erreichbaren Start synchronisiert
+---
+
+## Performance
+
+Im Gespräch zählt vor allem die **Time to First Audio (TTFA)**: die Zeit vom Drücken auf *Senden* bis zum ersten Ton. Jede Sekunde Stille unterbricht das Gegenüber.
+
+Menschen, die eine AAC-App nutzen, tippen langsam — in dieser Zeit ist das Netzwerk ungenutzt. myEcho nutzt diese Zeit und **synthetisiert fertige Sätze schon während des Tippens**. Lange Nachrichten werden dann **Satz für Satz** abgespielt.
+
+**TTFA für 10 Nachrichten mit ~30 Wörtern** (Android-Emulator, Debug-Build, Cloud-TTS):
+
+| Modus | Ø TTFA |
+|---|---|
+| Vorher: ganzer Text nach dem Senden synthetisiert | **3506 ms** |
+| Satzweise, Synthese nach dem Senden (*Eco*) | 2274 ms |
+| Vorab-Synthese beim Tippen (*Schnell*) | **~100 ms** |
+| Bestfall: ganzer Text schon im Cache | 85 ms |
+
+- Lange Nachrichten starten etwa **30× schneller** (~3,5 s → ~0,1 s), fast so schnell wie ein Cache-Treffer.
+- Auch im *Eco*-Modus starten lange Nachrichten ~35 % schneller, ohne zusätzliche Anfragen.
+- Der nächste Satz wird schon während der Wiedergabe geladen, die Pause zwischen Sätzen liegt nur bei 19–43 ms (nicht hörbar).
+
+Details, Umgang mit Korrekturen und Rohdaten: [ADR 0001 — Sentence pre-synthesis while typing](docs/adr/0001-sentence-presynthesis.md).
 
 ---
 
@@ -95,36 +121,19 @@ Chats werden unabhängig vom Audio synchronisiert:
 
 ```
 My-Echo/
-├── backend/
-│   ├── main.py                 FastAPI — TTS-Streaming + Warmup + Health + Chats
-│   ├── db.py                   SQLite-Persistenz für Chats & Nachrichten
-│   ├── test_main.py            pytest-Suite (TTS + Health)
-│   ├── test_chats.py           pytest-Suite (Chat-Endpunkte)
-│   ├── requirements.txt
-│   ├── docker-compose.yml      Backend-Stack + persistentes Chat-DB-Volume
-│   └── Dockerfile
+├── backend/                    FastAPI — TTS-Streaming, Warmup, Health, Chats (SQLite) + pytest
 ├── mobile-app/
-│   ├── app/                    expo-router Screens
+│   ├── app/                    expo-router Screens (Chat, Phrasen, Statistik)
 │   ├── components/             ChatArea, Sidebar, Message, PhraseBar
 │   ├── context/                CloudStatusContext (Health-Check + grüner Punkt), PhrasesContext
-│   └── utils/                  tts, synthQueue, typingPrefetch(Core), speedMode, ttsCache,
-│                               chatStorage, chatSync, phrases, split, stats, storage, config, types, ttsLog
-├── monitoring/
-│   ├── docker-compose.yml      Prometheus + Grafana Stack
-│   ├── prometheus/             Scrape-Konfiguration
-│   └── grafana/                Dashboard + Datasource-Provisioning
+│   └── utils/                  tts, synthQueue, typingPrefetch, split, ttsCache, chatSync, …
+├── monitoring/                 Prometheus + Grafana Stack
+├── landing/                    Projekt-Website (GitHub Pages, /app/)
 ├── docs/
-│   ├── PRIVACY.md / PRIVACY_EN.md   Datenschutzerklärung (über GitHub Pages veröffentlicht)
-│   ├── adr/                    Architecture Decision Records
-│   └── release-notes/          Release Notes je Version
-└── .github/workflows/
-    ├── android-pr-build.yml    Android-Build für PRs mit Änderungen in mobile-app/
-    ├── android-merge-build.yml Android-Build + Draft-Release beim Merge auf main
-    ├── android-release.yml     Signierter APK/AAB-Build + GitHub Release (bei Tag)
-    ├── mobile-ci.yml           npm ci + Typecheck bei jedem mobile-app Push/PR
-    ├── backend-deploy.yml      Docker-Image bauen + nach GHCR pushen
-    ├── backend-tests.yml       pytest + Coverage-Badge
-    └── pages.yml               Veröffentlicht die Datenschutzerklärung auf GitHub Pages
+│   ├── adr/                    Architecture Decision Records (inkl. Benchmark-Daten)
+│   └── PRIVACY.md / PRIVACY_EN.md   Datenschutzerklärung
+├── scripts/                    Baut die Datenschutz-Seite
+└── .github/workflows/          CI/CD (siehe unten)
 ```
 
 ---
@@ -133,25 +142,15 @@ My-Echo/
 
 ### Funktionen
 
-- **Cloud-TTS** — Nachrichten werden über Fish Audio in einer natürlichen KI-Stimme gesprochen
-- **HTTP-Streaming** — die Wiedergabe startet sofort, ohne auf das komplette Audio zu warten
-- **Audio-Cache auf dem Gerät** — wiederholte Phrasen werden sofort aus einem lokalen LRU-Cache abgespielt (100 MB Limit, räumt auf 80 MB auf); Trefferquote und Größe sind im Statistik-Screen sichtbar
-- **Pre-Warming** — das Backend bereitet die Fish-Audio-Verbindung vor, während der Nutzer tippt
-- **Wiedergabe im Hintergrund** — die Sprache läuft weiter, wenn der Bildschirm gesperrt wird oder die App im Hintergrund ist, sodass lange Nachrichten ohne Unterbrechung zu Ende gesprochen werden
-- **Automatischer Fallback** — wechselt auf lokale Sprachsynthese, wenn das Backend nicht verfügbar ist
-- **Status-Anzeige** — ein grüner Punkt im Header zeigt, ob die Cloud-Verbindung aktiv ist
-- **Chatverlauf in der Seitenleiste** — Chats erstellen, anheften, umbenennen und löschen
-- **Täglicher Auto-Chat** — jeden Tag wird automatisch ein neuer Chat angelegt
-- **Zwei Sende-Aktionen** — *Senden* speichert und spielt die Nachricht automatisch ab; *Speichern* legt sie still ab
-- **Schnell / Eco-Schalter** — *Schnell* (Standard) bereitet die Sprache schon beim Tippen vor, sodass die Wiedergabe beim Senden sofort startet; *Eco* bereitet sie erst beim Senden vor und nutzt weniger Anfragen beim Sprachdienst. Die Auswahl wird gespeichert
-- **Satzweise Wiedergabe** — lange Nachrichten starten mit dem ersten Satz; der nächste wird geladen, während der aktuelle läuft, ohne hörbare Pause
-- **Schnellphrasen** — eine Phrasenleiste über dem Eingabefeld zum Sprechen per Tipp; Phrasen lassen sich auf einem eigenen Screen bearbeiten
-- **Wiedergabe pro Nachricht** — jede Sprechblase hat einen Play/Pause-Button
-- **Nachrichtentext kopieren** — lange auf eine Nachricht tippen, um den Text in die Zwischenablage zu kopieren
-- **Bearbeiten im Vollbild** — auf den Stift an einer Nachricht tippen, um sie in einem fokussierten, ablenkungsfreien Modal zu bearbeiten
-- **Nutzungsstatistik** — erfasst gesprochene Zeichen und TTS-Antwortzeiten
-- **Chat-Sync mit dem Backend** — Chats und Nachrichten werden in der Backend-Datenbank gespeichert und beim Start mit der lokalen Kopie zusammengeführt, sodass der Verlauf eine Neuinstallation übersteht
-- **Offline-Cache** — Chats werden als lokale JSON-Datei auf dem Gerät zwischengespeichert und genutzt, wenn das Backend nicht erreichbar ist
+- **Die eigene Stimme** — Nachrichten werden mit einer geklonten Stimme über Fish-Audio-Cloud-TTS gesprochen
+- **Schneller Start** — der Modus *Schnell* bereitet die Sprache schon beim Tippen vor; *Eco* erst beim Senden und mit weniger Anfragen
+- **Satzweises Streaming** — die Wiedergabe startet mit dem ersten Satz, ohne hörbare Pause zum nächsten
+- **Audio-Cache auf dem Gerät** — wiederholte Phrasen werden sofort abgespielt (LRU-Cache, 100 MB Limit)
+- **Automatischer Fallback** — wechselt auf lokale Sprachsynthese, wenn das Backend nicht erreichbar ist; ein grüner Punkt zeigt den Cloud-Status
+- **Schnellphrasen** — eine Phrasenleiste über dem Eingabefeld zum Sprechen per Tipp
+- **Chatverlauf** — täglicher Auto-Chat, anheften, umbenennen, löschen, Nachrichten kopieren und bearbeiten; mit dem Backend synchronisiert und offline zwischengespeichert
+- **Wiedergabe im Hintergrund** — die Sprache läuft weiter, wenn der Bildschirm gesperrt wird
+- **Nutzungsstatistik** — gesprochene Zeichen, TTS-Antwortzeiten, Cache-Trefferquote
 
 ### Lokal starten
 
@@ -163,8 +162,6 @@ cp .env.example .env   # EXPO_PUBLIC_BACKEND_URL auf die eigene Backend-IP setze
 npm install
 npm start
 ```
-
-Zum Vergleich mit der alten Einzel-Stream-Wiedergabe kann `EXPO_PUBLIC_SENTENCE_STREAMING=0` in der `.env` gesetzt werden.
 
 ---
 
@@ -195,55 +192,38 @@ Ein schlanker FastAPI-Dienst, der Streaming-TTS-Anfragen an Fish Audio weiterlei
 | `TTS_CHUNK_LENGTH` | `50`             | Tokens bis zum ersten Audio-Chunk (niedriger = schnelleres TTFA) |
 | `DB_PATH`          | `/data/chats.db` | Speicherort der SQLite-Chat-Datenbank                         |
 
-### Deployment (Raspberry Pi über Portainer)
+<details>
+<summary><b>Deployment (Raspberry Pi über Portainer)</b></summary>
 
 1. Portainer → **Stacks → Add stack → Web editor**
 2. Inhalt von `backend/docker-compose.yml` einfügen
 3. Die oben genannten Umgebungsvariablen hinzufügen
 4. Deployen — der Container öffnet Port `4444` und speichert Chats im Volume `myecho-data` (eingehängt unter `/data`)
 
-Updates: Push auf `main` → GitHub Actions baut ein neues Image → in Portainer **Pull and redeploy**. Das Volume `myecho-data` bleibt bei Updates erhalten, der Chatverlauf geht also nicht verloren.
+Updates: Push auf `main` → GitHub Actions baut ein neues Image → in Portainer **Pull and redeploy**. Das Volume `myecho-data` bleibt bei Updates erhalten.
+
+</details>
+
+### CI/CD
+
+GitHub Actions führt die Backend-Tests aus (mit Coverage-Badge), prüft und baut die Android-App, erstellt signierte Releases bei Tags, pusht das Backend-Docker-Image nach GHCR und veröffentlicht die Website auf GitHub Pages.
 
 ---
 
 ## Monitoring
 
-Prometheus + Grafana Dashboard, selbst gehostet auf dem Pi. Die Grafana-URL wird über `BACKEND_HOST` in `monitoring/.env` konfiguriert.
+Prometheus + Grafana Dashboard, selbst gehostet auf dem Pi. Zeigt Request-Rate, Latenz (p50/p95/p99), Fehlerrate und Warmup-Trefferquote. Dashboard und Datasource werden automatisch eingerichtet.
 
 ```bash
 cp monitoring/.env.example monitoring/.env   # BACKEND_HOST auf die Pi-IP setzen
 docker compose -f monitoring/docker-compose.yml up -d
 ```
 
-Zeigt Request-Rate, Latenz (p50/p95/p99), Fehlerrate und Warmup-Trefferquote.
-Der komplette Stack liegt in [`monitoring/`](monitoring/) — `monitoring/docker-compose.yml` wird genauso deployt wie das Backend; Grafana-Dashboard und Prometheus-Datasource werden automatisch eingerichtet.
-
----
-
-## CI/CD
-
-| Workflow | Auslöser | Ergebnis |
-|---|---|---|
-| `android-pr-build.yml` | PR mit Änderungen in `mobile-app/` | Android-Build zum Prüfen |
-| `android-merge-build.yml` | Push auf `main` | Android-Build + Draft-GitHub-Release |
-| `android-release.yml` | Push eines Tags `v*.*.*` (oder manueller Lauf) | Signierter APK/AAB am GitHub Release |
-| `mobile-ci.yml` | Push & PR mit Änderungen in `mobile-app/` | `npm ci` + TypeScript-Typecheck |
-| `backend-deploy.yml` | Push auf `backend/` in `main` | Docker-Image wird nach GHCR gepusht |
-| `backend-tests.yml` | Jeder Push & PR | pytest-Lauf + Aktualisierung des Coverage-Badges |
-| `pages.yml` | Push auf die Datenschutz-Dokumente in `main` | Datenschutzerklärung auf GitHub Pages |
-
-```bash
-# Mobile-Release
-git tag v2.0.1 && git push origin v2.0.1
-
-# Das Backend wird bei jedem Push auf backend/ automatisch deployt
-```
-
 ---
 
 ## Status
 
-Die App befindet sich in aktiver Entwicklung und ist für den persönlichen Gebrauch gebaut.
+myEcho wird von einer Person täglich genutzt und aktiv weiterentwickelt. Nächster Schritt: die App auch für andere Betroffene nutzbar machen, die noch tippen, aber nicht mehr sprechen können — zum Beispiel nach einem Schlaganfall.
 
 ---
 Dieses Projekt wird mit Hilfe von Claude und anderen KI-Tools entwickelt.
