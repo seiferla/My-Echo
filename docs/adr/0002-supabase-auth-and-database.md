@@ -1,4 +1,4 @@
-# ADR 0001: Supabase for authentication and database
+# ADR 0002: Supabase for authentication and database
 
 Status: proposed (2026-10-18). Related: goals G1, G2, G4, G5, G8; issue #208.
 

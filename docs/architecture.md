@@ -84,16 +84,16 @@ refreshes the token itself.
 | Component | Role | Technology / product | Where it runs | Status | Decision |
 |---|---|---|---|---|---|
 | Mobile app | UI, offline use | React Native 0.86, Expo SDK 57, expo-router | Android | done | |
-| Login | Sign-in, session | Supabase Auth (managed), `supabase-js` | Supabase, Frankfurt | done | [ADR 0001](adr/0001-supabase-auth-and-database.md) |
-| Token check | Verify the JWT, get `user_id` | PyJWT, ES256 / RS256 via JWKS | in the backend | done | ADR 0001 |
-| Backend API | Chats, phrases, statistics, TTS proxy | FastAPI, Uvicorn, asyncpg | local / Docker | done | ADR 0001 |
-| Database | Data per user | Supabase Postgres, RLS on every table | Supabase, Frankfurt | done | ADR 0001 |
+| Login | Sign-in, session | Supabase Auth (managed), `supabase-js` | Supabase, Frankfurt | done | [ADR 0002](adr/0002-supabase-auth-and-database.md) |
+| Token check | Verify the JWT, get `user_id` | PyJWT, ES256 / RS256 via JWKS | in the backend | done | ADR 0002 |
+| Backend API | Chats, phrases, statistics, TTS proxy | FastAPI, Uvicorn, asyncpg | local / Docker | done | ADR 0002 |
+| Database | Data per user | Supabase Postgres, RLS on every table | Supabase, Frankfurt | done | ADR 0002 |
 | Schema | Versioned database changes | Supabase CLI, SQL files in `supabase/migrations/` | repo | done | |
 | Speech | Text to speech | Fish Audio API, model `s2-pro` | Fish Audio cloud | done | |
 | CI | Tests, Android builds | GitHub Actions, Postgres 17 for backend tests | GitHub | done | |
 | Monitoring | Metrics | Prometheus, Grafana (`monitoring/`) | separate stack | done, `/metrics` is still public | |
-| Hosting | VM, HTTPS, infrastructure as code | Hetzner VM, Docker Compose, Caddy, Terraform | Hetzner | planned (G4) | ADR 0001 |
-| Passkeys | Sign-in without typing | `react-native-passkeys`, Supabase passkeys | app, Supabase | planned, 2-day spike (G1) | ADR 0001 |
+| Hosting | VM, HTTPS, infrastructure as code | Hetzner VM, Docker Compose, Caddy, Terraform | Hetzner | planned (G4) | ADR 0002 |
+| Passkeys | Sign-in without typing | `react-native-passkeys`, Supabase passkeys | app, Supabase | planned, 2-day spike (G1) | ADR 0002 |
 | Own voice | Voice clone per user | Fish Audio voice clone | Fish Audio cloud | planned (G3) | |
 | Usage metering | Cost per user | table with one row per TTS request | Postgres | planned (G7) | |
 | Load test | Scaling evidence | Locust, mock TTS | separate VM | planned (G5, G6) | |
