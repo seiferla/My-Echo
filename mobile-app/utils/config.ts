@@ -8,6 +8,13 @@ export const BACKEND_STREAM_URL  = `${BACKEND_BASE}/stream/tts`;
 export const BACKEND_HEALTH_URL  = `${BACKEND_BASE}/health`;
 export const BACKEND_WARMUP_URL  = `${BACKEND_BASE}/warmup`;
 export const BACKEND_CHATS_URL   = `${BACKEND_BASE}/chats`;
+export const BACKEND_PHRASES_URL = `${BACKEND_BASE}/phrases`;
+export const BACKEND_TTS_STATS_URL = `${BACKEND_BASE}/stats/tts`;
+
+// Supabase (Login). Projekt-URL und publishable/anon Key sind öffentlich
+// gedacht und dürfen in die App. Der secret/service_role Key gehört NIE hierher.
+export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+export const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_KEY || '';
 
 // Satzweise Sprachausgabe (erster Satz sofort, Rest im Hintergrund). Standardmäßig
 // an; zum A/B-Vergleich mit EXPO_PUBLIC_SENTENCE_STREAMING=0 abschaltbar.

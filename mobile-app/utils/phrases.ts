@@ -2,27 +2,30 @@ import { File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { storage } from './storage';
 import { getShareableAudioUri } from './tts';
+import { scoped } from './localUser';
+import { BACKEND_PHRASES_URL } from './config';
+import { authHeaders } from './supabase';
 
 const TAG = '[myEcho][Phrases]';
 
 // Wie in chatStorage.ts: im Web kein Dateisystem, also localStorage über den
 // storage-Helper. Die File-Instanz wird erst beim ersten Zugriff erzeugt.
 const isWeb = Platform.OS === 'web';
-const WEB_KEY = 'myEchoPhrases';
+const WEB_KEY_BASE = 'myEchoPhrases';
 
-let _phrasesFile: File | null = null;
+// Pro Konto eine eigene Datei (siehe localUser.ts). Nicht zwischenspeichern:
+// beim Kontowechsel ändert sich der Name.
 function phrasesFileRef(): File {
-    if (!_phrasesFile) _phrasesFile = new File(Paths.document, 'phrases.json');
-    return _phrasesFile;
+    return new File(Paths.document, `${scoped('phrases')}.json`);
 }
 
 async function readRaw(): Promise<string | null> {
-    if (isWeb) return storage.getItem(WEB_KEY);
+    if (isWeb) return storage.getItem(scoped(WEB_KEY_BASE));
     return phrasesFileRef().exists ? phrasesFileRef().textSync() : null;
 }
 
 async function writeRaw(json: string): Promise<void> {
-    if (isWeb) return storage.setItem(WEB_KEY, json);
+    if (isWeb) return storage.setItem(scoped(WEB_KEY_BASE), json);
     phrasesFileRef().write(json);
 }
 
@@ -46,6 +49,9 @@ export interface PhraseSettings {
 export interface PhraseStore {
     phrases: Phrase[];
     settings: PhraseSettings;
+    // Zeitpunkt der letzten Änderung (ms). 0 = unveränderte Startbelegung.
+    // Beim Abgleich mit dem Backend gewinnt der neuere Stand.
+    updatedAt?: number;
 }
 
 // Obergrenze für die ChatArea. Mehr Chips würden die Oberfläche unruhig machen
@@ -117,8 +123,9 @@ export async function loadPhraseStore(): Promise<PhraseStore> {
     }
 
     if (raw === null) {
-        const initial: PhraseStore = { phrases: seed(), settings: { ...DEFAULT_SETTINGS } };
-        await savePhraseStore(initial);
+        // updatedAt 0: die Startbelegung darf nie einen echten Stand aus dem Backend überschreiben.
+        const initial: PhraseStore = { phrases: seed(), settings: { ...DEFAULT_SETTINGS }, updatedAt: 0 };
+        await writeLocalStore(initial);
         console.log(`${TAG} Seeded ${initial.phrases.length} default phrases`);
         return initial;
     }
@@ -132,8 +139,9 @@ export async function loadPhraseStore(): Promise<PhraseStore> {
             const migrated: PhraseStore = {
                 phrases: parsed.filter((p) => p?.text).map(normalizePhrase),
                 settings: { ...DEFAULT_SETTINGS },
+                updatedAt: Date.now(),
             };
-            await savePhraseStore(migrated);
+            await writeLocalStore(migrated);
             console.log(`${TAG} Migrated ${migrated.phrases.length} phrases to store format`);
             return migrated;
         }
@@ -143,18 +151,91 @@ export async function loadPhraseStore(): Promise<PhraseStore> {
                 ? parsed.phrases.filter((p: Phrase) => p?.text).map(normalizePhrase)
                 : [],
             settings: normalizeSettings(parsed?.settings),
+            updatedAt: Number(parsed?.updatedAt) || 0,
         };
     } catch (e) {
         console.error(`${TAG} parse failed:`, e);
-        return { phrases: [], settings: { ...DEFAULT_SETTINGS } };
+        return { phrases: [], settings: { ...DEFAULT_SETTINGS }, updatedAt: 0 };
     }
 }
 
-export async function savePhraseStore(store: PhraseStore): Promise<void> {
+async function writeLocalStore(store: PhraseStore): Promise<void> {
     try {
         await writeRaw(JSON.stringify({ version: 2, ...store }));
     } catch (e) {
         console.error(`${TAG} write failed:`, e);
+    }
+}
+
+const SYNC_TIMEOUT_MS = 5_000;
+
+/** Schickt den Stand ins Backend. Wirft NICHT: der lokale Stand ist der UI-Stand. */
+async function pushPhraseStore(store: PhraseStore): Promise<void> {
+    try {
+        const response = await fetch(BACKEND_PHRASES_URL, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+            body: JSON.stringify(store),
+            signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    } catch (e) {
+        console.warn(`${TAG} Push failed:`, e);
+    }
+}
+
+/**
+ * Speichert eine Änderung des Nutzers: lokal sofort, danach im Hintergrund im
+ * Backend. Der Zeitstempel entscheidet beim Abgleich, welcher Stand neuer ist.
+ */
+export async function savePhraseStore(store: PhraseStore): Promise<void> {
+    const stamped: PhraseStore = { ...store, updatedAt: Date.now() };
+    await writeLocalStore(stamped);
+    pushPhraseStore(stamped);
+}
+
+/**
+ * Gleicht den lokalen Stand mit dem Backend ab (nach dem Laden, im Hintergrund):
+ *  - Backend leer oder älter  → lokalen Stand hochladen
+ *  - Backend neuer            → übernehmen und lokal speichern (wird zurückgegeben)
+ * Gibt nur dann einen Stand zurück, wenn die UI ihn übernehmen soll. Offline
+ * oder bei Fehlern: null, der lokale Stand bleibt unverändert.
+ */
+export async function syncPhraseStore(local: PhraseStore): Promise<PhraseStore | null> {
+    try {
+        const response = await fetch(BACKEND_PHRASES_URL, {
+            headers: await authHeaders(),
+            signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const remote = await response.json(); // null, wenn noch nichts gespeichert ist
+
+        const localAt = local.updatedAt ?? 0;
+        const remoteAt = Number(remote?.updatedAt) || 0;
+
+        if (remote === null || localAt > remoteAt) {
+            await pushPhraseStore({ ...local, updatedAt: localAt });
+            return null;
+        }
+        if (remoteAt <= localAt) return null;
+
+        // Hat der Nutzer während des Abrufs etwas geändert, nicht überschreiben.
+        const current = await loadPhraseStore();
+        if ((current.updatedAt ?? 0) !== localAt) return null;
+
+        const adopted: PhraseStore = {
+            phrases: Array.isArray(remote.phrases)
+                ? remote.phrases.filter((p: Phrase) => p?.text).map(normalizePhrase)
+                : [],
+            settings: normalizeSettings(remote.settings),
+            updatedAt: remoteAt,
+        };
+        await writeLocalStore(adopted);
+        console.log(`${TAG} Adopted newer phrases from backend (${adopted.phrases.length})`);
+        return adopted;
+    } catch (e) {
+        console.warn(`${TAG} Sync failed, keeping local phrases:`, e);
+        return null;
     }
 }
 

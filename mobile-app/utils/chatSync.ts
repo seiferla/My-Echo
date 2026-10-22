@@ -1,6 +1,7 @@
 import { Chat, withMessageIds } from './types';
 import { readChats, writeChats } from './chatStorage';
 import { BACKEND_CHATS_URL } from './config';
+import { authHeaders } from './supabase';
 
 const TAG = '[myEcho][Sync]';
 const FETCH_TIMEOUT_MS = 5_000;
@@ -27,7 +28,7 @@ function pickRicher(a: Chat, b: Chat): Chat {
  * NIE verloren — selbst wenn das Backend ihn (noch) nicht kennt oder leer ist.
  * Sortiert absteigend nach timestamp (neuester zuerst), wie index.tsx erwartet.
  */
-function mergeChats(local: Chat[], remote: Chat[]): Chat[] {
+export function mergeChats(local: Chat[], remote: Chat[]): Chat[] {
     const byId = new Map<string, Chat>();
     for (const c of remote) byId.set(c.id, c);
     for (const c of local) {
@@ -39,23 +40,28 @@ function mergeChats(local: Chat[], remote: Chat[]): Chat[] {
     );
 }
 
-/**
- * Liefert Chats für den App-Start. Wichtig: der lokale Verlauf ist immer der
- * Sockel — das Backend kann ihn nur ergänzen, niemals löschen.
- *
- * 1. Lokalen Cache lesen (bestehender Verlauf der installierten App).
- * 2. Backend abfragen und mit dem lokalen Stand mergen (id-basiert).
- * 3. Lokale Chats, die das Backend noch nicht (oder nur ärmer) kennt, hoch-
- *    pushen — einmalige verlustfreie Seed-Migration in die Backend-DB.
- * 4. Gemergten Stand cachen und zurückgeben.
- *
- * Offline / Backend nicht erreichbar → reiner lokaler Verlauf, ohne Verlust.
- */
-export async function loadChats(): Promise<Chat[]> {
-    const local = parseChats(await readChats());
+/** Der lokale Verlauf dieses Kontos. Schnell: kein Netz nötig. */
+export async function loadLocalChats(): Promise<Chat[]> {
+    return parseChats(await readChats());
+}
 
+/**
+ * Gleicht lokale Chats mit dem Backend ab. Der lokale Verlauf ist immer der
+ * Sockel: das Backend kann ihn nur ergänzen, niemals löschen.
+ *
+ *  - Backend-Chats, die lokal fehlen, werden dazugenommen (id-basiert).
+ *  - Lokale Chats, die das Backend noch nicht (oder nur ärmer) kennt, werden
+ *    hochgepusht (verlustfreie Seed-Migration in die Backend-DB).
+ *
+ * Gibt den vereinigten Stand zurück, oder null offline / bei Fehlern.
+ * Schreibt NICHT in den lokalen Cache: das macht der Aufrufer mit seinem
+ * aktuellen Stand, damit ein spät eintreffender Abgleich Änderungen des
+ * Nutzers nicht mit einem veralteten Stand überschreibt.
+ */
+export async function syncChats(local: Chat[]): Promise<Chat[] | null> {
     try {
         const response = await fetch(BACKEND_CHATS_URL, {
+            headers: await authHeaders(),
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -63,9 +69,8 @@ export async function loadChats(): Promise<Chat[]> {
 
         const merged = mergeChats(local, remote);
 
-        // Seed/Reparatur: alles, was das Backend nicht oder nur ärmer/anders
-        // kennt, nach oben schreiben, damit der bestehende Verlauf dauerhaft
-        // sicher ist. Identische Remote-Chats werden nicht erneut gepusht.
+        // Alles, was das Backend nicht oder nur ärmer/anders kennt, nach oben
+        // schreiben. Identische Remote-Chats werden nicht erneut gepusht.
         const remoteById = new Map(remote.map((c) => [c.id, c]));
         for (const c of merged) {
             const r = remoteById.get(c.id);
@@ -78,15 +83,58 @@ export async function loadChats(): Promise<Chat[]> {
             }
         }
 
-        await writeChats(JSON.stringify(merged));
         console.log(
             `${TAG} Merged ${remote.length} remote + ${local.length} local → ${merged.length} chats`
         );
         return merged;
     } catch (e) {
         console.warn(`${TAG} Backend unreachable, using local cache:`, e);
-        return local;
+        return null;
     }
+}
+
+/** Lokal lesen, abgleichen und den Cache aktualisieren (für Stellen ohne eigenen State). */
+export async function loadChats(): Promise<Chat[]> {
+    const local = await loadLocalChats();
+    const merged = await syncChats(local);
+    if (!merged) return local;
+    await writeChats(JSON.stringify(merged));
+    return merged;
+}
+
+// So lange wartet der App-Start höchstens auf das Backend, wenn lokale Chats da
+// sind. Danach werden sie sofort gezeigt und der Abgleich folgt nachträglich.
+const START_GRACE_MS = 600;
+const GRACE_EXPIRED = Symbol('grace expired');
+
+/**
+ * Chats für den App-Start, ohne dass ein langsames Netz die Anzeige blockiert.
+ *  - Lokale Chats vorhanden: Antwortet das Backend schnell (< 0,6 s), kommt der
+ *    abgeglichene Stand zurück. Sonst die lokalen Chats sofort, und `later`
+ *    liefert den Abgleich nachträglich.
+ *  - Nichts lokal (neues Gerät): auf das Backend warten. Sonst würde eine leere
+ *    Begrüßungs-Hülle einen vorhandenen Chat mit gleicher ID überschreiben.
+ */
+export async function loadChatsForStart(): Promise<{
+    chats: Chat[];
+    later: Promise<Chat[] | null> | null;
+}> {
+    const local = await loadLocalChats();
+    const sync = syncChats(local);
+
+    if (local.length === 0) {
+        return { chats: (await sync) ?? local, later: null };
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const grace = new Promise<typeof GRACE_EXPIRED>((resolve) => {
+        timer = setTimeout(() => resolve(GRACE_EXPIRED), START_GRACE_MS);
+    });
+    const first = await Promise.race([sync, grace]);
+    clearTimeout(timer);
+
+    if (first === GRACE_EXPIRED) return { chats: local, later: sync };
+    return { chats: first ?? local, later: null };
 }
 
 /**
@@ -97,7 +145,7 @@ export async function pushChat(chat: Chat): Promise<void> {
     try {
         const response = await fetch(`${BACKEND_CHATS_URL}/${chat.id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
             body: JSON.stringify(chat),
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
@@ -111,6 +159,7 @@ export async function deleteChatRemote(chatId: string): Promise<void> {
     try {
         await fetch(`${BACKEND_CHATS_URL}/${chatId}`, {
             method: 'DELETE',
+            headers: await authHeaders(),
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
     } catch (e) {

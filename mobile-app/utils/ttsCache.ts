@@ -1,5 +1,7 @@
 import { File, Directory, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
+import { authHeaders } from './supabase';
+import { scoped } from './localUser';
 
 const TAG = '[myEcho][Cache]';
 const MAX_CACHE_BYTES = 100 * 1024 * 1024;   // 100 MB hard cap
@@ -38,9 +40,12 @@ const isWeb = Platform.OS === 'web';
 
 let _cacheDir: Directory | null = null;
 let _indexFile: File | null = null;
+// Cache-Ordner, für den der Zustand unten gerade gilt. Jedes Konto hat einen
+// eigenen Ordner (tts-cache.<user_id>, siehe localUser.ts).
+let _ownerName: string | null = null;
 
 function cacheDirRef(): Directory {
-    if (!_cacheDir) _cacheDir = new Directory(Paths.document, 'tts-cache');
+    if (!_cacheDir) _cacheDir = new Directory(Paths.document, scoped('tts-cache'));
     return _cacheDir;
 }
 
@@ -94,9 +99,34 @@ function cacheFile(hash: string): File {
     return new File(cacheDirRef(), `${hash}.mp3`);
 }
 
+// Beim Kontowechsel den Zustand verwerfen und mit dem Ordner des neuen Kontos
+// neu starten. Sonst würde Konto B Audio von Konto A finden und abspielen.
+function switchAccountIfNeeded(): void {
+    const name = scoped('tts-cache');
+    if (name === _ownerName) return;
+    if (_ownerName !== null) {
+        // Den ausstehenden Index noch in den Ordner des bisherigen Kontos schreiben
+        // (_indexFile zeigt hier noch auf ihn), dann laufende Downloads des
+        // bisherigen Kontos entwerten: sie verwerfen ihr Ergebnis selbst.
+        try {
+            persistNow();
+        } catch (e) {
+            console.warn(`${TAG} Index persist before account switch failed:`, e);
+        }
+        _generation += 1;
+    }
+    _cacheDir = null;
+    _indexFile = null;
+    _index = null;
+    _initPromise = null;
+    _inFlight.clear();
+    _ownerName = name;
+}
+
 // --- Initialisation (lazy, deduplicated) ---
 
 async function ensureInit(): Promise<void> {
+    switchAccountIfNeeded();
     if (_index !== null) return;
     if (_initPromise) return _initPromise;
     _initPromise = (async () => {
@@ -237,7 +267,7 @@ export async function downloadAndCache(
         // File.downloadFileAsync throws UnableToDownload for non-2xx responses.
         // On failure, remove any partial bytes so they don't leak as untracked disk usage.
         try {
-            await File.downloadFileAsync(url, dest, { idempotent: true });
+            await File.downloadFileAsync(url, dest, { idempotent: true, headers: await authHeaders() });
         } catch (e) {
             try { dest.delete(); } catch {}
             throw e;

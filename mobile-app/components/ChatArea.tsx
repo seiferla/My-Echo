@@ -19,7 +19,7 @@ import { Message } from './Message';
 import { PhraseBar } from './PhraseBar';
 import { usePhrases } from '../context/PhrasesContext';
 import { Phrase } from '../utils/phrases';
-import { BACKEND_WARMUP_URL } from '../utils/config';
+import { warmBackend } from '../utils/tts';
 import { useCloudStatus } from '../context/CloudStatusContext';
 import { onTypingChanged, resetTypingPrefetch } from '../utils/typingPrefetch';
 import { useFastMode } from '../utils/speedMode';
@@ -94,9 +94,9 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     useEffect(() => {
         if (!isComposing) return;
 
-        fetch(BACKEND_WARMUP_URL).catch(() => {});
+        warmBackend();
         const interval = setInterval(() => {
-            fetch(BACKEND_WARMUP_URL).catch(() => {});
+            warmBackend();
         }, WARMUP_INTERVAL_MS);
 
         return () => clearInterval(interval);

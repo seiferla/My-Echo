@@ -6,20 +6,43 @@ import msgpack
 import httpx
 import websockets
 from contextlib import asynccontextmanager
-from typing import Optional
-from fastapi import FastAPI, HTTPException, Query, Request
+from typing import Annotated, Optional
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from db import init_db, close_db, list_chats, upsert_chat, delete_chat
+import mock_tts
+from auth import current_user, require_metrics_token
+from db import (
+    init_db, close_db, list_chats, upsert_chat, delete_chat,
+    get_phrase_store, put_phrase_store, get_tts_stats, merge_tts_stats,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("myecho.tts")
+
+
+class StripQueryFromAccessLog(logging.Filter):
+    """Entfernt den Query-String aus dem Uvicorn-Zugriffslog (G8).
+
+    /stream/tts?text=... würde sonst den Nachrichtentext ins Log schreiben,
+    solange der Text noch in der URL steht. Uvicorn übergibt den Pfad mit
+    Query-String als drittes Argument der Logzeile.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str):
+            record.args = (*args[:2], args[2].split("?", 1)[0], *args[3:])
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(StripQueryFromAccessLog())
 
 # --- Pydantic-Modelle (vor app = FastAPI(...) einfügen) ---------------------
 
@@ -40,30 +63,88 @@ class ChatModel(BaseModel):
     messages: list[MessageModel] = []
 
 
+class PhraseModel(BaseModel):
+    id: str = Field(max_length=100)
+    text: str = Field(min_length=1, max_length=1000)
+    useCount: int = Field(0, ge=0, le=1_000_000_000)
+    lastUsedAt: Optional[int] = None
+    createdAt: int
+
+
+class PhraseSettingsModel(BaseModel):
+    visibleCount: int = Field(ge=0, le=20)
+    instantEnabled: bool
+
+
+class PhraseStoreModel(BaseModel):
+    phrases: list[PhraseModel] = Field(default=[], max_length=200)
+    settings: PhraseSettingsModel
+    updatedAt: int = Field(ge=0)  # Zeitpunkt der letzten Änderung (ms), der neuere Stand gewinnt
+
+
+# Tag wie in der App: YYYY-MM-DD
+DayKey = Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
+MAX_STAT_DAYS = 800
+
+
+class TtsDayStatModel(BaseModel):
+    requests: int = Field(ge=0, le=1_000_000_000)
+    chars: int = Field(ge=0, le=1_000_000_000)
+    durationMs: int = Field(ge=0, le=10**12)
+
+
 # --- Lifespan: DB beim Start initialisieren, beim Stop schließen ------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if TTS_PROVIDER == "mock":
+        logger.warning("TTS_PROVIDER=mock: there is NO real speech. For load tests only.")
     await init_db()
     yield
     await close_db()
 
 
-app = FastAPI(lifespan=lifespan)
-Instrumentator().instrument(app).expose(app)
+# Swagger-UI und OpenAPI-Datei sind aus: sie würden alle Routen öffentlich zeigen.
+app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+# /metrics nur für Prometheus mit eigenem Token (METRICS_TOKEN), nicht öffentlich.
+Instrumentator().instrument(app).expose(
+    app, include_in_schema=False, dependencies=[Depends(require_metrics_token)]
+)
 
-# Rate limiting: single-user app, generous limits to prevent API abuse
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+# Rate limiting: pro Nutzer (siehe rate_limit_key), schützt vor Missbrauch und Kosten.
+def rate_limit_key(request: Request) -> str:
+    """Ein Zähler pro angemeldetem Nutzer, nicht pro IP-Adresse.
+
+    Hinter einem Proxy (Caddy) oder in einem Lasttest sähe das Backend sonst für alle
+    Nutzer dieselbe IP und sie teilten sich ein Limit. Ohne geprüften Nutzer (die
+    user_id setzt auth.current_user) bleibt es bei der IP.
+    """
+    user_id = getattr(request.state, "user_id", None)
+    return f"user:{user_id}" if user_id else f"ip:{get_remote_address(request)}"
+
+
+def _tts_rate_limit() -> str:
+    """Pro Nutzer, wird bei jeder Anfrage gelesen (RATE_LIMIT_TTS, z. B. "100/minute")."""
+    return os.getenv("RATE_LIMIT_TTS", "30/minute")
+
+
+# Nur /stream/tts ist begrenzt (jede Anfrage kostet Geld). Die anderen Routen haben
+# kein Limit; die frühere Angabe default_limits=["60/minute"] hat nie gegriffen.
+limiter = Limiter(key_func=rate_limit_key)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS: allow mobile app (Expo) and local dev origins
+# CORS: allow mobile app (Expo) and local dev origins.
+# Weitere Browser-Herkünfte (z. B. eine gehostete Web-Version) über
+# CORS_ORIGINS, kommagetrennt.
+EXTRA_CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:8081",   # Expo web
         "http://localhost:19006",  # Expo web (alt)
         "exp://*",                 # Expo Go (native)
+        *EXTRA_CORS_ORIGINS,
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -74,6 +155,19 @@ FISH_API_KEY = os.getenv("TTS_API_KEY", "")
 WS_URL = "wss://api.fish.audio/v1/tts/live"
 AUDIO_MODEL = os.getenv("TTS_MODEL", "s2-pro")
 AUDIO_REFERENCE_ID = os.getenv("TTS_VOICE", "")
+
+
+def _resolve_provider(value: str) -> str:
+    """"fish" (Standard) oder "mock". Ein Tippfehler bricht den Start ab: er darf nie still
+    echte, kostenpflichtige Sprachausgabe einschalten oder ausschalten."""
+    value = (value or "fish").strip().lower()
+    if value not in ("fish", "mock"):
+        raise RuntimeError(f"TTS_PROVIDER must be 'fish' or 'mock', got {value!r}")
+    return value
+
+
+# "mock" = stumme Test-MP3 statt Fish Audio, nur für Lasttests (siehe mock_tts.py).
+TTS_PROVIDER = _resolve_provider(os.getenv("TTS_PROVIDER", "fish"))
 
 # Standard hier: "balanced" — bester TTFA/Qualitäts-Kompromiss fürs Streaming
 AUDIO_LATENCY = os.getenv("TTS_LATENCY", "balanced")
@@ -144,12 +238,14 @@ async def _take_warm_connection():
 
 
 @app.get("/warmup")
-async def warmup():
+async def warmup(user_id: str = Depends(current_user)):
     """
     Öffnet vorab eine Fish-Audio-Verbindung und sendet das start-Event.
     Vom Frontend aufgerufen sobald der User das Eingabefeld öffnet —
     spart beim späteren Senden den Handshake + start-Roundtrip.
     """
+    if TTS_PROVIDER == "mock":
+        return {"status": "warm"}  # nichts vorzuwärmen, es gibt keine Verbindung zu Fish
     async with _warm_lock:
         if _warm["ws"] is not None:
             try:
@@ -166,8 +262,20 @@ async def warmup():
 
 
 @app.get("/stream/tts")
-@limiter.limit("30/minute")
-async def stream_tts(request: Request, text: str):
+@limiter.limit(_tts_rate_limit)
+async def stream_tts(request: Request, text: str, user_id: str = Depends(current_user)):
+    if TTS_PROVIDER == "mock":
+        return StreamingResponse(
+            mock_tts.stream(text),
+            media_type="audio/mpeg",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-TTS-Provider": "mock",
+                # Der Lasttest zieht diese Zeit von der Messung ab (Aufwand des eigenen Systems).
+                "X-TTS-Mock-First-Audio-Ms": str(int(mock_tts.first_audio_ms())),
+            },
+        )
+
     async def generate():
         t_start = time.monotonic()
 
@@ -251,13 +359,17 @@ async def health():
     url = "https://api.fish.audio/wallet/self/api-credit"
     headers = {"Authorization": f"Bearer {FISH_API_KEY}", "model": AUDIO_MODEL}
 
-    base = {"voice": AUDIO_REFERENCE_ID, "model": AUDIO_MODEL}
+    base = {"voice": AUDIO_REFERENCE_ID, "model": AUDIO_MODEL, "provider": TTS_PROVIDER}
+
+    if TTS_PROVIDER == "mock":
+        return {**base, "status": "ok"}  # kein Aufruf bei Fish: so läuft der Mock ohne Key
 
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return {**base, "status": "ok", "credits": response.json()}
+            # Guthaben nicht ausgeben: das Backend ist öffentlich erreichbar.
+            return {**base, "status": "ok"}
         except httpx.TimeoutException:
             return {**base, "status": "unavailable", "message": "Fish Audio API Timeout"}
         except httpx.HTTPStatusError as e:
@@ -269,23 +381,51 @@ async def health():
 # --- Endpoints (am Ende der Datei ergänzen) ---------------------------------
 
 @app.get("/chats", response_model=list[ChatModel])
-async def get_chats():
-    """Alle Chats laden — wird beim App-Start aufgerufen."""
-    return await list_chats()
+async def get_chats(user_id: str = Depends(current_user)):
+    """Alle Chats des angemeldeten Nutzers — wird beim App-Start aufgerufen."""
+    return await list_chats(user_id)
 
 
 @app.put("/chats/{chat_id}")
-async def put_chat(chat_id: str, chat: ChatModel):
-    """Chat anlegen oder komplett ersetzen."""
+async def put_chat(chat_id: str, chat: ChatModel, user_id: str = Depends(current_user)):
+    """Chat des angemeldeten Nutzers anlegen oder komplett ersetzen."""
     if chat.id != chat_id:
         raise HTTPException(400, "chat_id mismatch between URL and body")
-    await upsert_chat(chat.model_dump())
+    await upsert_chat(user_id, chat.model_dump())
     return {"status": "ok"}
 
 
 @app.delete("/chats/{chat_id}")
-async def remove_chat(chat_id: str):
-    deleted = await delete_chat(chat_id)
+async def remove_chat(chat_id: str, user_id: str = Depends(current_user)):
+    deleted = await delete_chat(user_id, chat_id)
     if not deleted:
         raise HTTPException(404, f"chat {chat_id} not found")
     return {"status": "deleted"}
+
+
+@app.get("/phrases", response_model=Optional[PhraseStoreModel])
+async def get_phrases(user_id: str = Depends(current_user)):
+    """Phrasen + Einstellungen des angemeldeten Nutzers, oder null wenn es noch keine gibt."""
+    return await get_phrase_store(user_id)
+
+
+@app.put("/phrases")
+async def put_phrases(store: PhraseStoreModel, user_id: str = Depends(current_user)):
+    """Speichert den Stand. Ein älterer Stand überschreibt keinen neueren ("stale")."""
+    stored = await put_phrase_store(user_id, store.model_dump())
+    return {"status": "ok" if stored else "stale"}
+
+
+@app.get("/stats/tts", response_model=dict[str, TtsDayStatModel])
+async def get_stats_tts(user_id: str = Depends(current_user)):
+    """Alle TTS-Tageswerte des angemeldeten Nutzers."""
+    return await get_tts_stats(user_id)
+
+
+@app.post("/stats/tts")
+async def post_stats_tts(stats: dict[DayKey, TtsDayStatModel], user_id: str = Depends(current_user)):
+    """Führt Tageswerte zusammen: pro Feld gilt der größere Wert, die Zahlen werden nie kleiner."""
+    if len(stats) > MAX_STAT_DAYS:
+        raise HTTPException(413, f"too many days (max {MAX_STAT_DAYS})")
+    await merge_tts_stats(user_id, {day: s.model_dump() for day, s in stats.items()})
+    return {"status": "ok"}

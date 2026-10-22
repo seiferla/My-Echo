@@ -1,6 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { storage } from './storage';
+import { scoped } from './localUser';
 
 const TAG = '[myEcho][ChatStorage]';
 
@@ -13,19 +14,19 @@ const TAG = '[myEcho][ChatStorage]';
 // (localStorage). Die File-Instanz erst bei Bedarf erzeugen, sonst crasht
 // bereits der Modul-Import im Browser.
 const isWeb = Platform.OS === 'web';
-const WEB_KEY = 'myEchoChatsFile';
+const WEB_KEY_BASE = 'myEchoChatsFile';
 
-let _chatsFile: File | null = null;
+// Pro Konto eine eigene Datei (siehe localUser.ts). Nicht zwischenspeichern:
+// beim Kontowechsel ändert sich der Name.
 function chatsFileRef(): File {
-    if (!_chatsFile) _chatsFile = new File(Paths.document, 'chats.json');
-    return _chatsFile;
+    return new File(Paths.document, `${scoped('chats')}.json`);
 }
 
 // Bisheriger SecureStore-Key — nur noch für die einmalige Migration gebraucht.
 const LEGACY_KEY = 'myEchoChats';
 
 export async function readChats(): Promise<string | null> {
-    if (isWeb) return storage.getItem(WEB_KEY);
+    if (isWeb) return storage.getItem(scoped(WEB_KEY_BASE));
 
     if (chatsFileRef().exists) {
         try {
@@ -49,7 +50,7 @@ export async function readChats(): Promise<string | null> {
 }
 
 export async function writeChats(json: string): Promise<void> {
-    if (isWeb) return storage.setItem(WEB_KEY, json);
+    if (isWeb) return storage.setItem(scoped(WEB_KEY_BASE), json);
 
     try {
         chatsFileRef().write(json);

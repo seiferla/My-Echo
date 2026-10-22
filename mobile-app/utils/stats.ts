@@ -1,6 +1,6 @@
 
 import { readChats } from './chatStorage';
-import { getTtsStats, dayKey, TtsStats } from './ttsLog';
+import { getTtsStats, syncTtsStats, dayKey, TtsStats } from './ttsLog';
 import { Chat, ChatMessage } from './types';
 
 export type { Chat, ChatMessage };
@@ -252,7 +252,14 @@ export interface TtsSummary {
     perDay: TimeBucket[];
 }
 
+/** Lokale TTS-Statistik: sofort, ohne Netz. */
 export async function loadTtsStats(): Promise<TtsStats> {
+    return getTtsStats();
+}
+
+/** Gleicht mit dem Backend ab und liefert danach den aktuellen Stand. Wirft nicht. */
+export async function syncAndLoadTtsStats(): Promise<TtsStats> {
+    await syncTtsStats();
     return getTtsStats();
 }
 
