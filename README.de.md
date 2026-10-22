@@ -53,9 +53,7 @@ Tippe, was du sagen möchtest — myEcho spricht es mit deiner eigenen Stimme au
 
 **myEcho wurde für Menschen entwickelt, die ihre eigene Stimme nicht mehr nutzen können.**
 
-Das Projekt begann, als meine Mutter an ALS in der bulbären Form erkrankte. Dabei werden zuerst die Muskeln zum Sprechen schwächer, deshalb kann sie heute kaum noch deutlich sprechen. Die meisten Voice-Cloning-Lösungen brauchen mehrere Minuten Studioaufnahmen — dafür war ihre Stimme schon zu instabil. Weil das TTS-Modell zero-shot arbeitet, haben **30 Sekunden aus alten WhatsApp-Sprachnachrichten**, aufgenommen lange vor ihrer Erkrankung, gereicht, um ihre Stimme nachzubilden.
-
-Sie nutzt myEcho seit mehreren Monaten im Alltag: Sie tippt, was sie sagen möchte, und die App spricht es mit ihrer alten Stimme aus. Die Oberfläche ist bewusst ruhig und einfach — keine Hürden, keine Komplexität.
+Sprechen kann anstrengend, schmerzhaft oder unmöglich sein — und bestehende Lösungen sind oft zu kompliziert. myEcho ist das Gegenteil: eine ruhige, einfache Oberfläche, in der du tippst, was du sagen möchtest, und die App es mit einer natürlichen Stimme ausspricht. Keine Hürden. Keine Komplexität.
 
 ---
 
