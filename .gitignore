@@ -32,6 +32,10 @@ mobile-app/.idea/
 .env.*.local
 FETCH_HEAD
 
+# Python
+__pycache__/
+*.pyc
+
 # generierte Datenschutz-Seite (GitHub Pages)
 /site/
 
