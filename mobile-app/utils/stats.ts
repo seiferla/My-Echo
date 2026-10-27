@@ -1,18 +1,12 @@
-
-import { readChats } from './chatStorage';
 import { getTtsStats, syncTtsStats, dayKey, TtsStats } from './ttsLog';
-import { Chat, ChatMessage } from './types';
-
-export type { Chat, ChatMessage };
-export type { TtsStats } from './ttsLog';
+import { Chat } from './types';
 
 /**
- * Auswertungslogik für die Statistikseite.
- * Alle Nachrichten-Statistiken werden aus dem lokal gespeicherten
- * Chat-Verlauf berechnet, die TTS-Statistiken aus 'myEchoTtsStats'.
+ * Calculations for the stats screen.
+ * Message stats come from the local chat history, TTS stats from ttsLog.ts.
  */
 
-/** Eine einzelne geäußerte (vom Nutzer verfasste) Nachricht, flach. */
+/** One message written by the user, flattened. */
 export interface FlatMessage {
     ts: number;
     content: string;
@@ -22,7 +16,7 @@ export interface FlatMessage {
     editCount: number;
 }
 
-// Kleine deutsche Stopwortliste für die Wort-Auswertung.
+// Small German stop word list for the word ranking.
 const STOPWORDS = new Set([
     'der', 'die', 'das', 'und', 'ist', 'ich', 'du', 'er', 'sie', 'es', 'wir',
     'ihr', 'ein', 'eine', 'einen', 'einem', 'einer', 'zu', 'mit', 'auf', 'für',
@@ -33,21 +27,11 @@ const STOPWORDS = new Set([
     'kann', 'will', 'man', 'schon', 'sehr', 'mehr', 'hier', 'doch', 'ja', 'nein',
 ]);
 
-export async function loadChats(): Promise<Chat[]> {
-    const raw = await readChats();
-    if (!raw) return [];
-    try {
-        return JSON.parse(raw) as Chat[];
-    } catch {
-        return [];
-    }
-}
-
 /**
- * Flacht alle vom Nutzer verfassten Nachrichten zu einer Liste ab.
- * Fehlende Felder (Altdaten) werden sinnvoll vorbelegt:
- * - timestamp: fällt auf den Chat-Zeitstempel zurück
- * - via: 'send' angenommen
+ * Flattens all messages written by the user into one list.
+ * Missing fields (old data) get defaults:
+ * - timestamp: the chat timestamp
+ * - via: 'send'
  */
 export function flattenMessages(chats: Chat[]): FlatMessage[] {
     const out: FlatMessage[] = [];
@@ -69,19 +53,24 @@ export function flattenMessages(chats: Chat[]): FlatMessage[] {
     return out.sort((a, b) => a.ts - b.ts);
 }
 
+/** "DD.MM" label for a chart axis. */
+function dayLabel(d: Date): string {
+    return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export function filterByRange(msgs: FlatMessage[], from: number, to: number): FlatMessage[] {
     return msgs.filter((m) => m.ts >= from && m.ts <= to);
 }
 
-// ---- Zeit-Aggregationen ----
+// ---- Time aggregations ----
 
 export interface TimeBucket {
-    label: string; // Achsenbeschriftung
-    key: string;   // eindeutiger Schlüssel
+    label: string; // axis label
+    key: string;   // unique key
     count: number;
 }
 
-/** Nachrichten pro Tag über den gegebenen Zeitraum (lückenlos inkl. Null-Tage). */
+/** Messages per day in the range (every day, also days with 0). */
 export function messagesPerDay(msgs: FlatMessage[], from: number, to: number): TimeBucket[] {
     const counts: Record<string, number> = {};
     for (const m of msgs) {
@@ -97,14 +86,14 @@ export function messagesPerDay(msgs: FlatMessage[], from: number, to: number): T
         const k = dayKey(d.getTime());
         buckets.push({
             key: k,
-            label: `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`,
+            label: dayLabel(d),
             count: counts[k] ?? 0,
         });
     }
     return buckets;
 }
 
-/** ISO-Kalenderwoche eines Datums. */
+/** ISO calendar week of a date. */
 function isoWeek(d: Date): { year: number; week: number } {
     const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNum = date.getUTCDay() || 7;
@@ -114,7 +103,7 @@ function isoWeek(d: Date): { year: number; week: number } {
     return { year: date.getUTCFullYear(), week };
 }
 
-/** Nachrichten pro Kalenderwoche. */
+/** Messages per calendar week. */
 export function messagesPerWeek(msgs: FlatMessage[]): TimeBucket[] {
     const counts: Record<string, number> = {};
     const order: string[] = [];
@@ -128,7 +117,7 @@ export function messagesPerWeek(msgs: FlatMessage[]): TimeBucket[] {
     return order.map((k) => ({ key: k, label: `KW${k.split('W')[1]}`, count: counts[k] }));
 }
 
-/** Verteilung über den Tag, in 6 Vier-Stunden-Blöcken. */
+/** Distribution over the day, in 6 blocks of 4 hours. */
 export function timeOfDayDistribution(msgs: FlatMessage[]): TimeBucket[] {
     const labels = ['0–4', '4–8', '8–12', '12–16', '16–20', '20–24'];
     const counts = new Array(6).fill(0);
@@ -139,14 +128,14 @@ export function timeOfDayDistribution(msgs: FlatMessage[]): TimeBucket[] {
     return labels.map((label, i) => ({ key: label, label, count: counts[i] }));
 }
 
-// ---- Inhalts-Aggregationen (AAC) ----
+// ---- Content aggregations (AAC) ----
 
 export interface Ranked {
     text: string;
     count: number;
 }
 
-/** Häufigste komplette Sätze/Nachrichten (Kandidaten für Schnellzugriffe). */
+/** Most frequent full messages (candidates for phrases). */
 export function topPhrases(msgs: FlatMessage[], n = 10): Ranked[] {
     const counts: Record<string, { text: string; count: number }> = {};
     for (const m of msgs) {
@@ -161,7 +150,7 @@ export function topPhrases(msgs: FlatMessage[], n = 10): Ranked[] {
         .slice(0, n);
 }
 
-/** Häufigste Einzelwörter (ohne Stopwörter). */
+/** Most frequent single words (without stop words). */
 export function topWords(msgs: FlatMessage[], n = 10): Ranked[] {
     const counts: Record<string, number> = {};
     for (const m of msgs) {
@@ -178,7 +167,7 @@ export function topWords(msgs: FlatMessage[], n = 10): Ranked[] {
         .slice(0, n);
 }
 
-// ---- Kennzahlen ----
+// ---- Totals ----
 
 export interface Totals {
     totalMessages: number;
@@ -224,13 +213,13 @@ export function computeTotals(msgs: FlatMessage[]): Totals {
     };
 }
 
-/** Längste ununterbrochene Tagesserie, die bis heute (oder gestern) reicht. */
+/** Longest run of active days that reaches today (or yesterday). */
 export function computeStreak(activeDays: Set<string>): number {
     if (activeDays.size === 0) return 0;
     const d = new Date();
     d.setHours(0, 0, 0, 0);
-    // Erlaube Start heute oder gestern, damit die Serie nicht direkt um
-    // Mitternacht "bricht", bevor man getippt hat.
+    // Allow a start today or yesterday, so the streak does not break at
+    // midnight before the user typed anything.
     if (!activeDays.has(dayKey(d.getTime()))) {
         d.setDate(d.getDate() - 1);
         if (!activeDays.has(dayKey(d.getTime()))) return 0;
@@ -250,10 +239,6 @@ export interface TtsSummary {
     chars: number;
     durationSec: number;
     perDay: TimeBucket[];
-}
-
-export async function loadTtsStats(): Promise<TtsStats> {
-    return getTtsStats();
 }
 
 /** Syncs with the backend, then returns the current stats. Never throws. */
@@ -281,7 +266,7 @@ export function summarizeTts(stats: TtsStats, from: number, to: number): TtsSumm
         durationMs += bucket?.durationMs ?? 0;
         perDay.push({
             key: k,
-            label: `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`,
+            label: dayLabel(d),
             count: r,
         });
     }
@@ -290,7 +275,7 @@ export function summarizeTts(stats: TtsStats, from: number, to: number): TtsSumm
 
 export interface MonthAudio {
     key: string;   // 'YYYY-MM'
-    label: string; // z.B. 'Jun 2026'
+    label: string; // e.g. 'Jun 2026'
     minutes: number;
 }
 
@@ -300,9 +285,9 @@ const MONTH_LABELS = [
 ];
 
 /**
- * Erzeugte Audio-Minuten pro Kalendermonat, aufsummiert aus den
- * TTS-Tagesdaten (`durationMs`). Misst die abgespielte Sprechzeit — bei
- * Cache-Miss inkl. der Download-Zeit, also eine gute Näherung der Audiolänge.
+ * Audio minutes per calendar month, summed from the daily TTS data (`durationMs`).
+ * It measures playback time (on a cache miss including the download), so it is
+ * a good estimate of the audio length.
  */
 export function ttsAudioPerMonth(stats: TtsStats): MonthAudio[] {
     const byMonth: Record<string, number> = {};

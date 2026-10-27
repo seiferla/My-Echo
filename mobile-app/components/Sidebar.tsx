@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { Chat } from '../utils/types';
 import { useAuth } from '../context/AuthContext';
 import { confirmAction } from '../utils/confirm';
+import { groupChatsByDate } from '../utils/chatGroups';
 
 const { width } = Dimensions.get('window');
 
@@ -110,44 +111,7 @@ export function Sidebar({
         }
     };
 
-    const groupChatsByDate = () => {
-        const now = Date.now();
-        const oneDay = 24 * 60 * 60 * 1000;
-        const oneWeek = 7 * oneDay;
-        const oneMonth = 30 * oneDay;
-
-        const groups: { [key: string]: Chat[] } = {
-            'Gepinnt': [],
-            'Heute': [],
-            'Gestern': [],
-            'Letzte 7 Tage': [],
-            'Letzte 30 Tage': [],
-            'Älter': [],
-        };
-
-        chats.forEach(chat => {
-            if (chat.pinned) {
-                groups['Gepinnt'].push(chat);
-                return;
-            }
-            const diff = now - chat.timestamp;
-            if (diff < oneDay) {
-                groups['Heute'].push(chat);
-            } else if (diff < 2 * oneDay) {
-                groups['Gestern'].push(chat);
-            } else if (diff < oneWeek) {
-                groups['Letzte 7 Tage'].push(chat);
-            } else if (diff < oneMonth) {
-                groups['Letzte 30 Tage'].push(chat);
-            } else {
-                groups['Älter'].push(chat);
-            }
-        });
-
-        return groups;
-    };
-
-    const groupedChats = groupChatsByDate();
+    const groupedChats = groupChatsByDate(chats);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -234,7 +198,7 @@ export function Sidebar({
                 </View>
             </View>
 
-            {/* Kontext-Menü Modal */}
+            {/* Context menu */}
             <Modal
                 visible={isMenuVisible}
                 transparent={true}
@@ -263,7 +227,7 @@ export function Sidebar({
                 </TouchableWithoutFeedback>
             </Modal>
 
-            {/* Umbenennen Modal */}
+            {/* Rename dialog */}
             <Modal
                 visible={isRenaming}
                 transparent={true}

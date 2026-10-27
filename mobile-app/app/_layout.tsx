@@ -5,7 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { CloudStatusProvider } from '../context/CloudStatusContext';
 import { PhrasesProvider } from '../context/PhrasesContext';
-import { configureAudioSession } from '../utils/tts';
+import { configureAudioSession } from '../utils/audioPlayer';
 
 // Route guard: signed out only "login" is reachable, signed in only the app screens.
 function RootStack() {
@@ -48,8 +48,7 @@ function UserScope({ children }: { children: React.ReactNode }) {
 
 export default function Layout() {
   useEffect(() => {
-    // Audio-Session einmalig einrichten, damit die Wiedergabe bei gesperrtem
-    // Bildschirm nicht abbricht.
+    // Set up the audio session once, so playback goes on when the screen is locked.
     configureAudioSession();
   }, []);
 

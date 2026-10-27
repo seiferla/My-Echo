@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
     View,
     StyleSheet,
@@ -6,146 +6,44 @@ import {
     Text,
     Modal,
     Dimensions,
-    Animated,
     TouchableWithoutFeedback
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Menu, PenSquare } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
 import { Sidebar } from '../components/Sidebar';
 import { ChatArea } from '../components/ChatArea';
 import { useCloudStatus } from '../context/CloudStatusContext';
-import { Chat, ChatMessage, withMessageIds } from '../utils/types';
-import { loadChatsForStart, mergeChats, pushChat, deleteChatRemote, persistLocal } from '../utils/chatSync';
+import { useChats } from '../hooks/useChats';
 
 const { width } = Dimensions.get('window');
 
 export default function ChatScreen() {
-    const router = useRouter();
     const insets = useSafeAreaInsets();
     const { isAvailable } = useCloudStatus();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [currentChatId, setCurrentChatId] = useState('1');
-    const [chats, setChats] = useState<Chat[]>([]);
-
-    useEffect(() => {
-        let alive = true;
-        loadChatsForStart().then(({ chats: loaded, later }) => {
-            if (!alive) return;
-            // "Neuer Chat für heute"-Logik bleibt — operiert jetzt auf den
-            // geladenen Backend-Chats statt auf SecureStore-Rohdaten.
-            const today = new Date().setHours(0, 0, 0, 0);
-            const latest = loaded[0];
-            if (latest && new Date(latest.timestamp).setHours(0, 0, 0, 0) < today) {
-                const newChat: Chat = {
-                    id: Date.now().toString(),
-                    title: 'Neuer Chat',
-                    messages: [],
-                    timestamp: Date.now(),
-                };
-                const updated = [newChat, ...loaded];
-                setChats(updated);
-                setCurrentChatId(newChat.id);
-                pushChat(newChat);                // ← neuen Chat sofort anlegen
-            } else if (loaded.length > 0) {
-                setChats(loaded);
-                setCurrentChatId(loaded[0].id);
-            } else {
-                // Komplett leerer Zustand — eine Begrüßungs-Hülle anlegen
-                const fresh: Chat = {
-                    id: '1',
-                    title: 'Neuer Chat',
-                    messages: [],
-                    timestamp: Date.now(),
-                };
-                setChats([fresh]);
-                pushChat(fresh);
-            }
-
-            // Slow backend: merge its result later without losing changes made meanwhile.
-            later?.then((merged) => {
-                if (!alive || !merged) return;
-                setChats((prev) => mergeChats(prev, merged));
-            });
-        });
-        return () => {
-            alive = false;
-        };
-    }, []);
-
-    useEffect(() => {
-        if (chats.length === 0) return;
-        persistLocal(chats);                                       // lokaler Cache
-        // Aktuellen Chat pushen — nicht den ganzen Array, das wäre Verschwendung
-        const current = chats.find((c) => c.id === currentChatId);
-        if (current) pushChat(current);
-    }, [chats]);
+    const {
+        chats,
+        currentChat,
+        currentChatId,
+        selectChat: openChat,
+        createChat,
+        pinChat,
+        renameChat,
+        deleteChat,
+        updateChat,
+    } = useChats();
 
     const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
     const createNewChat = () => {
-        const newChat: Chat = {
-            id: Date.now().toString(),
-            title: 'Neuer Chat',
-            messages: [],
-            timestamp: Date.now(),
-        };
-        setChats([newChat, ...chats]);
-        setCurrentChatId(newChat.id);
+        createChat();
         setIsSidebarOpen(false);
-    };
-
-    const pinChat = (id: string) => {
-        setChats(prevChats => prevChats.map(chat =>
-            chat.id === id ? { ...chat, pinned: !chat.pinned } : chat
-        ));
-    };
-
-    const renameChat = (id: string, newTitle: string) => {
-        setChats(prevChats => prevChats.map(chat =>
-            chat.id === id ? { ...chat, title: newTitle, titleIsCustom: true } : chat
-        ));
-    };
-
-    const deleteChat = (id: string) => {
-        deleteChatRemote(id);
-        setChats(prevChats => {
-            const newChats = prevChats.filter(chat => chat.id !== id);
-            if (newChats.length === 0) {
-                const fresh = { id: Date.now().toString(), title: 'Neuer Chat', messages: [], timestamp: Date.now() };
-                pushChat(fresh);
-                return [fresh];
-            }
-            if (id === currentChatId) {
-                setCurrentChatId(newChats[0].id);
-            }
-            return newChats;
-        });
     };
 
     const selectChat = (id: string) => {
-        setCurrentChatId(id);
+        openChat(id);
         setIsSidebarOpen(false);
     };
-
-    const updateChat = (id: string, messages: ChatMessage[]) => {
-        setChats(prevChats => prevChats.map(chat =>
-            chat.id === id
-                ? {
-                    ...chat,
-                    messages,
-                    // Manuell umbenannte Chats bleiben unangetastet — sonst würde
-                    // jede weitere Nachricht den Titel wieder aus messages[0] ableiten
-                    // und den Rename überschreiben.
-                    title: chat.titleIsCustom
-                        ? chat.title
-                        : messages[0]?.content.slice(0, 30) || 'Neuer Chat',
-                }
-                : chat
-        ));
-    };
-
-    const currentChat = chats.find(chat => chat.id === currentChatId);
 
     return (
         <View style={styles.container}>
@@ -185,7 +83,7 @@ export default function ChatScreen() {
                     <TouchableWithoutFeedback onPress={() => setIsSidebarOpen(false)}>
                         <View style={styles.modalBackground} />
                     </TouchableWithoutFeedback>
-                    <Animated.View style={styles.sidebarWrapper}>
+                    <View style={styles.sidebarWrapper}>
                         <Sidebar
                             chats={chats}
                             currentChatId={currentChatId}
@@ -196,7 +94,7 @@ export default function ChatScreen() {
                             onDeleteChat={deleteChat}
                             onClose={() => setIsSidebarOpen(false)}
                         />
-                    </Animated.View>
+                    </View>
                 </View>
             </Modal>
         </View>

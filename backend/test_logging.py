@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import msgpack
 from fastapi.testclient import TestClient
 
+import fish_tts
 import main
 from auth import current_user
 from testutils import MARKER, LogCapture
@@ -38,7 +39,7 @@ class TestTtsLogsNoText(unittest.TestCase):
         main.app.dependency_overrides[current_user] = lambda: "user-1"
         try:
             with LogCapture() as logs, \
-                 patch.object(main, "_take_warm_connection", AsyncMock(return_value=ws)):
+                 patch.object(fish_tts, "_take_warm_connection", AsyncMock(return_value=ws)):
                 r = TestClient(main.app).get("/stream/tts", params={"text": f"Hallo {MARKER}"})
         finally:
             main.app.dependency_overrides.pop(current_user, None)

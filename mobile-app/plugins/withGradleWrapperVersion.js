@@ -3,23 +3,23 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * Expo Config-Plugin: setzt die Gradle-Wrapper-Version in
+ * Expo config plugin: sets the Gradle wrapper version in
  * android/gradle/wrapper/gradle-wrapper.properties.
  *
- * Grund: android/ ist gitignored und wird bei jedem `expo prebuild` neu aus
- * dem React-Native-Template erzeugt (siehe withReleaseSigning.js). Das
- * Template bringt seine eigene, meist ältere Gradle-Version mit; ein
- * manueller Edit an gradle-wrapper.properties geht beim nächsten Prebuild
- * verloren. expo-build-properties kennt keine Option dafür (nur
- * compileSdkVersion, buildToolsVersion, kotlinVersion, …), daher dieses
- * kleine eigene Plugin nach demselben Muster wie withReleaseSigning.js.
+ * Reason: android/ is gitignored and is created again from the React Native
+ * template on every `expo prebuild` (see withReleaseSigning.js). The template
+ * brings its own, usually older Gradle version; a manual edit to
+ * gradle-wrapper.properties is lost on the next prebuild.
+ * expo-build-properties has no option for this (only compileSdkVersion,
+ * buildToolsVersion, kotlinVersion, …), so this is a small own plugin
+ * with the same pattern as withReleaseSigning.js.
  *
- * Nutzung in app.json:
+ * Usage in app.json:
  *   ["./plugins/withGradleWrapperVersion", { "version": "9.7.1" }]
  */
 module.exports = function withGradleWrapperVersion(config, { version } = {}) {
     if (!version) {
-        throw new Error('withGradleWrapperVersion: "version" ist erforderlich, z.B. "9.7.1".');
+        throw new Error('withGradleWrapperVersion: "version" is required, e.g. "9.7.1".');
     }
 
     return withDangerousMod(config, [
@@ -33,7 +33,7 @@ module.exports = function withGradleWrapperVersion(config, { version } = {}) {
             );
 
             if (!fs.existsSync(wrapperPath)) {
-                throw new Error(`withGradleWrapperVersion: ${wrapperPath} nicht gefunden.`);
+                throw new Error(`withGradleWrapperVersion: ${wrapperPath} not found.`);
             }
 
             const contents = fs.readFileSync(wrapperPath, 'utf8');
@@ -44,7 +44,7 @@ module.exports = function withGradleWrapperVersion(config, { version } = {}) {
 
             if (patched === contents && !contents.includes(`gradle-${version}-bin.zip`)) {
                 throw new Error(
-                    `withGradleWrapperVersion: distributionUrl-Zeile in ${wrapperPath} nicht gefunden — Format des Templates hat sich geändert.`
+                    `withGradleWrapperVersion: distributionUrl line not found in ${wrapperPath} — the template format has changed.`
                 );
             }
 

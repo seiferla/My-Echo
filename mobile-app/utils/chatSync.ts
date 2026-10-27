@@ -73,15 +73,6 @@ export async function syncChats(local: Chat[]): Promise<Chat[] | null> {
     }
 }
 
-/** Load, sync and update the local cache (for callers without their own state). */
-export async function loadChats(): Promise<Chat[]> {
-    const local = await loadLocalChats();
-    const merged = await syncChats(local);
-    if (!merged) return local;
-    await writeChats(JSON.stringify(merged));
-    return merged;
-}
-
 // Max wait for the backend at app start when local chats exist.
 const START_GRACE_MS = 600;
 const GRACE_EXPIRED = Symbol('grace expired');

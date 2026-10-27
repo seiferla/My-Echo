@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+import fish_tts
 import main
 import mock_tts
 from auth import current_user
@@ -18,10 +19,10 @@ def _forbid_fish():
     """Every access to Fish Audio fails the test."""
     boom = AssertionError("Fish Audio must not be used in mock mode")
     return [
-        patch.object(main, "_open_fish_connection", AsyncMock(side_effect=boom)),
-        patch.object(main, "_take_warm_connection", AsyncMock(side_effect=boom)),
-        patch.object(main.httpx, "AsyncClient", MagicMock(side_effect=boom)),
-        patch.object(main.websockets, "connect", AsyncMock(side_effect=boom)),
+        patch.object(fish_tts, "_open_connection", AsyncMock(side_effect=boom)),
+        patch.object(fish_tts, "_take_warm_connection", AsyncMock(side_effect=boom)),
+        patch.object(fish_tts.httpx, "AsyncClient", MagicMock(side_effect=boom)),
+        patch.object(fish_tts.websockets, "connect", AsyncMock(side_effect=boom)),
     ]
 
 
@@ -134,7 +135,7 @@ class TestProviderSwitch(unittest.TestCase):
 
     def test_health_reports_fish_when_not_mocked(self):
         with patch.object(main, "TTS_PROVIDER", "fish"), \
-             patch.object(main.httpx, "AsyncClient") as client_class:
+             patch.object(fish_tts.httpx, "AsyncClient") as client_class:
             client = AsyncMock()
             client.__aenter__.return_value = client
             client.get.return_value = MagicMock(status_code=200)

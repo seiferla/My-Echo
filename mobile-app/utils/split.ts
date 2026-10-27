@@ -1,27 +1,26 @@
-// Zerlegt einen Eingabetext in abgeschlossene Sätze plus einen unfertigen Rest.
-// Gedacht für die Satz-Vorab-Synthese: Während der User tippt, werden nur Sätze
-// synthetisiert, die mit einem Satzzeichen abgeschlossen sind — der Rest bleibt
-// liegen, bis er (evtl. beim Senden) fertig ist.
+// Splits an input text into finished sentences plus an unfinished rest.
+// Used by the sentence prefetch: while the user types, only sentences that end
+// with a punctuation mark are synthesized; the rest waits (maybe until send).
 
-// Schließende Zeichen, die direkt auf ein Satzzeichen folgen dürfen, ohne dass
-// das Satzzeichen dadurch aufhört ein Satzende zu sein ("Hallo.", "Hallo!").
+// Closing characters that may follow the punctuation mark and still keep it a
+// sentence end (e.g. a closing quote or bracket).
 const CLOSING = new Set(['"', "'", '”', '“', ')', ']', '»', '„']);
 
 export interface SentenceSplit {
-    /** Abgeschlossene Sätze, getrimmt, in Reihenfolge. */
+    /** Finished sentences, trimmed, in order. */
     completed: string[];
-    /** Noch nicht abgeschlossener Rest, getrimmt (leer wenn Text auf Satzende endet). */
+    /** Unfinished rest, trimmed (empty when the text ends with a sentence end). */
     remainder: string;
 }
 
 /**
- * Liefert die Position direkt hinter einem Satzende (Satzzeichen + schließende
- * Zeichen + folgendes Whitespace) oder null, wenn `i` kein Satzende ist.
+ * Returns the position right after a sentence end (punctuation + closing chars
+ * + following whitespace), or null when `i` is not a sentence end.
  *
- * Kernregel: Ein `.`/`!`/`?` ist nur dann ein Satzende, wenn danach (ggf. nach
- * schließenden Quotes/Klammern) Whitespace oder Textende folgt. Das fängt mit
- * einer Regel die häufigen Fälle ab, in denen ein Punkt KEIN Satzende ist:
- * Dezimalzahlen ("3.5"), Tausenderpunkte ("1.200") und Abkürzungen ("z.B.").
+ * Rule: `.`/`!`/`?` ends a sentence only when whitespace or the end of the text
+ * follows (maybe after closing quotes/brackets). This one rule handles the
+ * common cases where a period is NOT a sentence end: decimals ("3.5"),
+ * thousands ("1.200") and abbreviations ("z.B.").
  */
 function scanSentenceEnd(text: string, i: number): number | null {
     let j = i + 1;

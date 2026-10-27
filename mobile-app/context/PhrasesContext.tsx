@@ -17,7 +17,7 @@ interface PhrasesContextType {
     phrases: Phrase[];
     settings: PhraseSettings;
     ready: boolean;
-    // Die Phrasen, die tatsächlich in der ChatArea liegen (max. 3).
+    // The phrases the ChatArea shows (max. 3).
     visiblePhrases: Phrase[];
     addPhrase: (text: string) => void;
     updatePhrase: (id: string, text: string) => void;
@@ -45,18 +45,17 @@ const PhrasesContext = createContext<PhrasesContextType>({
 });
 
 /**
- * Hält Schnell-Phrasen und ihre Anzeige-Einstellungen im Speicher, damit
- * Chat-Screen und Verwaltungs-Seite denselben Stand sehen (Änderungen
- * erscheinen sofort in der ChatArea). Schreibt jede Änderung direkt in die
- * JSON-Datei — die Liste ist klein, eine Debounce-Logik wäre unnötig.
+ * Holds the quick phrases and their settings, so the chat screen and the
+ * phrases screen show the same data (changes appear in the ChatArea at once).
+ * Every change is written to the JSON file directly; the list is small, so
+ * no debounce is needed.
  */
 export function PhrasesProvider({ children }: { children: React.ReactNode }) {
     const { isAvailable, voice, model } = useCloudStatus();
     const [phrases, setPhrases] = useState<Phrase[]>([]);
     const [settings, setSettings] = useState<PhraseSettings>(DEFAULT_SETTINGS);
     const [ready, setReady] = useState(false);
-    // Merkt sich, welche Text/Stimme-Kombination schon vorgewärmt wurde —
-    // verhindert, dass jeder Render-Durchlauf erneut über alle Phrasen läuft.
+    // Text/voice pairs that are already prewarmed, so not every render loops over all phrases.
     const prewarmedRef = useRef<Set<string>>(new Set());
 
     useEffect(() => {
@@ -81,8 +80,8 @@ export function PhrasesProvider({ children }: { children: React.ReactNode }) {
 
     const visiblePhrases = phrases.slice(0, settings.visibleCount);
 
-    // Audio der sichtbaren Phrasen vorab in den Cache holen, sobald das Backend
-    // erreichbar ist. Danach kostet ein Phrasen-Tipp keine Netzwerkzeit mehr.
+    // Load the audio of the visible phrases into the cache when the backend is
+    // reachable. After that a tap on a phrase needs no network.
     useEffect(() => {
         if (!ready || !isAvailable || visiblePhrases.length === 0) return;
         const key = (p: Phrase) => `${p.text}|${voice}|${model}`;
@@ -92,8 +91,7 @@ export function PhrasesProvider({ children }: { children: React.ReactNode }) {
         if (pending.length === 0) return;
         pending.forEach((p) => prewarmedRef.current.add(key(p)));
         prewarmPhrases(pending, isAvailable, voice, model).catch(() => {
-            // Fehlgeschlagenes Vorwärmen ist unkritisch — beim Antippen wird
-            // notfalls live geladen. Keys wieder freigeben für einen Retry.
+            // Not critical: a tap loads the audio live. Free the keys for a retry.
             pending.forEach((p) => prewarmedRef.current.delete(key(p)));
         });
     }, [ready, isAvailable, voice, model, phrases, settings.visibleCount]);
@@ -128,10 +126,9 @@ export function PhrasesProvider({ children }: { children: React.ReactNode }) {
         commit(phrases.filter((p) => p.id !== id));
     };
 
-    // Reihenfolge bleibt bewusst manuell (Drag & Drop bzw. Pfeile): eine
-    // automatische Sortierung nach Häufigkeit würde die Positionen ständig
-    // verschieben und das Muskelgedächtnis zerstören — für schnelles Antworten
-    // ist Vorhersagbarkeit wichtiger.
+    // The order is manual on purpose (drag & drop or arrows). Sorting by use
+    // would move the phrases all the time and break muscle memory; for fast
+    // answers a stable order matters more.
     const reorderPhrases = (from: number, to: number) => {
         const next = reorder(phrases, from, to);
         if (next !== phrases) commit(next);
