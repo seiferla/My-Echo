@@ -74,8 +74,7 @@ SPEECH_URL = "https://api.mistral.ai/v1/audio/speech"
 AUDIO_MODEL = os.getenv("TTS_MODEL", "voxtral-mini-tts-3-0")
 AUDIO_VOICE_ID = os.getenv("TTS_VOICE", "")
 
-# Streaming-Timeout: Verbindungsaufbau 10 s, Lesen bis zu 120 s — großzügig,
-# damit auch längere Nachrichten vollständig gestreamt werden.
+# Generous streaming timeout so long messages finish.
 TTS_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
 
 
@@ -96,7 +95,7 @@ def _speech_payload(text: str) -> dict:
 
 
 def _parse_sse_event(data_lines: list) -> tuple[bool, list]:
-    """Parst ein SSE-Event (Liste von data:-Zeilen) zu (done, [audio_bytes])."""
+    """Parse one SSE event (data: lines) into (done, [audio_bytes])."""
     payload = "\n".join(data_lines)
     if not payload:
         return False, []
@@ -116,7 +115,7 @@ def _parse_sse_event(data_lines: list) -> tuple[bool, list]:
 
 
 async def _iter_mistral_audio(response) -> AsyncIterator[bytes]:
-    """Iteriert über die SSE-Antwort und liefert dekodierte Audio-Bytes."""
+    """Yield decoded audio bytes from the SSE stream."""
     data_lines: list = []
     done = False
     async for line in response.aiter_lines():

@@ -18,7 +18,7 @@ def _b64(data: bytes) -> str:
 
 
 class _FakeStreamResponse:
-    """Minimale SSE-Response zum Testen von _iter_mistral_audio."""
+    """Fake SSE response for _iter_mistral_audio."""
 
     def __init__(self, chunks):
         self._lines = []
@@ -37,7 +37,7 @@ class _FakeStreamResponse:
 
 
 def _install_stream_mock(mock_client_class, chunks):
-    """Verdrahtet httpx.AsyncClient so, dass stream() die Fake-SSE-Response liefert."""
+    """Wire httpx.AsyncClient so stream() returns the fake SSE response."""
     fake_response = _FakeStreamResponse(chunks)
     mock_client = AsyncMock()
     mock_client.__aenter__.return_value = mock_client
@@ -47,8 +47,8 @@ def _install_stream_mock(mock_client_class, chunks):
     stream_cm.__aenter__.return_value = fake_response
     stream_cm.__aexit__.return_value = False
 
-    # stream(...) muss synchron den Async-Context-Manager zurückgeben (kein
-    # await), sonst scheitert `async with client.stream(...)` an einem coroutine.
+    # stream() must return the async CM synchronously (no await), else
+    # `async with client.stream(...)` fails on a coroutine.
     mock_client.stream = MagicMock(return_value=stream_cm)
 
     mock_client_class.return_value = mock_client
@@ -56,7 +56,7 @@ def _install_stream_mock(mock_client_class, chunks):
 
 
 class TestSpeechPayload(unittest.TestCase):
-    """Tests für _speech_payload."""
+    """Tests for _speech_payload."""
 
     def test_payload_with_voice(self):
         with patch("main.AUDIO_MODEL", "voxtral-mini-tts-3-0"), \
@@ -77,7 +77,7 @@ class TestSpeechPayload(unittest.TestCase):
 
 
 class TestParseSseEvent(unittest.TestCase):
-    """Tests für _parse_sse_event."""
+    """Tests for _parse_sse_event."""
 
     def test_done_event_returns_done(self):
         done, chunks = main._parse_sse_event(['{"type": "speech.audio.done", "usage": {}}'])
@@ -103,7 +103,7 @@ class TestParseSseEvent(unittest.TestCase):
 
 
 class TestIterMistralAudio(unittest.IsolatedAsyncioTestCase):
-    """Tests für _iter_mistral_audio."""
+    """Tests for _iter_mistral_audio."""
 
     async def test_yields_decoded_chunks_and_stops_on_done(self):
         response = _FakeStreamResponse([b"chunk1", b"chunk2"])
@@ -112,7 +112,7 @@ class TestIterMistralAudio(unittest.IsolatedAsyncioTestCase):
 
 
 class TestStreamTts(unittest.IsolatedAsyncioTestCase):
-    """Tests für den HTTP-Streaming-Endpunkt /stream/tts."""
+    """Tests for the /stream/tts endpoint."""
 
     @patch("main.httpx.AsyncClient")
     async def test_streams_audio_bytes(self, mock_client_class):
@@ -133,7 +133,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
 
 
 class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
-    """Tests für den /health-Endpunkt."""
+    """Tests for the /health endpoint."""
 
     @patch("main.httpx.AsyncClient")
     async def test_health_success_includes_voice_and_model(self, mock_client_class):
@@ -190,7 +190,7 @@ class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
 
     @patch("main.httpx.AsyncClient")
     async def test_health_generic_exception_returns_error(self, mock_client_class):
-        """Unerwartete Exception wird ohne interne Details als error zurückgegeben."""
+        """Unexpected exception maps to a generic error."""
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
         mock_client.get.side_effect = Exception("Unexpected error")
