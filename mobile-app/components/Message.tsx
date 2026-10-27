@@ -5,16 +5,11 @@ import {
     TouchableOpacity,
     Pressable,
     StyleSheet,
-    Platform,
-    ToastAndroid,
     Alert,
-    Vibration,
-    Share,
 } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
-import * as Sharing from 'expo-sharing';
 import { Bot, Volume2, Pause, Pencil } from 'lucide-react-native';
-import { speak, stopSpeaking, getShareableAudioUri } from '../utils/tts';
+import { speak, stopSpeaking } from '../utils/tts';
+import { copyMessage, shareMessageAudio, shareMessageText } from '../utils/messageShare';
 import { useCloudStatus } from '../context/CloudStatusContext';
 import { recordTtsRequest } from '../utils/ttsLog';
 
@@ -52,33 +47,7 @@ export function Message({ message, onStartEdit, autoPlay }: MessageProps) {
         };
     }, []);
 
-    // Copies the message text. Short vibration plus a toast (Android) or alert (iOS)
-    // as feedback. Clipboard errors are ignored.
-    const handleCopy = async () => {
-        try {
-            await Clipboard.setStringAsync(message.content);
-            Vibration.vibrate(40);
-            if (Platform.OS === 'android') {
-                ToastAndroid.show('In Zwischenablage kopiert', ToastAndroid.SHORT);
-            } else {
-                Alert.alert('Kopiert', 'Text in die Zwischenablage übernommen.');
-            }
-        } catch {
-            // No error dialog: the user sees no feedback and can try again.
-        }
-    };
-
-    // Shares the text with the native share sheet (WhatsApp is one option there).
-    const shareText = async () => {
-        try {
-            await Share.share({ message: message.content });
-        } catch {
-            // Cancelled by the user or platform error: no feedback needed.
-        }
-    };
-
-    // Shares the spoken version as an audio file. Needs cloud TTS (expo-speech makes
-    // no file). On a cache miss it downloads first, which can take a moment.
+    // Only one audio share at a time: preparing the file can take a moment.
     const shareAudio = async () => {
         if (isPreparingShareRef.current) return;
         if (!isAvailable) {
@@ -88,21 +57,7 @@ export function Message({ message, onStartEdit, autoPlay }: MessageProps) {
 
         isPreparingShareRef.current = true;
         try {
-            const uri = await getShareableAudioUri(message.content, isAvailable, voice, model);
-            if (!uri) {
-                Alert.alert('Fehler', 'Sprachnachricht konnte nicht vorbereitet werden.');
-                return;
-            }
-            if (!(await Sharing.isAvailableAsync())) {
-                Alert.alert('Nicht unterstützt', 'Teilen wird auf diesem Gerät nicht unterstützt.');
-                return;
-            }
-            await Sharing.shareAsync(uri, {
-                mimeType: 'audio/mpeg',
-                dialogTitle: 'Sprachnachricht teilen',
-            });
-        } catch {
-            Alert.alert('Fehler', 'Sprachnachricht konnte nicht geteilt werden.');
+            await shareMessageAudio(message.content, voice, model);
         } finally {
             isPreparingShareRef.current = false;
         }
@@ -110,7 +65,7 @@ export function Message({ message, onStartEdit, autoPlay }: MessageProps) {
 
     const handleShare = () => {
         Alert.alert('Teilen als', undefined, [
-            { text: 'Text', onPress: shareText },
+            { text: 'Text', onPress: () => shareMessageText(message.content) },
             { text: 'Sprachnachricht', onPress: shareAudio },
             { text: 'Abbrechen', style: 'cancel' },
         ]);
@@ -118,7 +73,7 @@ export function Message({ message, onStartEdit, autoPlay }: MessageProps) {
 
     const handleLongPress = () => {
         Alert.alert('Nachricht', undefined, [
-            { text: 'Kopieren', onPress: handleCopy },
+            { text: 'Kopieren', onPress: () => copyMessage(message.content) },
             { text: 'Teilen', onPress: handleShare },
             { text: 'Abbrechen', style: 'cancel' },
         ]);
