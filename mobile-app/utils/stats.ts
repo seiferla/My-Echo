@@ -53,6 +53,11 @@ export function flattenMessages(chats: Chat[]): FlatMessage[] {
     return out.sort((a, b) => a.ts - b.ts);
 }
 
+/** "DD.MM" label for a chart axis. */
+function dayLabel(d: Date): string {
+    return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 export function filterByRange(msgs: FlatMessage[], from: number, to: number): FlatMessage[] {
     return msgs.filter((m) => m.ts >= from && m.ts <= to);
 }
@@ -81,7 +86,7 @@ export function messagesPerDay(msgs: FlatMessage[], from: number, to: number): T
         const k = dayKey(d.getTime());
         buckets.push({
             key: k,
-            label: `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`,
+            label: dayLabel(d),
             count: counts[k] ?? 0,
         });
     }
@@ -261,7 +266,7 @@ export function summarizeTts(stats: TtsStats, from: number, to: number): TtsSumm
         durationMs += bucket?.durationMs ?? 0;
         perDay.push({
             key: k,
-            label: `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`,
+            label: dayLabel(d),
             count: r,
         });
     }

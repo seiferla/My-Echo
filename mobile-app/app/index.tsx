@@ -18,6 +18,10 @@ import { loadChatsForStart, mergeChats, pushChat, deleteChatRemote, persistLocal
 
 const { width } = Dimensions.get('window');
 
+function createEmptyChat(id = Date.now().toString()): Chat {
+    return { id, title: 'Neuer Chat', messages: [], timestamp: Date.now() };
+}
+
 export default function ChatScreen() {
     const insets = useSafeAreaInsets();
     const { isAvailable } = useCloudStatus();
@@ -33,12 +37,7 @@ export default function ChatScreen() {
             const today = new Date().setHours(0, 0, 0, 0);
             const latest = loaded[0];
             if (latest && new Date(latest.timestamp).setHours(0, 0, 0, 0) < today) {
-                const newChat: Chat = {
-                    id: Date.now().toString(),
-                    title: 'Neuer Chat',
-                    messages: [],
-                    timestamp: Date.now(),
-                };
+                const newChat = createEmptyChat();
                 const updated = [newChat, ...loaded];
                 setChats(updated);
                 setCurrentChatId(newChat.id);
@@ -48,12 +47,7 @@ export default function ChatScreen() {
                 setCurrentChatId(loaded[0].id);
             } else {
                 // No chats at all: create an empty welcome chat.
-                const fresh: Chat = {
-                    id: '1',
-                    title: 'Neuer Chat',
-                    messages: [],
-                    timestamp: Date.now(),
-                };
+                const fresh = createEmptyChat('1');
                 setChats([fresh]);
                 pushChat(fresh);
             }
@@ -80,12 +74,7 @@ export default function ChatScreen() {
     const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
     const createNewChat = () => {
-        const newChat: Chat = {
-            id: Date.now().toString(),
-            title: 'Neuer Chat',
-            messages: [],
-            timestamp: Date.now(),
-        };
+        const newChat = createEmptyChat();
         setChats([newChat, ...chats]);
         setCurrentChatId(newChat.id);
         setIsSidebarOpen(false);
@@ -108,7 +97,7 @@ export default function ChatScreen() {
         setChats(prevChats => {
             const newChats = prevChats.filter(chat => chat.id !== id);
             if (newChats.length === 0) {
-                const fresh = { id: Date.now().toString(), title: 'Neuer Chat', messages: [], timestamp: Date.now() };
+                const fresh = createEmptyChat();
                 pushChat(fresh);
                 return [fresh];
             }

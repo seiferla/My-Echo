@@ -183,15 +183,14 @@ async function playLocalAudio(
     });
 }
 
+function streamUrl(text: string): string {
+    return `${BACKEND_STREAM_URL}?text=${encodeURIComponent(text)}`;
+}
+
 // Download into the cache, with a timeout.
-function downloadWithTimeout(
-    text: string,
-    url: string,
-    voice: string,
-    model: string,
-): Promise<string> {
+function downloadWithTimeout(text: string, voice: string, model: string): Promise<string> {
     return Promise.race([
-        downloadAndCache(text, url, voice, model),
+        downloadAndCache(text, streamUrl(text), voice, model),
         new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('Download timeout')), DOWNLOAD_TIMEOUT_MS)
         ),
@@ -217,6 +216,13 @@ export interface SpeakResult {
     sentences?: number;
 }
 
+/** Logs the [METRIC] line and builds the result of one cloud path. */
+function cloudResult(path: SpeakPath, ttfaMs: number, text: string, startMs: number): SpeakResult {
+    const totalMs = Date.now() - startMs;
+    console.log(`${TAG} [METRIC] path=${path} chars=${text.length} ttfa=${ttfaMs} total=${totalMs}`);
+    return { path, ttfaMs, totalMs, chars: text.length };
+}
+
 async function speakWithCloud(
     text: string,
     voice: string,
@@ -233,28 +239,28 @@ async function speakWithCloud(
     const preview = text.length > 40 ? text.slice(0, 40) + '…' : text;
     console.log(`${TAG} speak "${preview}" (${text.length} chars) voice=${voice || '?'} model=${model || '?'}`);
 
+    const downloadAndPlay = async (path: SpeakPath): Promise<SpeakResult> => {
+        const localUri = await downloadWithTimeout(text, voice, model);
+        console.log(`${TAG} Downloaded in ${Date.now() - startMs} ms`);
+        ensureActive();
+        const ttfaMs = await playLocalAudio(localUri, session, startMs, onFirstAudio);
+        return cloudResult(path, ttfaMs, text, startMs);
+    };
+
     const cachedUri = await getCachedUri(text, voice, model);
     ensureActive();
 
     if (cachedUri) {
         console.log(`${TAG} Cache HIT (${Date.now() - startMs} ms lookup)`);
         const ttfaMs = await playLocalAudio(cachedUri, session, startMs, onFirstAudio);
-        console.log(`${TAG} [METRIC] path=cache chars=${text.length} ttfa=${ttfaMs} total=${Date.now() - startMs}`);
-        return { path: 'cache', ttfaMs, totalMs: Date.now() - startMs, chars: text.length };
+        return cloudResult('cache', ttfaMs, text, startMs);
     }
-
-    const url = `${BACKEND_STREAM_URL}?text=${encodeURIComponent(text)}`;
 
     // Short text: download and cache instead of streaming (see SHORT_TEXT_CHARS).
     if (text.length <= SHORT_TEXT_CHARS) {
         try {
             console.log(`${TAG} Cache MISS — short text, download+cache`);
-            const localUri = await downloadWithTimeout(text, url, voice, model);
-            console.log(`${TAG} Downloaded in ${Date.now() - startMs} ms`);
-            ensureActive();
-            const ttfaMs = await playLocalAudio(localUri, session, startMs, onFirstAudio);
-            console.log(`${TAG} [METRIC] path=download chars=${text.length} ttfa=${ttfaMs} total=${Date.now() - startMs}`);
-            return { path: 'download', ttfaMs, totalMs: Date.now() - startMs, chars: text.length };
+            return await downloadAndPlay('download');
         } catch (e) {
             if (e instanceof AbortedError) throw e;
             console.warn(`${TAG} Short-text download failed, falling back to streaming:`, e);
@@ -266,21 +272,15 @@ async function speakWithCloud(
     // Play the stream while it arrives. If the player cannot play the chunked
     // response, fall back to download + cache.
     try {
-        const ttfaMs = await playLocalAudio(url, session, startMs, onFirstAudio);
-        console.log(`${TAG} [METRIC] path=stream chars=${text.length} ttfa=${ttfaMs} total=${Date.now() - startMs}`);
-        return { path: 'stream', ttfaMs, totalMs: Date.now() - startMs, chars: text.length };
+        const ttfaMs = await playLocalAudio(streamUrl(text), session, startMs, onFirstAudio);
+        return cloudResult('stream', ttfaMs, text, startMs);
     } catch (e) {
         if (e instanceof AbortedError) throw e;
         console.warn(`${TAG} Streaming failed, falling back to download:`, e);
     }
 
     ensureActive();
-    const localUri = await downloadWithTimeout(text, url, voice, model);
-    console.log(`${TAG} Downloaded in ${Date.now() - startMs} ms`);
-    ensureActive();
-    const ttfaMs = await playLocalAudio(localUri, session, startMs, onFirstAudio);
-    console.log(`${TAG} [METRIC] path=stream-fallback-download chars=${text.length} ttfa=${ttfaMs} total=${Date.now() - startMs}`);
-    return { path: 'stream-fallback-download', ttfaMs, totalMs: Date.now() - startMs, chars: text.length };
+    return downloadAndPlay('stream-fallback-download');
 }
 
 // Returns a local audio file for a text, for sharing (e.g. WhatsApp). Plays nothing.
@@ -297,9 +297,7 @@ export async function getShareableAudioUri(
     try {
         const cachedUri = await getCachedUri(text, voice, model);
         if (cachedUri) return cachedUri;
-
-        const url = `${BACKEND_STREAM_URL}?text=${encodeURIComponent(text)}`;
-        return await downloadWithTimeout(text, url, voice, model);
+        return await downloadWithTimeout(text, voice, model);
     } catch (e) {
         console.warn(`${TAG} getShareableAudioUri failed:`, e);
         return null;
@@ -312,14 +310,19 @@ export async function getShareableAudioUri(
 const synthQueue = createSynthQueue(
     async (text, voice, model) => {
         if (await getCachedUri(text, voice, model)) return;
-        const url = `${BACKEND_STREAM_URL}?text=${encodeURIComponent(text)}`;
-        await downloadWithTimeout(text, url, voice, model);
+        await downloadWithTimeout(text, voice, model);
         console.log(`${TAG} Prefetched sentence (${text.length} chars)`);
     },
     (e) => console.warn(`${TAG} Prefetch failed:`, e),
 );
 
 export const prefetchSentence = synthQueue.enqueue;
+
+/** If the queue already synthesizes this sentence, wait for it instead of loading it twice. */
+async function waitForPendingSynth(sentence: string, voice: string, model: string): Promise<void> {
+    const pending = synthQueue.awaitPending(sentence, voice, model);
+    if (pending) await pending;
+}
 
 // Loads the player for a sentence while the previous one still plays: waits for
 // the synthesis, creates the player (loads the file) and leaves it paused.
@@ -330,8 +333,7 @@ async function preparePlayer(
     model: string,
     session: number,
 ): Promise<AudioPlayer | null> {
-    const pending = synthQueue.awaitPending(sentence, voice, model);
-    if (pending) await pending;
+    await waitForPendingSynth(sentence, voice, model);
     if (session !== activeSession) return null;
     const uri = await getCachedUri(sentence, voice, model);
     if (!uri || session !== activeSession) return null;
@@ -383,9 +385,7 @@ async function speakSentences(
 
         try {
             if (i === 0) {
-                // If typing prefetch already downloads sentence 1, wait for it.
-                const pending = synthQueue.awaitPending(sentence, voice, model);
-                if (pending) await pending;
+                await waitForPendingSynth(sentence, voice, model);
                 ensureActive();
 
                 first = await speakWithCloud(
@@ -403,8 +403,7 @@ async function speakSentences(
                     await playLocalAudio('', session, startMs, undefined, player);
                 } else {
                     // Not cached (synthesis failed or too slow): normal path.
-                    const pending = synthQueue.awaitPending(sentence, voice, model);
-                    if (pending) await pending;
+                    await waitForPendingSynth(sentence, voice, model);
                     ensureActive();
                     await speakWithCloud(sentence, voice, model, startMs);
                 }
