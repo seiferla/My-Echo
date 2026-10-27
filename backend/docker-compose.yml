@@ -7,10 +7,8 @@ services:
       - "4444:4444"
     environment:
       TTS_API_KEY: ${TTS_API_KEY}
-      TTS_MODEL: ${TTS_MODEL:-s2-pro}
+      TTS_MODEL: ${TTS_MODEL:-voxtral-mini-tts-3-0}
       TTS_VOICE: ${TTS_VOICE:-}
-      TTS_LATENCY: ${TTS_LATENCY:-balanced}
-      TTS_CHUNK_LENGTH: ${TTS_CHUNK_LENGTH:-50}
       DB_PATH: /data/chats.db
     volumes:
       - myecho-data:/data

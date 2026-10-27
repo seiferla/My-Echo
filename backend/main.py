@@ -1,12 +1,11 @@
 import os
 import time
-import asyncio
+import json
+import base64
 import logging
-import msgpack
 import httpx
-import websockets
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, AsyncIterator
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -70,99 +69,70 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-FISH_API_KEY = os.getenv("TTS_API_KEY", "")
-WS_URL = "wss://api.fish.audio/v1/tts/live"
-AUDIO_MODEL = os.getenv("TTS_MODEL", "s2-pro")
-AUDIO_REFERENCE_ID = os.getenv("TTS_VOICE", "")
+MISTRAL_API_KEY = os.getenv("TTS_API_KEY", "")
+SPEECH_URL = "https://api.mistral.ai/v1/audio/speech"
+AUDIO_MODEL = os.getenv("TTS_MODEL", "voxtral-mini-tts-3-0")
+AUDIO_VOICE_ID = os.getenv("TTS_VOICE", "")
 
-# Standard hier: "balanced" — bester TTFA/Qualitäts-Kompromiss fürs Streaming
-AUDIO_LATENCY = os.getenv("TTS_LATENCY", "balanced")
-
-# chunk_length: Token-Chunkgröße (typ. 30–300, Fish-Default 200). Kleinere
-# Werte erzwingen früheres erstes Audio (schnellere TTFA). 50 ist ein guter
-# Kompromiss für typische AAC-Nachrichten (2–200 Zeichen).
-try:
-    AUDIO_CHUNK_LENGTH = int(os.getenv("TTS_CHUNK_LENGTH", "50"))
-except ValueError:
-    AUDIO_CHUNK_LENGTH = 50
-
-# --- Pre-Warming State -------------------------------------------------------
-_warm = {"ws": None, "ts": 0.0}
-_warm_lock = asyncio.Lock()
-WARM_TTL_SECONDS = 25.0
+# Streaming-Timeout: Verbindungsaufbau 10 s, Lesen bis zu 120 s — großzügig,
+# damit auch längere Nachrichten vollständig gestreamt werden.
+TTS_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
 
 
-def _fish_headers() -> dict:
-    return {
-        "Authorization": f"Bearer {FISH_API_KEY}",
+def _mistral_headers() -> dict:
+    return {"Authorization": f"Bearer {MISTRAL_API_KEY}"}
+
+
+def _speech_payload(text: str) -> dict:
+    payload = {
+        "input": text,
         "model": AUDIO_MODEL,
+        "response_format": "mp3",
+        "stream": True,
     }
+    if AUDIO_VOICE_ID:
+        payload["voice_id"] = AUDIO_VOICE_ID
+    return payload
 
 
-def _start_payload() -> bytes:
-    return msgpack.packb({
-        "event": "start",
-        "request": {
-            "text": "",
-            "format": "mp3",
-            "latency": AUDIO_LATENCY,
-            "chunk_length": AUDIO_CHUNK_LENGTH,
-            "reference_id": AUDIO_REFERENCE_ID,
-            "prosody": {
-                "speed": 0.85,
-                "volume": 0,
-            }
-        }
-    })
+def _parse_sse_event(data_lines: list) -> tuple[bool, list]:
+    """Parst ein SSE-Event (Liste von data:-Zeilen) zu (done, [audio_bytes])."""
+    payload = "\n".join(data_lines)
+    if not payload:
+        return False, []
+    try:
+        obj = json.loads(payload)
+    except json.JSONDecodeError:
+        return False, []
+    if obj.get("type") == "speech.audio.done":
+        return True, []
+    audio = obj.get("audio_data")
+    if not audio:
+        return False, []
+    try:
+        return False, [base64.b64decode(audio)]
+    except Exception:
+        return False, []
 
 
-async def _open_fish_connection():
-    """Öffnet eine Fish-Audio-Verbindung und sendet das start-Event."""
-    ws = await websockets.connect(WS_URL, additional_headers=_fish_headers())
-    await ws.send(_start_payload())
-    return ws
-
-
-async def _take_warm_connection():
-    """
-    Gibt eine vorgewärmte Verbindung zurück (und entfernt sie aus dem State),
-    falls eine frische genug existiert. Sonst None.
-    """
-    async with _warm_lock:
-        ws = _warm["ws"]
-        age = time.monotonic() - _warm["ts"]
-        _warm["ws"] = None
-        if ws is not None and age < WARM_TTL_SECONDS:
-            return ws
-        # zu alt: aufräumen
-        if ws is not None:
-            try:
-                await ws.close()
-            except Exception:
-                pass
-        return None
-
-
-@app.get("/warmup")
-async def warmup():
-    """
-    Öffnet vorab eine Fish-Audio-Verbindung und sendet das start-Event.
-    Vom Frontend aufgerufen sobald der User das Eingabefeld öffnet —
-    spart beim späteren Senden den Handshake + start-Roundtrip.
-    """
-    async with _warm_lock:
-        if _warm["ws"] is not None:
-            try:
-                await _warm["ws"].close()
-            except Exception:
-                pass
-            _warm["ws"] = None
-        try:
-            _warm["ws"] = await _open_fish_connection()
-            _warm["ts"] = time.monotonic()
-            return {"status": "warm"}
-        except Exception:
-            return {"status": "error", "message": "Internal server error"}
+async def _iter_mistral_audio(response) -> AsyncIterator[bytes]:
+    """Iteriert über die SSE-Antwort und liefert dekodierte Audio-Bytes."""
+    data_lines: list = []
+    done = False
+    async for line in response.aiter_lines():
+        if line == "":
+            done, chunks = _parse_sse_event(data_lines)
+            data_lines = []
+            for chunk in chunks:
+                yield chunk
+            if done:
+                break
+        elif line.startswith("data:"):
+            data_lines.append(line[len("data:"):].strip())
+    if not done and data_lines:
+        _, chunks = _parse_sse_event(data_lines)
+        for chunk in chunks:
+            yield chunk
 
 
 @app.get("/stream/tts")
@@ -170,63 +140,29 @@ async def warmup():
 async def stream_tts(request: Request, text: str):
     async def generate():
         t_start = time.monotonic()
-
-        # 1. Vorgewärmte Verbindung nutzen, sonst frisch öffnen
-        ws = await _take_warm_connection()
-        warm = ws is not None
-        opened_fresh = False
-        if ws is None:
-            ws = await _open_fish_connection()
-            opened_fresh = True
-
         first_audio_logged = False
         chunk_count = 0
         byte_count = 0
 
         try:
-            # 2. Text senden (start ist bereits gesendet — warm oder fresh)
-            try:
-                await ws.send(msgpack.packb({"event": "text", "text": text}))
-                await ws.send(msgpack.packb({"event": "flush"}))
-                await ws.send(msgpack.packb({"event": "stop"}))
-                t_sent = time.monotonic()
-            except Exception:
-                # Warme Verbindung war doch tot → einmal frisch neu versuchen
-                if not opened_fresh:
-                    try:
-                        await ws.close()
-                    except Exception:
-                        pass
-                    ws = await _open_fish_connection()
-                    await ws.send(msgpack.packb({"event": "text", "text": text}))
-                    await ws.send(msgpack.packb({"event": "flush"}))
-                    await ws.send(msgpack.packb({"event": "stop"}))
-                    t_sent = time.monotonic()
-                else:
-                    raise
-
-            # 3. Audio-Chunks streamen
-            async for message in ws:
-                msg = msgpack.unpackb(message)
-                if msg.get("event") == "audio":
-                    if not first_audio_logged:
-                        first_audio_logged = True
-                        t_first_audio = time.monotonic()
-                        logger.info(
-                            "TTS first audio: %d ms after text sent (%d ms total), "
-                            "chars=%d, warm=%s, chunk_length=%d, latency=%s",
-                            int((t_first_audio - t_sent) * 1000),
-                            int((t_first_audio - t_start) * 1000),
-                            len(text),
-                            warm,
-                            AUDIO_CHUNK_LENGTH,
-                            AUDIO_LATENCY,
-                        )
-                    chunk_count += 1
-                    byte_count += len(msg["audio"])
-                    yield msg["audio"]
-                elif msg.get("event") == "finish":
-                    break
+            async with httpx.AsyncClient(timeout=TTS_TIMEOUT) as client:
+                async with client.stream(
+                    "POST", SPEECH_URL, json=_speech_payload(text), headers=_mistral_headers()
+                ) as response:
+                    response.raise_for_status()
+                    async for chunk in _iter_mistral_audio(response):
+                        if not first_audio_logged:
+                            first_audio_logged = True
+                            logger.info(
+                                "TTS first audio: %d ms total, chars=%d, model=%s, voice=%s",
+                                int((time.monotonic() - t_start) * 1000),
+                                len(text),
+                                AUDIO_MODEL,
+                                AUDIO_VOICE_ID or "default",
+                            )
+                        chunk_count += 1
+                        byte_count += len(chunk)
+                        yield chunk
         finally:
             logger.info(
                 "TTS finished: %d ms total, %d audio chunks, %d bytes",
@@ -234,10 +170,6 @@ async def stream_tts(request: Request, text: str):
                 chunk_count,
                 byte_count,
             )
-            try:
-                await ws.close()
-            except Exception:
-                pass
 
     return StreamingResponse(
         generate(),
@@ -248,18 +180,19 @@ async def stream_tts(request: Request, text: str):
 
 @app.get("/health")
 async def health():
-    url = "https://api.fish.audio/wallet/self/api-credit"
-    headers = {"Authorization": f"Bearer {FISH_API_KEY}", "model": AUDIO_MODEL}
+    url = "https://api.mistral.ai/v1/models"
+    headers = _mistral_headers()
 
-    base = {"voice": AUDIO_REFERENCE_ID, "model": AUDIO_MODEL}
+    base = {"voice": AUDIO_VOICE_ID, "model": AUDIO_MODEL}
 
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
-            return {**base, "status": "ok", "credits": response.json()}
+            models = response.json().get("data", [])
+            return {**base, "status": "ok", "models": len(models)}
         except httpx.TimeoutException:
-            return {**base, "status": "unavailable", "message": "Fish Audio API Timeout"}
+            return {**base, "status": "unavailable", "message": "Mistral API Timeout"}
         except httpx.HTTPStatusError as e:
             return {**base, "status": "error", "message": f"HTTP {e.response.status_code}"}
         except Exception:

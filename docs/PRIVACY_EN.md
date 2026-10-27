@@ -63,14 +63,14 @@ safe and available on more than one device. The server is **not reachable from
 the public internet**: access works inside the private network or through a
 secure VPN connection.
 
-**c) Speech synthesis by a third party (Fish Audio)**
+**c) Speech synthesis by a third party (Mistral AI)**
 To turn text into speech, the text you typed is sent to the service provider
-**Fish Audio** (https://fish.audio) and processed there. Only the text itself is
-sent — **no device ID, no user name, no chat history**. Please also read Fish
-Audio's own privacy policy. The transfer happens only to create the spoken
+**Mistral AI** (https://mistral.ai) and processed there. Only the text itself is
+sent — **no device ID, no user name, no chat history**. Please also read Mistral
+AI's own privacy policy. The transfer happens only to create the spoken
 output.
 
-*Transfer outside the EU:* Fish Audio most likely processes the data on servers
+*Transfer outside the EU:* Mistral AI most likely processes the data on servers
 **outside the EU/EEA**. For those countries there is no adequacy decision by the
 EU Commission, and we have not signed Standard Contractual Clauses with the
 provider. The transfer therefore relies on your **explicit consent**
@@ -106,7 +106,7 @@ given by using the app (Art. 9(2)(a) GDPR).
 
 ## 5. Sharing with others
 
-We share data **only** with the speech provider named in 3c (Fish Audio), and
+We share data **only** with the speech provider named in 3c (Mistral AI), and
 only as far as it is needed for the spoken output. We do **not sell** data and
 we do **not use it for advertising**.
 
@@ -133,7 +133,7 @@ We want to be open about two points:
   **not encrypted (HTTP)**. The protection comes from the fact that this network
   or VPN tunnel is not publicly reachable. Anyone with access to that network
   could read the traffic.
-- The connection to the speech provider (Fish Audio) goes over the internet and
+- The connection to the speech provider (Mistral AI) goes over the internet and
   **is encrypted (TLS)**.
 
 ---

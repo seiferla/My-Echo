@@ -82,15 +82,15 @@ verfügbar zu machen. Es besteht **keine öffentliche Zugänglichkeit**; der Zug
 erfolgt innerhalb eines privaten Netzwerks bzw. über eine gesicherte
 VPN-Verbindung.
 
-**c) Sprachsynthese durch einen Drittanbieter (Fish Audio)**
+**c) Sprachsynthese durch einen Drittanbieter (Mistral AI)**
 Zur Umwandlung von Text in Sprache wird der eingegebene **Text an den
-Dienstleister Fish Audio** (https://fish.audio) übermittelt und dort verarbeitet.
+Dienstleister Mistral AI** (https://mistral.ai) übermittelt und dort verarbeitet.
 Übertragen wird ausschließlich der Text selbst — **keine Kennung des Geräts,
 kein Nutzername, kein Chat-Verlauf**. Bitte beachte hierzu die
-Datenschutzerklärung von Fish Audio. Die Übertragung dient ausschließlich der
+Datenschutzerklärung von Mistral AI. Die Übertragung dient ausschließlich der
 Erzeugung der Sprachausgabe.
 
-*Übermittlung in ein Drittland:* Fish Audio verarbeitet die Daten
+*Übermittlung in ein Drittland:* Mistral AI verarbeitet die Daten
 voraussichtlich auf Servern **außerhalb der EU/des EWR**. Für diese Länder
 liegt kein Angemessenheitsbeschluss der EU-Kommission vor, und es wurden keine
 eigenen Standardvertragsklauseln mit dem Anbieter geschlossen. Die Übermittlung
@@ -129,7 +129,7 @@ ausdrücklichen Einwilligung durch die Nutzung der App (Art. 9 Abs. 2 lit. a DSG
 ## 5. Weitergabe an Dritte
 
 Eine Weitergabe erfolgt **ausschließlich** an den unter 3c genannten
-Sprachsynthese-Dienstleister (Fish Audio), soweit dies für die Sprachausgabe
+Sprachsynthese-Dienstleister (Mistral AI), soweit dies für die Sprachausgabe
 erforderlich ist. Es findet **kein Verkauf** von Daten und **keine Nutzung für
 Werbung** statt.
 
@@ -156,7 +156,7 @@ Bitte beachte dabei zwei Punkte:
   **unverschlüsselt (HTTP)**. Der Schutz beruht darauf, dass dieses Netzwerk
   bzw. der VPN-Tunnel nicht öffentlich zugänglich ist. Wer Zugriff auf dieses
   Netzwerk hat, könnte die Übertragung mitlesen.
-- Die Übertragung an den Sprachsynthese-Dienstleister (Fish Audio) erfolgt über
+- Die Übertragung an den Sprachsynthese-Dienstleister (Mistral AI) erfolgt über
   das Internet und ist dorthin verschlüsselt (TLS).
 
 ---
