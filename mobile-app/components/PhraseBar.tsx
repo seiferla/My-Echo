@@ -4,14 +4,13 @@ import { Volume2 } from 'lucide-react-native';
 import { Phrase } from '../utils/phrases';
 
 interface PhraseBarProps {
-    // Bereits auf die eingestellte Anzahl gekürzt (siehe PhrasesContext).
+    // Already cut to the chosen count (see PhrasesContext).
     phrases: Phrase[];
-    // 'grid' — leerer Chat: große Kacheln mittig unter der Begrüßung.
-    // 'strip' — laufender Chat: schmale Zeile direkt über der Eingabe.
+    // 'grid': empty chat, big tiles below the greeting.
+    // 'strip': chat with messages, a small row above the input.
     variant: 'grid' | 'strip';
-    // Globaler Schalter: an → Antippen spricht sofort, aus → Text landet nur
-    // im Eingabefeld. Steuert auch das Lautsprecher-Symbol, damit die Anzeige
-    // kein Verhalten verspricht, das gerade aus ist.
+    // Global switch: on = a tap speaks at once, off = the text only goes into
+    // the input. Also controls the speaker icon, so the UI matches the behavior.
     speaksInstantly: boolean;
     onSelect: (phrase: Phrase) => void;
 }
@@ -59,7 +58,7 @@ export function PhraseBar({ phrases, variant, speaksInstantly, onSelect }: Phras
 }
 
 const styles = StyleSheet.create({
-    // --- Kacheln im leeren Chat ---
+    // --- Tiles in the empty chat ---
     grid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -70,7 +69,7 @@ const styles = StyleSheet.create({
         maxWidth: 600,
         alignSelf: 'center',
     },
-    // --- Zeile über der Eingabe ---
+    // --- Row above the input ---
     stripWrapper: {
         backgroundColor: '#ffffff',
     },
@@ -81,8 +80,8 @@ const styles = StyleSheet.create({
         paddingTop: 10,
         paddingBottom: 6,
     },
-    // Zurückhaltend im Design: heller Grauton, dünner Rand, keine Signalfarbe —
-    // die Phrasen sollen den Chat nicht dominieren.
+    // Quiet design (light grey, thin border, no signal color),
+    // so the phrases do not dominate the chat.
     chip: {
         flexDirection: 'row',
         alignItems: 'center',

@@ -1,0 +1,5 @@
+# Tokens expire after an hour, but they never belong in the repo.
+.tokens.json
+__pycache__/
+# Quick runs (--quick) only test the setup. Only real runs are committed.
+results/quick-*/

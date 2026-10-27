@@ -1,177 +1,135 @@
-import os
-import time
-import json
-import base64
 import logging
-import httpx
+import os
 from contextlib import asynccontextmanager
-from typing import Optional, AsyncIterator
-from fastapi import FastAPI, HTTPException, Query, Request
+from typing import Annotated
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from db import init_db, close_db, list_chats, upsert_chat, delete_chat
+import mistral_tts
+import mock_tts
+from auth import CurrentUser, current_user, require_metrics_token
+from db import (
+    init_db, close_db, list_chats, upsert_chat, delete_chat,
+    get_phrase_store, put_phrase_store, get_tts_stats, merge_tts_stats,
+)
+from schemas import (
+    MAX_MESSAGE_CHARS, MAX_STAT_DAYS, ChatModel, DayKey, PhraseStoreModel, TtsDayStatModel,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("myecho.tts")
 
-# --- Pydantic-Modelle (vor app = FastAPI(...) einfügen) ---------------------
 
-class MessageModel(BaseModel):
-    id: str
-    role: str = Field(pattern="^(user|assistant)$")
-    content: str = Field(min_length=1, max_length=10_000)
-    timestamp: Optional[int] = None
-    via: Optional[str] = Field(None, pattern="^(send|save)$")
-    editCount: int = 0
+class StripQueryFromAccessLog(logging.Filter):
+    """Removes the query string from the Uvicorn access log, so /stream/tts?text=... never logs the text."""
 
-
-class ChatModel(BaseModel):
-    id: str
-    title: str = Field(max_length=200)
-    timestamp: int
-    pinned: bool = False
-    messages: list[MessageModel] = []
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        # Uvicorn passes "path?query" as the third argument.
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str):
+            record.args = (*args[:2], args[2].split("?", 1)[0], *args[3:])
+        return True
 
 
-# --- Lifespan: DB beim Start initialisieren, beim Stop schließen ------------
+logging.getLogger("uvicorn.access").addFilter(StripQueryFromAccessLog())
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if TTS_PROVIDER == "mock":
+        logger.warning("TTS_PROVIDER=mock: there is NO real speech. For load tests only.")
     await init_db()
     yield
     await close_db()
 
 
-app = FastAPI(lifespan=lifespan)
-Instrumentator().instrument(app).expose(app)
+# No Swagger UI and no OpenAPI file: they would list every route publicly.
+app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+Instrumentator().instrument(app).expose(
+    app, include_in_schema=False, dependencies=[Depends(require_metrics_token)]
+)
 
-# Rate limiting: single-user app, generous limits to prevent API abuse
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
+def rate_limit_key(request: Request) -> str:
+    """One counter per signed-in user, so users behind the same IP do not share a limit.
+
+    auth.current_user sets request.state.user_id. Without a verified user, the IP is used.
+    """
+    user_id = getattr(request.state, "user_id", None)
+    return f"user:{user_id}" if user_id else f"ip:{get_remote_address(request)}"
+
+
+def _tts_rate_limit() -> str:
+    # Read on every request, so tests and load tests can change it.
+    return os.getenv("RATE_LIMIT_TTS", "30/minute")
+
+
+# Only /stream/tts has a limit, because every request costs money.
+limiter = Limiter(key_func=rate_limit_key)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS: allow mobile app (Expo) and local dev origins
+# Extra browser origins (e.g. a hosted web version), comma-separated.
+EXTRA_CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:8081",   # Expo web
         "http://localhost:19006",  # Expo web (alt)
         "exp://*",                 # Expo Go (native)
+        *EXTRA_CORS_ORIGINS,
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-MISTRAL_API_KEY = os.getenv("TTS_API_KEY", "")
-SPEECH_URL = "https://api.mistral.ai/v1/audio/speech"
-AUDIO_MODEL = os.getenv("TTS_MODEL", "voxtral-mini-tts-3-0")
-AUDIO_VOICE_ID = os.getenv("TTS_VOICE", "")
 
-# Generous streaming timeout so long messages finish.
-TTS_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
-
-
-def _mistral_headers() -> dict:
-    return {"Authorization": f"Bearer {MISTRAL_API_KEY}"}
+def _resolve_provider(value: str) -> str:
+    """Returns "mistral" (default) or "mock". A typo stops the start, so paid speech never switches silently."""
+    value = (value or "mistral").strip().lower()
+    if value not in ("mistral", "mock"):
+        raise RuntimeError(f"TTS_PROVIDER must be 'mistral' or 'mock', got {value!r}")
+    return value
 
 
-def _speech_payload(text: str) -> dict:
-    payload = {
-        "input": text,
-        "model": AUDIO_MODEL,
-        "response_format": "mp3",
-        "stream": True,
-    }
-    if AUDIO_VOICE_ID:
-        payload["voice_id"] = AUDIO_VOICE_ID
-    return payload
+# "mock" sends silent MP3 instead of calling Mistral. For load tests only.
+TTS_PROVIDER = _resolve_provider(os.getenv("TTS_PROVIDER", "mistral"))
 
 
-def _parse_sse_event(data_lines: list) -> tuple[bool, list]:
-    """Parse one SSE event (data: lines) into (done, [audio_bytes])."""
-    payload = "\n".join(data_lines)
-    if not payload:
-        return False, []
-    try:
-        obj = json.loads(payload)
-    except json.JSONDecodeError:
-        return False, []
-    if obj.get("type") == "speech.audio.done":
-        return True, []
-    audio = obj.get("audio_data")
-    if not audio:
-        return False, []
-    try:
-        return False, [base64.b64decode(audio)]
-    except Exception:
-        return False, []
+@app.get("/warmup", dependencies=[Depends(current_user)])
+async def warmup():
+    """Opens a TTS connection in advance (called when the user starts typing)."""
+    if TTS_PROVIDER == "mock":
+        return {"status": "warm"}
+    return await mistral_tts.warm_up()
 
 
-async def _iter_mistral_audio(response) -> AsyncIterator[bytes]:
-    """Yield decoded audio bytes from the SSE stream."""
-    data_lines: list = []
-    done = False
-    async for line in response.aiter_lines():
-        if line == "":
-            done, chunks = _parse_sse_event(data_lines)
-            data_lines = []
-            for chunk in chunks:
-                yield chunk
-            if done:
-                break
-        elif line.startswith("data:"):
-            data_lines.append(line[len("data:"):].strip())
-    if not done and data_lines:
-        _, chunks = _parse_sse_event(data_lines)
-        for chunk in chunks:
-            yield chunk
-
-
-@app.get("/stream/tts")
-@limiter.limit("30/minute")
-async def stream_tts(request: Request, text: str):
-    async def generate():
-        t_start = time.monotonic()
-        first_audio_logged = False
-        chunk_count = 0
-        byte_count = 0
-
-        try:
-            async with httpx.AsyncClient(timeout=TTS_TIMEOUT) as client:
-                async with client.stream(
-                    "POST", SPEECH_URL, json=_speech_payload(text), headers=_mistral_headers()
-                ) as response:
-                    response.raise_for_status()
-                    async for chunk in _iter_mistral_audio(response):
-                        if not first_audio_logged:
-                            first_audio_logged = True
-                            logger.info(
-                                "TTS first audio: %d ms total, chars=%d, model=%s, voice=%s",
-                                int((time.monotonic() - t_start) * 1000),
-                                len(text),
-                                AUDIO_MODEL,
-                                AUDIO_VOICE_ID or "default",
-                            )
-                        chunk_count += 1
-                        byte_count += len(chunk)
-                        yield chunk
-        finally:
-            logger.info(
-                "TTS finished: %d ms total, %d audio chunks, %d bytes",
-                int((time.monotonic() - t_start) * 1000),
-                chunk_count,
-                byte_count,
-            )
+@app.get("/stream/tts", dependencies=[Depends(current_user)])
+@limiter.limit(_tts_rate_limit)
+async def stream_tts(
+    request: Request,
+    text: Annotated[str, Query(min_length=1, max_length=MAX_MESSAGE_CHARS)],
+):
+    if TTS_PROVIDER == "mock":
+        return StreamingResponse(
+            mock_tts.stream(text),
+            media_type="audio/mpeg",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-TTS-Provider": "mock",
+                # The load test subtracts this delay to measure only our own system.
+                "X-TTS-Mock-First-Audio-Ms": str(int(mock_tts.first_audio_ms())),
+            },
+        )
 
     return StreamingResponse(
-        generate(),
+        mistral_tts.stream(text),
         media_type="audio/mpeg",
         headers={"Cache-Control": "no-cache"},
     )
@@ -179,45 +137,56 @@ async def stream_tts(request: Request, text: str):
 
 @app.get("/health")
 async def health():
-    url = "https://api.mistral.ai/v1/models"
-    headers = _mistral_headers()
+    base = {"voice": mistral_tts.VOICE, "model": mistral_tts.MODEL, "provider": TTS_PROVIDER}
+    if TTS_PROVIDER == "mock":
+        return {**base, "status": "ok"}  # no call to Mistral, so the mock runs without a key
+    return {**base, **await mistral_tts.check_health()}
 
-    base = {"voice": AUDIO_VOICE_ID, "model": AUDIO_MODEL}
-
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        try:
-            response = await client.get(url, headers=headers)
-            response.raise_for_status()
-            models = response.json().get("data", [])
-            return {**base, "status": "ok", "models": len(models)}
-        except httpx.TimeoutException:
-            return {**base, "status": "unavailable", "message": "Mistral API Timeout"}
-        except httpx.HTTPStatusError as e:
-            return {**base, "status": "error", "message": f"HTTP {e.response.status_code}"}
-        except Exception:
-            return {**base, "status": "error", "message": "Internal server error"}
-
-
-# --- Endpoints (am Ende der Datei ergänzen) ---------------------------------
 
 @app.get("/chats", response_model=list[ChatModel])
-async def get_chats():
-    """Alle Chats laden — wird beim App-Start aufgerufen."""
-    return await list_chats()
+async def get_chats(user_id: CurrentUser):
+    return await list_chats(user_id)
 
 
 @app.put("/chats/{chat_id}")
-async def put_chat(chat_id: str, chat: ChatModel):
-    """Chat anlegen oder komplett ersetzen."""
+async def put_chat(chat_id: str, chat: ChatModel, user_id: CurrentUser):
+    """Creates the chat or replaces it completely."""
     if chat.id != chat_id:
         raise HTTPException(400, "chat_id mismatch between URL and body")
-    await upsert_chat(chat.model_dump())
+    await upsert_chat(user_id, chat.model_dump())
     return {"status": "ok"}
 
 
 @app.delete("/chats/{chat_id}")
-async def remove_chat(chat_id: str):
-    deleted = await delete_chat(chat_id)
+async def remove_chat(chat_id: str, user_id: CurrentUser):
+    deleted = await delete_chat(user_id, chat_id)
     if not deleted:
         raise HTTPException(404, f"chat {chat_id} not found")
     return {"status": "deleted"}
+
+
+@app.get("/phrases", response_model=PhraseStoreModel | None)
+async def get_phrases(user_id: CurrentUser):
+    """Returns null when the user has no phrases yet."""
+    return await get_phrase_store(user_id)
+
+
+@app.put("/phrases")
+async def put_phrases(store: PhraseStoreModel, user_id: CurrentUser):
+    """An older store never replaces a newer one; then the answer is "stale"."""
+    stored = await put_phrase_store(user_id, store.model_dump())
+    return {"status": "ok" if stored else "stale"}
+
+
+@app.get("/stats/tts", response_model=dict[str, TtsDayStatModel])
+async def get_stats_tts(user_id: CurrentUser):
+    return await get_tts_stats(user_id)
+
+
+@app.post("/stats/tts")
+async def post_stats_tts(stats: dict[DayKey, TtsDayStatModel], user_id: CurrentUser):
+    """Per field the larger value wins, so the numbers never go down."""
+    if len(stats) > MAX_STAT_DAYS:
+        raise HTTPException(413, f"too many days (max {MAX_STAT_DAYS})")
+    await merge_tts_stats(user_id, {day: s.model_dump() for day, s in stats.items()})
+    return {"status": "ok"}

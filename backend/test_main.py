@@ -2,15 +2,7 @@ import base64
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import main
-from starlette.requests import Request
-
-
-def _mock_request():
-    """Build a mock Request for tests that call rate-limited endpoints directly."""
-    req = MagicMock(spec=Request)
-    req.client.host = "127.0.0.1"
-    return req
+import mistral_tts
 
 
 def _b64(data: bytes) -> str:
@@ -18,7 +10,7 @@ def _b64(data: bytes) -> str:
 
 
 class _FakeStreamResponse:
-    """Fake SSE response for _iter_mistral_audio."""
+    """Fake SSE response for _iter_audio."""
 
     def __init__(self, chunks):
         self._lines = []
@@ -55,13 +47,13 @@ def _install_stream_mock(mock_client_class, chunks):
     return fake_response
 
 
-class TestSpeechPayload(unittest.TestCase):
-    """Tests for _speech_payload."""
+class TestPayload(unittest.TestCase):
+    """Tests for _payload."""
 
     def test_payload_with_voice(self):
-        with patch("main.AUDIO_MODEL", "voxtral-mini-tts-3-0"), \
-             patch("main.AUDIO_VOICE_ID", "voice-abc"):
-            payload = main._speech_payload("Hallo")
+        with patch("mistral_tts.MODEL", "voxtral-mini-tts-3-0"), \
+             patch("mistral_tts.VOICE", "voice-abc"):
+            payload = mistral_tts._payload("Hallo")
 
         self.assertEqual(payload["input"], "Hallo")
         self.assertEqual(payload["model"], "voxtral-mini-tts-3-0")
@@ -70,8 +62,8 @@ class TestSpeechPayload(unittest.TestCase):
         self.assertEqual(payload["voice_id"], "voice-abc")
 
     def test_payload_without_voice_has_no_voice_id(self):
-        with patch("main.AUDIO_VOICE_ID", ""):
-            payload = main._speech_payload("Hallo")
+        with patch("mistral_tts.VOICE", ""):
+            payload = mistral_tts._payload("Hallo")
 
         self.assertNotIn("voice_id", payload)
 
@@ -80,99 +72,83 @@ class TestParseSseEvent(unittest.TestCase):
     """Tests for _parse_sse_event."""
 
     def test_done_event_returns_done(self):
-        done, chunks = main._parse_sse_event(['{"type": "speech.audio.done", "usage": {}}'])
+        done, chunks = mistral_tts._parse_sse_event(['{"type": "speech.audio.done", "usage": {}}'])
         self.assertTrue(done)
         self.assertEqual(chunks, [])
 
     def test_audio_delta_decodes_base64(self):
-        done, chunks = main._parse_sse_event(
+        done, chunks = mistral_tts._parse_sse_event(
             [f'{{"type": "speech.audio.delta", "audio_data": "{_b64(b"chunk")}"}}']
         )
         self.assertFalse(done)
         self.assertEqual(chunks, [b"chunk"])
 
     def test_invalid_json_is_ignored(self):
-        done, chunks = main._parse_sse_event(["not json"])
+        done, chunks = mistral_tts._parse_sse_event(["not json"])
         self.assertFalse(done)
         self.assertEqual(chunks, [])
 
     def test_missing_audio_data_is_ignored(self):
-        done, chunks = main._parse_sse_event(['{"type": "speech.audio.delta"}'])
+        done, chunks = mistral_tts._parse_sse_event(['{"type": "speech.audio.delta"}'])
         self.assertFalse(done)
         self.assertEqual(chunks, [])
 
 
-class TestIterMistralAudio(unittest.IsolatedAsyncioTestCase):
-    """Tests for _iter_mistral_audio."""
+class TestIterAudio(unittest.IsolatedAsyncioTestCase):
+    """Tests for _iter_audio."""
 
     async def test_yields_decoded_chunks_and_stops_on_done(self):
         response = _FakeStreamResponse([b"chunk1", b"chunk2"])
-        collected = [c async for c in main._iter_mistral_audio(response)]
+        collected = [c async for c in mistral_tts._iter_audio(response)]
         self.assertEqual(collected, [b"chunk1", b"chunk2"])
 
 
-class TestStreamTts(unittest.IsolatedAsyncioTestCase):
-    """Tests for the /stream/tts endpoint."""
+class TestStream(unittest.IsolatedAsyncioTestCase):
+    """Tests for stream()."""
 
-    @patch("main.httpx.AsyncClient")
+    @patch("mistral_tts.httpx.AsyncClient")
     async def test_streams_audio_bytes(self, mock_client_class):
         _install_stream_mock(mock_client_class, [b"chunk1", b"chunk2"])
 
-        response = await main.stream_tts(_mock_request(), "Hallo Welt")
-        collected = b"".join([c async for c in response.body_iterator])
+        collected = b"".join([c async for c in mistral_tts.stream("Hallo Welt")])
 
         self.assertEqual(collected, b"chunk1chunk2")
 
-    @patch("main.httpx.AsyncClient")
-    async def test_response_media_type_is_audio_mpeg(self, mock_client_class):
-        _install_stream_mock(mock_client_class, [b"chunk1"])
 
-        response = await main.stream_tts(_mock_request(), "Audio-Typ Test")
+class TestWarmup(unittest.IsolatedAsyncioTestCase):
+    """Tests for warm_up()."""
 
-        self.assertEqual(response.media_type, "audio/mpeg")
+    async def test_warmup_is_a_noop(self):
+        self.assertEqual(await mistral_tts.warm_up(), {"status": "warm"})
 
 
-class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
-    """Tests for the /health endpoint."""
+class TestHealth(unittest.IsolatedAsyncioTestCase):
+    """Tests for check_health()."""
 
-    @patch("main.httpx.AsyncClient")
-    async def test_health_success_includes_voice_and_model(self, mock_client_class):
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_health_ok(self, mock_client_class):
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
-        mock_client.get.return_value = MagicMock(
-            status_code=200,
-            json=lambda: {"data": [{"id": "voxtral-mini-tts-3-0"}]},
-        )
+        mock_client.get.return_value = MagicMock(status_code=200, json=lambda: {"data": []})
         mock_client_class.return_value = mock_client
 
-        with patch("main.AUDIO_VOICE_ID", "voice-abc"), \
-             patch("main.AUDIO_MODEL", "voxtral-mini-tts-3-0"):
-            response = await main.health()
+        self.assertEqual(await mistral_tts.check_health(), {"status": "ok"})
 
-        self.assertEqual(response["status"], "ok")
-        self.assertEqual(response["models"], 1)
-        self.assertEqual(response["voice"], "voice-abc")
-        self.assertEqual(response["model"], "voxtral-mini-tts-3-0")
-
-    @patch("main.httpx.AsyncClient")
-    async def test_health_timeout_still_returns_voice_and_model(self, mock_client_class):
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_health_timeout(self, mock_client_class):
         import httpx
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
         mock_client.get.side_effect = httpx.TimeoutException("Timeout")
         mock_client_class.return_value = mock_client
 
-        with patch("main.AUDIO_VOICE_ID", "voice-abc"), \
-             patch("main.AUDIO_MODEL", "voxtral-mini-tts-3-0"):
-            response = await main.health()
+        result = await mistral_tts.check_health()
 
-        self.assertEqual(response["status"], "unavailable")
-        self.assertEqual(response["message"], "Mistral API Timeout")
-        self.assertEqual(response["voice"], "voice-abc")
-        self.assertEqual(response["model"], "voxtral-mini-tts-3-0")
+        self.assertEqual(result["status"], "unavailable")
+        self.assertEqual(result["message"], "Mistral API Timeout")
 
-    @patch("main.httpx.AsyncClient")
-    async def test_health_http_error_returns_error_status(self, mock_client_class):
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_health_http_error(self, mock_client_class):
         import httpx
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
@@ -183,20 +159,19 @@ class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
         )
         mock_client_class.return_value = mock_client
 
-        response = await main.health()
+        result = await mistral_tts.check_health()
 
-        self.assertEqual(response["status"], "error")
-        self.assertIn("401", response["message"])
+        self.assertEqual(result["status"], "error")
+        self.assertIn("401", result["message"])
 
-    @patch("main.httpx.AsyncClient")
-    async def test_health_generic_exception_returns_error(self, mock_client_class):
-        """Unexpected exception maps to a generic error."""
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_health_generic_exception(self, mock_client_class):
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
-        mock_client.get.side_effect = Exception("Unexpected error")
+        mock_client.get.side_effect = Exception("Unexpected")
         mock_client_class.return_value = mock_client
 
-        response = await main.health()
+        result = await mistral_tts.check_health()
 
-        self.assertEqual(response["status"], "error")
-        self.assertEqual("Internal server error", response["message"])
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["message"], "Internal server error")

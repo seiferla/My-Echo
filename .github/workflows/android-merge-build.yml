@@ -1,25 +1,35 @@
 name: Android Merge Build
 
-# Baut bei jedem Merge in main automatisch APK + AAB und veröffentlicht
-# beide als DRAFT-Release auf GitHub. So gibt es nach jedem Merge sofort
-# eine installierbare APK (Sideload) und ein AAB (Store) zum Herunterladen.
+# On every merge to main that touches the app, builds an APK automatically
+# and publishes it as a DRAFT release on GitHub. So after every merge there
+# is an installable APK (sideload) to download right away.
 #
-# Unterschied zu android-release.yml:
-#   - läuft automatisch (push auf main), nicht nur manuell oder per Tag
-#   - baut BEIDE Formate in einem Lauf
-#   - erzeugt ein rollierendes DRAFT-Release (Tag "android-preview"),
-#     das bei jedem Merge überschrieben wird — keine Tag-Flut
+# Difference to android-release.yml:
+#   - runs automatically (push to main), not only manually or by tag
+#   - builds ONLY the APK (arm64-v8a). The AAB for the Play Store (all 4 ABIs,
+#     several extra minutes of C++ compile) is built by android-release.yml by tag
+#     or manually with format=aab — it is not needed after every merge.
+#   - creates a rolling DRAFT release (tag "android-preview")
+#     that is overwritten on every merge — no flood of tags
 on:
   push:
     branches: [main]
+    # No ~10 min build for README, backend or docs merges.
+    paths:
+      - "mobile-app/**"
+      - ".github/workflows/android-merge-build.yml"
+      - ".github/scripts/**"
 
-# Nur ein Lauf gleichzeitig; ein neuer Merge bricht einen noch laufenden Build ab.
+# Only one run at a time. On purpose NOT cancelled: a cancelled run does not
+# save the Gradle cache (the setup-gradle post step never runs), and PR builds
+# read exactly this cache from main. GitHub still keeps only the newest
+# waiting run — with several quick merges, not every merge is built.
 concurrency:
   group: android-merge-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
-  contents: write # nötig, um das Draft-Release zu erstellen/löschen
+  contents: write # needed to create/delete the draft release
 
 env:
   NODE_VERSION: "24"
@@ -28,20 +38,20 @@ env:
 
 jobs:
   build-and-release:
-    name: Build APK + AAB and publish draft
+    name: Build APK and publish draft
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: mobile-app
     env:
-      # Backend-URL der ausgelieferten APK/AAB (wie android-release.yml).
+      # Backend URL of the shipped APK (same as android-release.yml).
       EXPO_PUBLIC_BACKEND_URL: ${{ vars.EXPO_PUBLIC_BACKEND_URL || 'http://192.168.178.21:4444' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -50,31 +60,32 @@ jobs:
       - name: Install dependencies
         run: npm ci --prefer-offline --no-audit --no-fund
 
-      # Quality-Gate vor dem teuren nativen Build.
+      # Quality gate before the expensive native build.
       - name: TypeScript typecheck
         run: npx tsc --noEmit
 
       - name: Set up JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
-      - name: Set up Gradle (mit Caching)
+      - name: Set up Gradle (with caching)
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Versionsname bestimmen
+      - name: Determine version name
         id: version
         run: echo "name=$(node -p "require('./app.json').expo.version")" >> "$GITHUB_OUTPUT"
 
-      # Prebuild-Cache: android/-Ordner nur regenerieren, wenn sich app.json,
-      # Lockfile oder App-Sourcen geändert haben.
+      # Prebuild cache: only regenerate the android/ folder if app.json,
+      # lockfile, config plugins, patches or assets changed. Pure JS
+      # changes (app/**) do not change the generated android/ folder.
       - name: Restore prebuild cache
         id: prebuild-cache
         uses: actions/cache/restore@v6
         with:
           path: mobile-app/android
-          key: prebuild-${{ runner.os }}-${{ hashFiles('mobile-app/app.json', 'mobile-app/package-lock.json', 'mobile-app/app/**', 'mobile-app/assets/**') }}
+          key: prebuild-${{ runner.os }}-${{ hashFiles('mobile-app/app.json', 'mobile-app/package-lock.json', 'mobile-app/plugins/**', 'mobile-app/patches/**', 'mobile-app/assets/**') }}
 
       - name: Expo prebuild (Android)
         if: steps.prebuild-cache.outputs.cache-hit != 'true'
@@ -87,19 +98,18 @@ jobs:
           path: mobile-app/android
           key: ${{ steps.prebuild-cache.outputs.cache-primary-key }}
 
-      # Native-Build-Cache für die teuren Gradle-/C++-Outputs.
+      # Native build cache for the expensive Gradle/C++ outputs.
       - name: Cache native build outputs
         uses: actions/cache@v6
         with:
           path: |
             mobile-app/android/.gradle
             mobile-app/android/app/.cxx
-            mobile-app/node_modules/react-native/ReactAndroid/build
           key: native-${{ runner.os }}-${{ hashFiles('mobile-app/package-lock.json', 'mobile-app/android/build.gradle', 'mobile-app/android/app/build.gradle') }}
           restore-keys: |
             native-${{ runner.os }}-
 
-      - name: Signing-Keystore aus Secrets einrichten
+      - name: Set up signing keystore from secrets
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -109,7 +119,7 @@ jobs:
           B64="$(printf '%s' "$KEYSTORE_B64" | tr -d '[:space:]')"
           printf '%s' "$B64" | base64 --decode --ignore-garbage > android/app/myecho.keystore 2>/dev/null || true
           if ! keytool -list -keystore android/app/myecho.keystore -storepass "$STORE_PASSWORD" >/dev/null 2>&1; then
-            echo "::error::Keystore ungültig. ANDROID_KEYSTORE_BASE64 oder ANDROID_KEYSTORE_PASSWORD prüfen."
+            echo "::error::Invalid keystore. Check ANDROID_KEYSTORE_BASE64 or ANDROID_KEYSTORE_PASSWORD."
             exit 1
           fi
           cat > android/keystore.properties <<EOF
@@ -119,60 +129,56 @@ jobs:
           keyPassword=$KEY_PASSWORD
           EOF
 
-      - name: Gradle-Build (APK + AAB)
+      - name: Gradle build (APK)
         working-directory: mobile-app/android
         env:
-          ANDROID_VERSION_CODE: ${{ github.run_number }}
           ANDROID_VERSION_NAME: ${{ steps.version.outputs.name }}
           GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
-          COMMON_FLAGS="--build-cache --parallel --stacktrace"
-          # APK zum Sideloaden: nur arm64-v8a (alle modernen Phones) -> schneller.
-          ./gradlew assembleRelease $COMMON_FLAGS -PreactNativeArchitectures=arm64-v8a
-          # AAB für den Store: alle ABIs.
-          ./gradlew bundleRelease $COMMON_FLAGS
+          # Same formula as android-release.yml (time-based, monotonic across
+          # workflows) — separate run_number counters drifted apart.
+          export ANDROID_VERSION_CODE=$("$GITHUB_WORKSPACE/.github/scripts/android-version-code.sh")
+          echo "versionCode=$ANDROID_VERSION_CODE"
 
-      - name: Artefakt-Pfade ermitteln
+          # APK for sideloading: only arm64-v8a (all modern phones) -> faster.
+          ./gradlew assembleRelease --build-cache --parallel --stacktrace -PreactNativeArchitectures=arm64-v8a
+
+      - name: Find artifact path
         id: artifacts
         working-directory: mobile-app/android
         run: |
           apk=$(ls app/build/outputs/apk/release/*.apk | head -1)
-          aab=$(ls app/build/outputs/bundle/release/*.aab | head -1)
           echo "apk=mobile-app/android/$apk" >> "$GITHUB_OUTPUT"
-          echo "aab=mobile-app/android/$aab" >> "$GITHUB_OUTPUT"
 
-      - name: APK + AAB als Artefakte hochladen
+      - name: Upload APK as artifact
         uses: actions/upload-artifact@v7
         with:
           name: myecho-${{ steps.version.outputs.name }}
-          path: |
-            ${{ steps.artifacts.outputs.apk }}
-            ${{ steps.artifacts.outputs.aab }}
+          path: ${{ steps.artifacts.outputs.apk }}
           if-no-files-found: error
           retention-days: 14
 
-      # Rollierendes Draft-Release: altes Release + Tag entfernen, dann neu anlegen.
-      - name: Altes Preview-Release zurücksetzen
+      # Rolling draft release: remove the old release + tag, then create it again.
+      - name: Reset old preview release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete "$PREVIEW_TAG" --yes 2>/dev/null || true
           git push origin --delete "$PREVIEW_TAG" 2>/dev/null || true
 
-      - name: Draft-Release erstellen
-        uses: softprops/action-gh-release@v2
+      - name: Create draft release
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.PREVIEW_TAG }}
           draft: true
           name: "Android Preview v${{ steps.version.outputs.name }}"
           body: |
-            Automatisch aus `${{ github.sha }}` (Branch `main`) gebaut.
+            Built automatically from `${{ github.sha }}` (branch `main`).
 
-            - **APK** (arm64-v8a) zum Sideloaden
-            - **AAB** (alle ABIs) für den Play Store
+            - **APK** (arm64-v8a) for sideloading
 
-            Release finalisieren: Draft auf GitHub öffnen und „Publish release“.
-          files: |
-            ${{ steps.artifacts.outputs.apk }}
-            ${{ steps.artifacts.outputs.aab }}
+            AAB for the Play Store: run the "Android Release" workflow with format=aab.
+
+            To finalize the release: open the draft on GitHub and click "Publish release".
+          files: ${{ steps.artifacts.outputs.apk }}
           fail_on_unmatched_files: true

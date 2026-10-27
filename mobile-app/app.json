@@ -2,16 +2,10 @@
   "expo": {
     "name": "myEcho",
     "slug": "myecho",
-    "version": "2.0.0",
+    "version": "2.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -38,7 +32,7 @@
       [
         "./plugins/withGradleWrapperVersion",
         {
-          "version": "9.3.1"
+          "version": "9.4.1"
         }
       ],
       [
@@ -56,7 +50,15 @@
           }
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ]
     ],
     "scheme": "myecho",
     "extra": {

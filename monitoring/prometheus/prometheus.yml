@@ -7,3 +7,7 @@ scrape_configs:
     static_configs:
       - targets: ["__BACKEND_HOST__:4444"]
     metrics_path: "/metrics"
+    # Same value as METRICS_TOKEN in the backend; filled in at start (docker-compose.yml).
+    authorization:
+      type: Bearer
+      credentials: "__METRICS_TOKEN__"

@@ -53,8 +53,12 @@ attached and generated release notes. The `versionName` is taken from the tag
 
 ## Versioning
 
-- **`versionCode`** is set automatically on each CI run to `github.run_number`
-  (monotonically increasing — required for updates).
+- **`versionCode`** is set automatically on each CI run to the seconds since
+  2026-01-01 UTC (`.github/scripts/android-version-code.sh`). Both build
+  workflows (release and merge-build) use this same script, so the code rises
+  across workflows — separate `github.run_number` counters drifted apart, and
+  Play rejected a bundle with a lower code than an earlier upload ("no existing
+  users can upgrade"). The log prints `versionCode=…` for each build.
 - **`versionName`** comes from the Git tag (for tag builds) or from
   `app.json` → `expo.version` (for manual builds).
 

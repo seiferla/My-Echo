@@ -3,22 +3,30 @@ import {
     View,
     Text,
     ScrollView,
+    ScrollViewInstance,
     TouchableOpacity,
-    TextInput,
     StyleSheet,
     KeyboardAvoidingView,
     Platform,
-    Modal,
     NativeSyntheticEvent,
     NativeScrollEvent,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, X, Save, Check, ChevronDown } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Send, X, Save, ChevronDown } from 'lucide-react-native';
 import { Message } from './Message';
 import { PhraseBar } from './PhraseBar';
+import { ComposeModal } from './ComposeModal';
 import { usePhrases } from '../context/PhrasesContext';
 import { Phrase } from '../utils/phrases';
+import { warmBackend } from '../utils/tts';
+import { useCloudStatus } from '../context/CloudStatusContext';
+import { onTypingChanged, resetTypingPrefetch } from '../utils/typingPrefetch';
+import { useFastMode } from '../utils/speedMode';
 import { ChatMessage, newMessageId } from '../utils/types';
+
+// Must stay below the backend's WARM_TTL_SECONDS (25 s),
+// else the warm TTS connection expires before the next ping.
+const WARMUP_INTERVAL_MS = 20_000;
 
 interface ChatAreaProps {
     chat?: {
@@ -31,21 +39,22 @@ interface ChatAreaProps {
 
 export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     const { visiblePhrases, settings, recordUse } = usePhrases();
+    const { isAvailable, voice, model } = useCloudStatus();
+    const [fastMode, setFastMode] = useFastMode();
     const [input, setInput] = useState('');
     const [lastSentIndex, setLastSentIndex] = useState<number | null>(null);
     const [isComposing, setIsComposing] = useState(false);
-    // Wenn editingIndex !== null, zeigt der Modal den Edit-Modus (Check + X statt Save + Send).
+    // When editingIndex !== null, the modal is in edit mode (Check + X instead of Save + Send).
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editInput, setEditInput] = useState('');
-    const scrollViewRef = useRef<ScrollView>(null);
-    const composeScrollRef = useRef<ScrollView>(null);
+    const scrollViewRef = useRef<ScrollViewInstance>(null);
     const insets = useSafeAreaInsets();
-    // true wenn der User nahe genug am unteren Ende der Liste ist.
-    // Startet true → Pfeil bleibt initial verborgen, Auto-Scroll aktiv.
+    // true when the user is near the end of the list.
+    // Starts true: the arrow is hidden and auto-scroll is on.
     const [isNearBottom, setIsNearBottom] = useState(true);
 
-    // Die Phrasen wandern mit: leerer Chat → Kacheln in der Mitte,
-    // sobald Nachrichten da sind → schmale Zeile über der Eingabe.
+    // Empty chat: phrases as tiles in the middle.
+    // With messages: a small row above the input.
     const showStrip = (chat?.messages.length ?? 0) > 0 && visiblePhrases.length > 0;
 
     const isEditMode = editingIndex !== null;
@@ -57,9 +66,8 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
         scrollViewRef.current?.scrollToEnd({ animated: true });
     };
 
-    // Wenn der User scrollt, prüfen wie weit er vom unteren Ende entfernt ist.
-    // Schwelle 150px — etwa eine halbe Bubble-Höhe; genug Spielraum, dass kleine
-    // Wackler am Listenende den Pfeil nicht auslösen.
+    // Checks the distance to the end of the list. 150 px is about half a bubble,
+    // so small movements at the end do not show the arrow.
     const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
         const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
         const distanceFromBottom =
@@ -67,7 +75,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
         setIsNearBottom(distanceFromBottom < 150);
     };
 
-    // Öffnet das Eingabefeld.
+    // Opens the editor. The effect below keeps the backend connection warm meanwhile.
     const openCompose = () => {
         setIsComposing(true);
     };
@@ -76,15 +84,38 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
         scrollToBottom();
     }, [chat?.messages]);
 
-    // Beim Chat-Wechsel autoPlay zurücksetzen — sonst würde nach dem Wechsel
-    // die Nachricht an gleicher Position vorgelesen, obwohl sie nicht neu gesendet wurde.
+    // Keeps the TTS connection warm while the editor is open. Users often type
+    // longer than the backend TTL (25 s), so one warmup call is not enough.
+    useEffect(() => {
+        if (!isComposing) return;
+
+        warmBackend();
+        const interval = setInterval(() => {
+            warmBackend();
+        }, WARMUP_INTERVAL_MS);
+
+        return () => clearInterval(interval);
+    }, [isComposing]);
+
+    // Sentence prefetch (fast mode): while typing, synthesize finished sentences
+    // (and the rest after a 1 s pause) in the background. Off in eco mode and
+    // when editing (an edit is only saved, not spoken).
+    useEffect(() => {
+        if (!isComposing || isEditMode || !isAvailable || !fastMode) {
+            resetTypingPrefetch();
+            return;
+        }
+        onTypingChanged(input, voice, model);
+    }, [input, isComposing, isEditMode, isAvailable, fastMode, voice, model]);
+
+    // Reset autoPlay on chat change, else the message at the same index of the
+    // other chat would be spoken.
     useEffect(() => {
         setLastSentIndex(null);
     }, [chat?.id]);
 
-    // Gemeinsamer Weg für Senden (mit Sprachausgabe) und Speichern (stumm).
-    // Nimmt den Text als Parameter, damit auch eine Phrase direkt gesendet
-    // werden kann, ohne vorher durch das Eingabefeld zu laufen.
+    // Shared path for send (spoken) and save (silent). Takes the text as a
+    // parameter, so a phrase can be sent without going through the input.
     const appendMessage = (text: string, via: 'send' | 'save') => {
         const content = text.trim();
         if (!content || !chat) return;
@@ -99,7 +130,7 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
 
         const updatedMessages = [...chat.messages, userMessage];
         onUpdateChat(updatedMessages);
-        // Nur beim Senden vorlesen — autoPlay hängt am Index der neuen Nachricht.
+        // Speak only on send: autoPlay uses the index of the new message.
         setLastSentIndex(via === 'send' ? updatedMessages.length - 1 : null);
         setInput('');
         setIsComposing(false);
@@ -108,11 +139,9 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     const handleSend = () => appendMessage(input, 'send');
     const handleSave = () => appendMessage(input, 'save');
 
-    // Antippen einer Phrase. Das Verhalten gilt für alle Phrasen gemeinsam und
-    // wird auf der Phrasen-Seite umgeschaltet:
-    //   an  → sofort senden und sprechen (schnellste Antwort, z.B. "Ja")
-    //   aus → Text ins Eingabefeld legen, an vorhandenen Text angehängt, damit
-    //         sich Sätze aus Bausteinen zusammensetzen lassen.
+    // Tap on a phrase. One setting for all phrases (on the phrases screen):
+    //   on  → send and speak at once (fastest answer, e.g. "Ja")
+    //   off → append the text to the input, so sentences can be built from parts.
     const handlePhrase = (phrase: Phrase) => {
         recordUse(phrase.id);
         if (settings.instantEnabled) {
@@ -157,79 +186,19 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
 
     return (
         <View style={styles.container}>
-            {/* Fullscreen modal — used for composing new messages AND editing existing ones */}
-            <Modal
+            {/* Full-screen editor, for new messages AND for editing */}
+            <ComposeModal
                 visible={isModalOpen}
-                animationType="slide"
-                presentationStyle="fullScreen"
-            >
-                {/* Nur top/left/right: kein Bottom-Padding, damit das TextInput die volle Höhe nutzt */}
-                <SafeAreaView style={styles.modalContainer} edges={['top', 'left', 'right']}>
-                    <View style={styles.modalHeader}>
-                        <TouchableOpacity onPress={handleCloseModal} style={styles.modalButton}>
-                            <X size={32} color="#4b5563" />
-                        </TouchableOpacity>
-                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                            {isEditMode ? (
-                                // Edit-Modus: nur Check (Speichern)
-                                <TouchableOpacity
-                                    onPress={handleSaveEdit}
-                                    disabled={!editInput.trim()}
-                                    style={[styles.modalButton, styles.saveButton, !editInput.trim() && styles.disabledButton]}
-                                >
-                                    <Check size={32} color="white" />
-                                </TouchableOpacity>
-                            ) : (
-                                // Compose-Modus: Save (stumm) + Send (mit TTS)
-                                <>
-                                    <TouchableOpacity
-                                        onPress={handleSave}
-                                        disabled={!input.trim()}
-                                        style={[styles.modalButton, styles.saveButton, !input.trim() && styles.disabledButton]}
-                                    >
-                                        <Save size={32} color="white" />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        onPress={handleSend}
-                                        disabled={!input.trim()}
-                                        style={[styles.modalButton, styles.sendButton, !input.trim() && styles.disabledButton]}
-                                    >
-                                        <Send size={32} color="white" />
-                                    </TouchableOpacity>
-                                </>
-                            )}
-                        </View>
-                    </View>
-
-                    {/* KeyboardAvoidingView schiebt den Inhalt nach oben wenn die Tastatur erscheint */}
-                    <KeyboardAvoidingView
-                        style={{ flex: 1 }}
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    >
-                    {/* ScrollView scrollt automatisch zum Cursor, TextInput wächst mit dem Inhalt */}
-                    <ScrollView
-                        ref={composeScrollRef}
-                        style={styles.composeScroll}
-                        keyboardShouldPersistTaps="handled"
-                        onContentSizeChange={() =>
-                            composeScrollRef.current?.scrollToEnd({ animated: false })
-                        }
-                    >
-                        <TextInput
-                            style={styles.modalInput}
-                            value={modalValue}
-                            onChangeText={setModalValue}
-                            placeholder={isEditMode ? "Nachricht bearbeiten..." : "Nachricht eingeben..."}
-                            placeholderTextColor="#9ca3af"
-                            multiline
-                            autoFocus
-                            textAlignVertical="top"
-                            scrollEnabled={false}
-                        />
-                    </ScrollView>
-                    </KeyboardAvoidingView>
-                </SafeAreaView>
-            </Modal>
+                isEditMode={isEditMode}
+                value={modalValue}
+                onChangeText={setModalValue}
+                fastMode={fastMode}
+                onToggleFastMode={() => setFastMode(!fastMode)}
+                onClose={handleCloseModal}
+                onSave={handleSave}
+                onSend={handleSend}
+                onSaveEdit={handleSaveEdit}
+            />
 
             {/* Messages list */}
             <ScrollView
@@ -237,8 +206,8 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                 style={styles.messagesList}
                 contentContainerStyle={styles.scrollContent}
                 onContentSizeChange={() => {
-                    // Nur automatisch nach unten scrollen wenn der User dort eh schon ist —
-                    // sonst reißt es ihn beim Lesen alter Nachrichten ungewollt nach unten.
+                    // Auto-scroll only when the user is already at the end,
+                    // so reading old messages is not interrupted.
                     if (isNearBottom) scrollToBottom();
                 }}
                 onScroll={handleScroll}
@@ -248,8 +217,8 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                     <View style={styles.emptyContainer}>
                         <Text style={styles.emptyTitle}>myEcho</Text>
                         <Text style={styles.emptySubtitle}>Wie kann ich Ihnen heute helfen?</Text>
-                        {/* Leerer Chat → viel Platz: die Phrasen liegen als große
-                            Kacheln mittig, direkt erreichbar beim App-Start. */}
+                        {/* Empty chat has space: phrases as big tiles in the middle,
+                            ready at app start. */}
                         <PhraseBar
                             phrases={visiblePhrases}
                             variant="grid"
@@ -275,8 +244,8 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                 )}
             </ScrollView>
 
-            {/* Floating "zur neuesten Nachricht"-Pfeil — nur sichtbar wenn der User
-                weiter oben in der Liste ist. Sitzt knapp über der Eingabe-Leiste. */}
+            {/* Floating "to newest message" arrow, only when the user scrolled up.
+                Sits just above the input bar. */}
             {!isNearBottom && (
                 <TouchableOpacity
                     onPress={scrollToBottom}
@@ -288,14 +257,14 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                 </TouchableOpacity>
             )}
 
-            {/* Bottom input bar: paddingBottom direkt im Container, kein externer SafeAreaView-Wrapper */}
+            {/* Bottom input bar: paddingBottom on the container, no extra SafeAreaView */}
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
                 <View style={styles.inputArea}>
-                    {/* Laufender Chat → die Phrasen rücken als schmale Zeile
-                        direkt über die Eingabe, wo der Daumen ohnehin liegt. */}
+                    {/* Chat with messages: phrases as a small row above the input,
+                        where the thumb already is. */}
                     {showStrip && (
                         <PhraseBar
                             phrases={visiblePhrases}
@@ -315,8 +284,8 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
                             >
                                 {input || "Nachricht senden..."}
                             </Text>
-                            {/* Phrasen können das Feld füllen, ohne dass der Editor
-                                aufgeht — deshalb braucht es hier ein Verwerfen. */}
+                            {/* Phrases can fill the field without opening the editor,
+                                so it needs a clear button here. */}
                             {!!input && (
                                 <TouchableOpacity
                                     onPress={() => setInput('')}
@@ -351,40 +320,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#ffffff',
-    },
-    modalContainer: {
-        flex: 1,
-        backgroundColor: '#ffffff',
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        padding: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
-    },
-    modalButton: {
-        padding: 10,
-        borderRadius: 30,
-    },
-    sendButton: {
-        backgroundColor: '#0ea5e9',
-    },
-    saveButton: {
-        backgroundColor: '#10b981',
-    },
-    disabledButton: {
-        opacity: 0.4,
-    },
-    composeScroll: {
-        flex: 1,
-    },
-    modalInput: {
-        minHeight: 200,
-        padding: 20,
-        fontSize: 32,
-        color: '#111827',
-        fontWeight: '500',
     },
     messagesList: {
         flex: 1,
@@ -478,7 +413,7 @@ const styles = StyleSheet.create({
     },
     scrollDownButton: {
         position: 'absolute',
-        // Knapp über der Eingabe-Leiste (~90px hoch inkl. paddings).
+        // Just above the input bar (~90 px high with padding).
         bottom: 90,
         alignSelf: 'center',
         backgroundColor: '#ffffff',
@@ -489,14 +424,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: '#e5e7eb',
-        // Hebt den Button visuell von der Liste ab.
+        // Lifts the button visually off the list.
         elevation: 4,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.15,
         shadowRadius: 6,
     },
-    // Mit Phrasen-Zeile sitzt die Eingabe-Leiste höher — der Pfeil muss mit.
+    // With the phrase row the input bar is higher, so the arrow moves up too.
     scrollDownButtonRaised: {
         bottom: 140,
     },

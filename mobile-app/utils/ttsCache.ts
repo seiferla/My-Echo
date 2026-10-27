@@ -1,5 +1,7 @@
 import { File, Directory, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
+import { authHeaders } from './supabase';
+import { scoped } from './localUser';
 
 const TAG = '[myEcho][Cache]';
 const MAX_CACHE_BYTES = 100 * 1024 * 1024;   // 100 MB hard cap
@@ -30,17 +32,18 @@ export interface CacheStats {
     hitRatePct: number;
 }
 
-// expo-file-system gibt es im Web nicht — dort schon beim Modul-Import ein
-// Directory anzulegen ließ das ganze Bundle crashen. Deshalb: Pfade erst bei
-// Bedarf erzeugen und im Web den Cache komplett überspringen (die Wiedergabe
-// läuft dort direkt über den Backend-Stream).
+// Web has no expo-file-system: creating a Directory at import crashed the whole
+// bundle. So paths are created on demand, and web skips the cache completely
+// (it plays the backend stream directly).
 const isWeb = Platform.OS === 'web';
 
 let _cacheDir: Directory | null = null;
 let _indexFile: File | null = null;
+// Account folder the cached paths and index belong to right now.
+let _ownerName: string | null = null;
 
 function cacheDirRef(): Directory {
-    if (!_cacheDir) _cacheDir = new Directory(Paths.document, 'tts-cache');
+    if (!_cacheDir) _cacheDir = new Directory(Paths.document, scoped('tts-cache'));
     return _cacheDir;
 }
 
@@ -78,9 +81,8 @@ function hash64(str: string): string {
     return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
 }
 
-// Cache-Key bindet text, voice, model und format zusammen — ein Wechsel
-// von Stimme oder Modell im Backend macht alte Einträge automatisch
-// unauffindbar (sie werden später durch LRU evictet).
+// The key joins text, voice, model and format. A new voice or model in the
+// backend makes old entries unreachable; LRU eviction removes them later.
 function cacheKey(
     text: string,
     voiceId = 'default',
@@ -94,9 +96,32 @@ function cacheFile(hash: string): File {
     return new File(cacheDirRef(), `${hash}.mp3`);
 }
 
+// On account change reset the state, so account B never plays audio of account A.
+function switchAccountIfNeeded(): void {
+    const name = scoped('tts-cache');
+    if (name === _ownerName) return;
+    if (_ownerName !== null) {
+        // Save the old account's index first (_indexFile still points there),
+        // then invalidate its running downloads.
+        try {
+            persistNow();
+        } catch (e) {
+            console.warn(`${TAG} Index persist before account switch failed:`, e);
+        }
+        _generation += 1;
+    }
+    _cacheDir = null;
+    _indexFile = null;
+    _index = null;
+    _initPromise = null;
+    _inFlight.clear();
+    _ownerName = name;
+}
+
 // --- Initialisation (lazy, deduplicated) ---
 
 async function ensureInit(): Promise<void> {
+    switchAccountIfNeeded();
     if (_index !== null) return;
     if (_initPromise) return _initPromise;
     _initPromise = (async () => {
@@ -192,7 +217,7 @@ export async function getCachedUri(
     }
 
     const file = cacheFile(hash);
-    // 0-Byte-Dateien (z.B. nach Abbruch zwischen create und write) wie Miss behandeln
+    // Treat empty files (e.g. after a crash between create and write) as a miss.
     if (!file.exists || file.size === 0) {
         if (file.exists) {
             try { file.delete(); } catch {}
@@ -221,8 +246,7 @@ export async function downloadAndCache(
     format?: string
 ): Promise<string> {
     await ensureInit();
-    // Ohne Dateisystem gibt es nichts zu cachen — der Aufrufer fällt dann auf
-    // Streaming bzw. expo-speech zurück.
+    // No file system, nothing to cache: the caller falls back to streaming or expo-speech.
     if (isWeb) throw new Error('TTS cache unavailable on web');
     const hash = cacheKey(text, voiceId, model, format);
 
@@ -237,7 +261,7 @@ export async function downloadAndCache(
         // File.downloadFileAsync throws UnableToDownload for non-2xx responses.
         // On failure, remove any partial bytes so they don't leak as untracked disk usage.
         try {
-            await File.downloadFileAsync(url, dest, { idempotent: true });
+            await File.downloadFileAsync(url, dest, { idempotent: true, headers: await authHeaders() });
         } catch (e) {
             try { dest.delete(); } catch {}
             throw e;

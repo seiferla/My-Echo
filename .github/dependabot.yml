@@ -1,9 +1,9 @@
-# Dependabot-Konfiguration für myEcho.
-# Jede Abhängigkeit bekommt einen eigenen PR — kein Sammel-PR mehr.
-# Ausnahme: die Expo-SDK-Pakete werden in EINER Gruppe gebündelt, da sie
-# versionsgebunden sind (expo, expo-*, @expo/*, react, react-dom, react-native,
-# react-native-screens, safe-area-context, svg, web) und nur zusammen funktionieren.
-# Maximal 5 offene PRs insgesamt.
+# Dependabot config for myEcho.
+# Every dependency gets its own PR — no more combined PR.
+# Exception: the Expo SDK packages are bundled in ONE group, because their
+# versions are tied together (expo, expo-*, @expo/*, react, react-dom, react-native,
+# react-native-screens, safe-area-context, svg, web) and they only work together.
+# At most 5 open PRs in total.
 #
 # Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
@@ -27,12 +27,12 @@ updates:
           - "react-native-safe-area-context"
           - "react-native-svg"
           - "react-native-web"
-    # Expo kodiert die SDK-Nummer als semver-Major (56.x -> 57.x = neues SDK).
-    # Ein einzelnes @expo/*-Paket auf die nächste SDK-Zeile zu heben, zerreißt
-    # den Stack: die anderen Pakete bleiben auf der alten Zeile, npm muss eine
-    # zweite, nicht gepinnte Kopie auflösen, und `npm ci` bricht ab, sobald
-    # deren Patch-Version driftet. Deshalb hier nur Patches automatisch.
-    # SDK-Upgrades bewusst und komplett per `npx expo install expo@^57 --fix`.
+    # Expo encodes the SDK number as the semver major (56.x -> 57.x = new SDK).
+    # Moving a single @expo/* package to the next SDK line breaks the stack:
+    # the other packages stay on the old line, npm must resolve a second,
+    # unpinned copy, and `npm ci` fails as soon as its patch version drifts.
+    # So only patches are automatic here.
+    # Do SDK upgrades on purpose and completely with `npx expo install expo@^57 --fix`.
     ignore:
       - dependency-name: "@expo/*"
         update-types:
@@ -46,9 +46,9 @@ updates:
         update-types:
           - "version-update:semver-major"
           - "version-update:semver-minor"
-      # react-native ist SDK-gebunden (SDK 57 -> RN 0.86.x) und per Override
-      # an react-native-reanimated@4.5.3 gekoppelt (Peer-Range 0.83-0.86).
-      # Ein Minor-Bump außerhalb eines SDK-Upgrades bricht `npm ci`.
+      # react-native is tied to the SDK (SDK 57 -> RN 0.86.x) and linked by an
+      # override to react-native-reanimated@4.5.3 (peer range 0.83-0.86).
+      # A minor bump outside an SDK upgrade breaks `npm ci`.
       - dependency-name: "react-native"
         update-types:
           - "version-update:semver-major"
@@ -59,5 +59,26 @@ updates:
     directory: "/backend"
     schedule:
       interval: "daily"
+      day: "monday"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "docker"
+    directory: "/mobile-app"
+    schedule:
+      interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5

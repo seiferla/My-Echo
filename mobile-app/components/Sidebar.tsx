@@ -12,9 +12,12 @@ import {
     Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3, Zap } from 'lucide-react-native';
+import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3, Zap, LogOut } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Chat } from '../utils/types';
+import { useAuth } from '../context/AuthContext';
+import { confirmAction } from '../utils/confirm';
+import { groupChatsByDate } from '../utils/chatGroups';
 
 const { width } = Dimensions.get('window');
 
@@ -40,6 +43,8 @@ export function Sidebar({
     onClose 
 }: SidebarProps) {
     const router = useRouter();
+    const { session, signOut } = useAuth();
+    const email = session?.user.email ?? '';
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
     const [isMenuVisible, setIsMenuVisible] = useState(false);
     const [isRenaming, setIsRenaming] = useState(false);
@@ -48,6 +53,15 @@ export function Sidebar({
     const handleSelectChat = (id: string) => {
         onSelectChat(id);
         onClose();
+    };
+
+    const handleLogout = () => {
+        confirmAction(
+            'Abmelden',
+            'Deine Chats bleiben gespeichert. Beim nächsten Anmelden sind sie wieder da.',
+            'Abmelden',
+            () => { onClose(); signOut(); }
+        );
     };
 
     const handleLongPress = (id: string, currentTitle: string) => {
@@ -97,44 +111,7 @@ export function Sidebar({
         }
     };
 
-    const groupChatsByDate = () => {
-        const now = Date.now();
-        const oneDay = 24 * 60 * 60 * 1000;
-        const oneWeek = 7 * oneDay;
-        const oneMonth = 30 * oneDay;
-
-        const groups: { [key: string]: Chat[] } = {
-            'Gepinnt': [],
-            'Heute': [],
-            'Gestern': [],
-            'Letzte 7 Tage': [],
-            'Letzte 30 Tage': [],
-            'Älter': [],
-        };
-
-        chats.forEach(chat => {
-            if (chat.pinned) {
-                groups['Gepinnt'].push(chat);
-                return;
-            }
-            const diff = now - chat.timestamp;
-            if (diff < oneDay) {
-                groups['Heute'].push(chat);
-            } else if (diff < 2 * oneDay) {
-                groups['Gestern'].push(chat);
-            } else if (diff < oneWeek) {
-                groups['Letzte 7 Tage'].push(chat);
-            } else if (diff < oneMonth) {
-                groups['Letzte 30 Tage'].push(chat);
-            } else {
-                groups['Älter'].push(chat);
-            }
-        });
-
-        return groups;
-    };
-
-    const groupedChats = groupChatsByDate();
+    const groupedChats = groupChatsByDate(chats);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -207,13 +184,21 @@ export function Sidebar({
             <View style={styles.footer}>
                 <View style={styles.userInfo}>
                     <View style={styles.userAvatar}>
-                        <Text style={styles.userAvatarText}>U</Text>
+                        <Text style={styles.userAvatarText}>{email.charAt(0).toUpperCase() || 'U'}</Text>
                     </View>
-                    <Text style={styles.userName}>Mama🌺</Text>
+                    <Text style={styles.userName} numberOfLines={1}>{email}</Text>
+                    <TouchableOpacity
+                        onPress={handleLogout}
+                        style={styles.logoutButton}
+                        accessibilityRole="button"
+                        accessibilityLabel="Abmelden"
+                    >
+                        <LogOut size={24} color="#374151" />
+                    </TouchableOpacity>
                 </View>
             </View>
 
-            {/* Kontext-Menü Modal */}
+            {/* Context menu */}
             <Modal
                 visible={isMenuVisible}
                 transparent={true}
@@ -242,7 +227,7 @@ export function Sidebar({
                 </TouchableWithoutFeedback>
             </Modal>
 
-            {/* Umbenennen Modal */}
+            {/* Rename dialog */}
             <Modal
                 visible={isRenaming}
                 transparent={true}
@@ -393,9 +378,17 @@ const styles = StyleSheet.create({
         fontSize: 16,
     },
     userName: {
+        flex: 1,
         fontSize: 16,
         color: '#374151',
         fontWeight: '500',
+    },
+    // At least 48 px touch target, like the other buttons.
+    logoutButton: {
+        minWidth: 48,
+        minHeight: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     menuOverlay: {
         flex: 1,

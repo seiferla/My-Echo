@@ -1,6 +1,6 @@
 # Datenschutzerklärung — myEcho
 
-**Stand:** 21.08.2026
+**Stand:** 26.10.2026
 
 myEcho ist eine assistive Kommunikations-App. Du tippst Text, und die App gibt
 ihn als Sprache aus. Diese Erklärung beschreibt, welche Daten dabei verarbeitet
@@ -8,7 +8,8 @@ werden.
 
 > **Geltungsbereich:** Diese Erklärung gilt für die App myEcho
 > (Paketname `io.github.seiferla.myecho`), die im **internen Testkanal** von Google Play
-> an einen kleinen, ausgewählten Personenkreis verteilt wird.
+> an einen kleinen, ausgewählten Personenkreis verteilt wird. Die Konten legt der
+> Verantwortliche an; eine öffentliche Registrierung gibt es nicht.
 
 ---
                 
@@ -43,23 +44,34 @@ genannte E-Mail-Adresse mitgeteilt.
 
 ## 2. Welche Daten verarbeitet werden
 
-myEcho verlangt **kein Benutzerkonto**, keine Anmeldung und enthält **keine
-Werbung und kein Tracking**. Verarbeitet werden ausschließlich:
+myEcho verlangt ein **Benutzerkonto** (E-Mail-Adresse und Passwort) und enthält
+**keine Werbung und kein Tracking**. Verarbeitet werden:
 
+- **Kontodaten:** deine E-Mail-Adresse und dein Passwort. Das Passwort wird nur
+  als Hash gespeichert, nie im Klartext. Die Konten legt der Verantwortliche an;
+  eine öffentliche Registrierung gibt es nicht.
+- **Anmelde-Sitzung:** Nach der Anmeldung speichert die App ein Sitzungs-Token
+  im geschützten Speicher des Betriebssystems, damit du angemeldet bleibst.
+  Beim Abmelden wird es entfernt.
 - **Nachrichtentexte:** die Texte, die du in der App eingibst, um sie sprechen
   oder speichern zu lassen. Diese können persönliche oder gesundheitsbezogene
   Inhalte enthalten.
+- **Schnellphrasen:** deine gespeicherten Phrasen und deren Einstellungen.
 - **Erzeugte Audiodateien:** die aus deinen Texten synthetisierte Sprache.
-- **Nutzungsstatistiken:** aggregierte Kennzahlen (z. B. Anzahl Nachrichten,
-  Sprechzeit, häufige Phrasen) zur Anzeige in der Statistik der App.
-- **Technische Verbindungsdaten (nur Backend):** beim Aufruf des Backends
-  werden die **IP-Adresse** des Geräts, Zeitpunkt, aufgerufener Pfad und
-  Statuscode verarbeitet. Die IP-Adresse dient der Begrenzung der Anfragerate
-  (Schutz vor Überlast), Pfad und Zeitpunkt fließen in technische Kennzahlen
-  (Antwortzeiten, Anzahl Anfragen) zur Überwachung des Servers ein.
+- **Nutzungsstatistiken:** pro Tag die Anzahl der Sprachausgaben, die Anzahl der
+  Zeichen und die Sprechzeit. Sie enthalten keinen Nachrichtentext. Sie werden
+  in der Statistik der App angezeigt und in deinem Konto gespeichert, damit sie
+  auf jedem Gerät gleich sind.
+- **Technische Verbindungsdaten:** beim Aufruf des Backends werden die
+  **IP-Adresse** des Geräts, Zeitpunkt, aufgerufener Pfad und Statuscode
+  verarbeitet. Die Anzahl der Sprachausgaben wird pro Konto begrenzt (Schutz vor
+  Überlast); Anfragen ohne gültige Anmeldung werden nach IP-Adresse begrenzt.
+  Pfad und Zeitpunkt fließen in technische Kennzahlen (Antwortzeiten, Anzahl
+  Anfragen) ein; diese enthalten weder eine Nutzerkennung noch Nachrichtentext.
+  Bei der Anmeldung erhält auch Supabase deine IP-Adresse.
   **Wichtig:** Beim Abruf der Sprachausgabe wird der zu sprechende Text als
-  Teil der Aufruf-Adresse übertragen und kann daher in den Server-Protokollen
-  des Backends erscheinen.
+  Teil der Aufruf-Adresse übertragen. Das Backend schreibt ihn nicht in seine
+  Protokolle; dort steht nur die Länge des Textes.
 
 Es werden **keine** Standortdaten, Kontakte, Werbe-IDs o. Ä. erfasst. Die App
 fordert **keine Mikrofon-Berechtigung** an; es werden keine Sprachaufnahmen
@@ -70,17 +82,27 @@ gemacht.
 ## 3. Wo die Daten gespeichert und verarbeitet werden
 
 **a) Auf deinem Gerät**
-Nachrichten, der Audio-Cache und die Nutzungsstatistiken werden lokal auf dem
-Gerät gespeichert. Der Audio-Cache lässt sich in der App jederzeit über
-„Cache leeren" entfernen.
+Nachrichten, Schnellphrasen, der Audio-Cache, die Nutzungsstatistiken und die
+Anmelde-Sitzung werden lokal auf dem Gerät gespeichert. Die lokalen Daten werden
+pro Konto getrennt abgelegt. Beim Abmelden bleiben die Daten des Kontos auf dem
+Gerät erhalten (damit Phrasen und Statistik nicht verloren gehen); nur die
+Anmelde-Sitzung wird entfernt. Der Audio-Cache lässt sich in der App jederzeit
+über „Cache leeren" entfernen.
 
-**b) Auf dem selbst betriebenen Backend**
-Deine Chats werden zusätzlich an einen vom Verantwortlichen selbst betriebenen
-Server (Raspberry Pi im privaten Netzwerk) übertragen und dort in einer lokalen
-Datenbank gespeichert, um den Verlauf zu sichern und geräteübergreifend
-verfügbar zu machen. Es besteht **keine öffentliche Zugänglichkeit**; der Zugriff
-erfolgt innerhalb eines privaten Netzwerks bzw. über eine gesicherte
-VPN-Verbindung.
+**b) Backend und Datenbank**
+Deine Chats, Schnellphrasen und Nutzungsstatistiken werden zusätzlich in einer
+Datenbank des Dienstleisters **Supabase** (https://supabase.com) gespeichert,
+auf Servern in **Irland (EU)**. Supabase übernimmt außerdem die Anmeldung
+(E-Mail-Adresse, Passwort-Hash). Die App greift nicht direkt auf die Datenbank
+zu: Jeder Zugriff läuft über das Backend des Verantwortlichen, das nur die Daten
+des angemeldeten Kontos liefert. Das Backend läuft auf einem virtuellen Server
+des Hosting-Anbieters **Hetzner**. Supabase und Hetzner verarbeiten die Daten
+im Auftrag des Verantwortlichen.
+<!--
+  HINWEIS (nicht veroeffentlichen): Standort des Hetzner-Servers hier eintragen
+  (EU), sobald G4 steht. Auftragsverarbeitungsvertraege mit Supabase und
+  Hetzner abschliessen, bevor echte Nutzer kommen.
+-->
 
 **c) Sprachsynthese durch einen Drittanbieter (Mistral AI)**
 Zur Umwandlung von Text in Sprache wird der eingegebene **Text an den
@@ -116,10 +138,11 @@ direkt an die App durchgeleitet und dort im lokalen Cache abgelegt.
 ## 4. Zwecke und Rechtsgrundlage
 
 Die Verarbeitung erfolgt zu dem Zweck, die Kernfunktion der App bereitzustellen:
-Text in Sprache umzuwandeln, den Verlauf zu speichern und Nutzungsstatistiken
-anzuzeigen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Erfüllung der
-Nutzung der App) bzw. lit. f DSGVO (berechtigtes Interesse an einer
-funktionierenden, verlässlichen Kommunikationshilfe). Soweit besondere
+die Anmeldung und die Trennung deiner Daten von denen anderer Nutzer, die
+Umwandlung von Text in Sprache, das Speichern von Verlauf und Schnellphrasen und
+die Anzeige von Nutzungsstatistiken. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b
+DSGVO (Erfüllung der Nutzung der App) bzw. lit. f DSGVO (berechtigtes Interesse
+an einer funktionierenden, verlässlichen Kommunikationshilfe). Soweit besondere
 Kategorien personenbezogener Daten (z. B. Gesundheitsdaten) durch die Inhalte
 betroffen sein können, erfolgt die Verarbeitung auf Grundlage deiner
 ausdrücklichen Einwilligung durch die Nutzung der App (Art. 9 Abs. 2 lit. a DSGVO).
@@ -128,8 +151,9 @@ ausdrücklichen Einwilligung durch die Nutzung der App (Art. 9 Abs. 2 lit. a DSG
 
 ## 5. Weitergabe an Dritte
 
-Eine Weitergabe erfolgt **ausschließlich** an den unter 3c genannten
-Sprachsynthese-Dienstleister (Mistral AI), soweit dies für die Sprachausgabe
+Eine Weitergabe erfolgt **ausschließlich** an die unter 3b und 3c genannten
+Dienstleister: Supabase (Anmeldung und Datenbank), Hetzner (Server des Backends)
+und Mistral AI (Sprachausgabe), soweit dies für die Funktion der App
 erforderlich ist. Es findet **kein Verkauf** von Daten und **keine Nutzung für
 Werbung** statt.
 
@@ -138,24 +162,40 @@ Werbung** statt.
 ## 6. Speicherdauer und Löschung
 
 - **Gerät:** Daten bleiben gespeichert, bis du sie löschst (Cache über
-  „Cache leeren", Chats über die App-Funktionen, oder durch Deinstallation).
-- **Backend:** Chats bleiben gespeichert, bis sie vom Verantwortlichen gelöscht
-  werden. Auf Wunsch werden deine Daten dort gelöscht.
+  „Cache leeren", Chats über die App-Funktionen, oder durch Deinstallation). Die
+  Daten eines abgemeldeten Kontos bleiben bis zur Deinstallation der App auf dem
+  Gerät.
+- **Datenbank:** Chats bleiben gespeichert, bis du sie in der App löschst oder
+  das Konto gelöscht wird. Schnellphrasen und Nutzungsstatistiken bleiben bis zur
+  Löschung des Kontos. Mit dem Konto werden alle zugehörigen Daten in der
+  Datenbank gelöscht. Derzeit löscht der Verantwortliche Konten auf Anfrage
+  (Kontakt unter 1.).
+- **Technische Kennzahlen** (kein Nachrichtentext, keine Nutzerkennung):
+  90 Tage.
 
 ---
 
 ## 7. Datensicherheit
 
-Der Zugriff auf das Backend erfolgt innerhalb eines privaten Netzwerks bzw. über
-eine VPN-Verbindung und ist nicht öffentlich erreichbar. Die Anzahl der Anfragen
-pro Gerät ist begrenzt, um Überlast und Missbrauch zu verhindern.
+Die Verbindungen zwischen App, Backend und Supabase sind verschlüsselt
+(HTTPS/TLS).
+<!--
+  HINWEIS (nicht veroeffentlichen): stimmt erst, wenn Caddy mit HTTPS laeuft
+  (G4). Caddy darf ausserdem keine Query-Strings loggen (Text steht in der URL).
+-->
+Jede Anfrage trägt dein Anmelde-Token. Das Backend prüft es und liefert nur Daten
+des eigenen Kontos. Die App kann nicht direkt auf die Datenbank zugreifen; nur
+das Backend darf sie lesen und schreiben (der Zeilenzugriffsschutz ist für jede
+Tabelle aktiv und sperrt den Zugriff standardmäßig). Das Passwort wird nur als
+Hash gespeichert, die Anmelde-Sitzung liegt im geschützten Speicher des
+Betriebssystems. Die Anzahl der Sprachausgaben pro Konto ist begrenzt, um
+Überlast und Missbrauch zu verhindern.
 
 Bitte beachte dabei zwei Punkte:
 
-- Die Verbindung zwischen App und Backend erfolgt im privaten Netzwerk
-  **unverschlüsselt (HTTP)**. Der Schutz beruht darauf, dass dieses Netzwerk
-  bzw. der VPN-Tunnel nicht öffentlich zugänglich ist. Wer Zugriff auf dieses
-  Netzwerk hat, könnte die Übertragung mitlesen.
+- Chats und Audio-Cache liegen im privaten Bereich der App auf dem Gerät. Das
+  Betriebssystem schützt diesen Bereich, die App verschlüsselt die Dateien aber
+  nicht zusätzlich.
 - Die Übertragung an den Sprachsynthese-Dienstleister (Mistral AI) erfolgt über
   das Internet und ist dorthin verschlüsselt (TLS).
 
