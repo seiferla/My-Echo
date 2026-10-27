@@ -5,18 +5,17 @@ import {
     ScrollView,
     ScrollViewInstance,
     TouchableOpacity,
-    TextInput,
     StyleSheet,
     KeyboardAvoidingView,
     Platform,
-    Modal,
     NativeSyntheticEvent,
     NativeScrollEvent,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, X, Save, Check, ChevronDown, Zap, Leaf } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Send, X, Save, ChevronDown } from 'lucide-react-native';
 import { Message } from './Message';
 import { PhraseBar } from './PhraseBar';
+import { ComposeModal } from './ComposeModal';
 import { usePhrases } from '../context/PhrasesContext';
 import { Phrase } from '../utils/phrases';
 import { warmBackend } from '../utils/tts';
@@ -49,7 +48,6 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editInput, setEditInput] = useState('');
     const scrollViewRef = useRef<ScrollViewInstance>(null);
-    const composeScrollRef = useRef<ScrollViewInstance>(null);
     const insets = useSafeAreaInsets();
     // true when the user is near the end of the list.
     // Starts true: the arrow is hidden and auto-scroll is on.
@@ -188,94 +186,19 @@ export function ChatArea({ chat, onUpdateChat }: ChatAreaProps) {
 
     return (
         <View style={styles.container}>
-            {/* Fullscreen modal — used for composing new messages AND editing existing ones */}
-            <Modal
+            {/* Full-screen editor, for new messages AND for editing */}
+            <ComposeModal
                 visible={isModalOpen}
-                animationType="slide"
-                presentationStyle="fullScreen"
-            >
-                {/* Only top/left/right: no bottom padding, so the TextInput uses the full height */}
-                <SafeAreaView style={styles.modalContainer} edges={['top', 'left', 'right']}>
-                    <View style={styles.modalHeader}>
-                        <TouchableOpacity onPress={handleCloseModal} style={styles.modalButton}>
-                            <X size={32} color="#4b5563" />
-                        </TouchableOpacity>
-                        {!isEditMode && (
-                            // Icon only, same size as the other header buttons: a wide
-                            // text/switch pushed the send button off small screens.
-                            // Lightning = fast, leaf = eco.
-                            <TouchableOpacity
-                                onPress={() => setFastMode(!fastMode)}
-                                style={[styles.modalButton, { backgroundColor: fastMode ? '#e0f2fe' : '#dcfce7' }]}
-                                activeOpacity={0.7}
-                                accessibilityRole="switch"
-                                accessibilityState={{ checked: fastMode }}
-                                accessibilityLabel={fastMode ? 'Schnell-Modus an' : 'Eco-Modus an'}
-                            >
-                                {fastMode ? <Zap size={32} color="#0ea5e9" /> : <Leaf size={32} color="#16a34a" />}
-                            </TouchableOpacity>
-                        )}
-                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                            {isEditMode ? (
-                                // Edit mode: only Check (save)
-                                <TouchableOpacity
-                                    onPress={handleSaveEdit}
-                                    disabled={!editInput.trim()}
-                                    style={[styles.modalButton, styles.saveButton, !editInput.trim() && styles.disabledButton]}
-                                >
-                                    <Check size={32} color="white" />
-                                </TouchableOpacity>
-                            ) : (
-                                // Compose mode: Save (silent) + Send (spoken)
-                                <>
-                                    <TouchableOpacity
-                                        onPress={handleSave}
-                                        disabled={!input.trim()}
-                                        style={[styles.modalButton, styles.saveButton, !input.trim() && styles.disabledButton]}
-                                    >
-                                        <Save size={32} color="white" />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        onPress={handleSend}
-                                        disabled={!input.trim()}
-                                        style={[styles.modalButton, styles.sendButton, !input.trim() && styles.disabledButton]}
-                                    >
-                                        <Send size={32} color="white" />
-                                    </TouchableOpacity>
-                                </>
-                            )}
-                        </View>
-                    </View>
-
-                    {/* Moves the content up when the keyboard opens */}
-                    <KeyboardAvoidingView
-                        style={{ flex: 1 }}
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    >
-                    {/* ScrollView follows the cursor; the TextInput grows with the text */}
-                    <ScrollView
-                        ref={composeScrollRef}
-                        style={styles.composeScroll}
-                        keyboardShouldPersistTaps="handled"
-                        onContentSizeChange={() =>
-                            composeScrollRef.current?.scrollToEnd({ animated: false })
-                        }
-                    >
-                        <TextInput
-                            style={styles.modalInput}
-                            value={modalValue}
-                            onChangeText={setModalValue}
-                            placeholder={isEditMode ? "Nachricht bearbeiten..." : "Nachricht eingeben..."}
-                            placeholderTextColor="#9ca3af"
-                            multiline
-                            autoFocus
-                            textAlignVertical="top"
-                            scrollEnabled={false}
-                        />
-                    </ScrollView>
-                    </KeyboardAvoidingView>
-                </SafeAreaView>
-            </Modal>
+                isEditMode={isEditMode}
+                value={modalValue}
+                onChangeText={setModalValue}
+                fastMode={fastMode}
+                onToggleFastMode={() => setFastMode(!fastMode)}
+                onClose={handleCloseModal}
+                onSave={handleSave}
+                onSend={handleSend}
+                onSaveEdit={handleSaveEdit}
+            />
 
             {/* Messages list */}
             <ScrollView
@@ -397,40 +320,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#ffffff',
-    },
-    modalContainer: {
-        flex: 1,
-        backgroundColor: '#ffffff',
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        padding: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e5e7eb',
-    },
-    modalButton: {
-        padding: 10,
-        borderRadius: 30,
-    },
-    sendButton: {
-        backgroundColor: '#0ea5e9',
-    },
-    saveButton: {
-        backgroundColor: '#10b981',
-    },
-    disabledButton: {
-        opacity: 0.4,
-    },
-    composeScroll: {
-        flex: 1,
-    },
-    modalInput: {
-        minHeight: 200,
-        padding: 20,
-        fontSize: 32,
-        color: '#111827',
-        fontWeight: '500',
     },
     messagesList: {
         flex: 1,
