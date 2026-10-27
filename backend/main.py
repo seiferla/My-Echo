@@ -157,6 +157,13 @@ async def _close_quietly(ws) -> None:
         await ws.close()
 
 
+async def _send_text(ws, text: str) -> None:
+    """Sends the text and asks Fish to synthesize it and then close the stream."""
+    await ws.send(msgpack.packb({"event": "text", "text": text}))
+    await ws.send(msgpack.packb({"event": "flush"}))
+    await ws.send(msgpack.packb({"event": "stop"}))
+
+
 async def _open_fish_connection():
     """Opens a Fish Audio connection and sends the start event."""
     ws = await websockets.connect(WS_URL, additional_headers=_fish_headers())
@@ -233,21 +240,15 @@ async def stream_tts(
         try:
             # The start event is already sent (warm or fresh).
             try:
-                await ws.send(msgpack.packb({"event": "text", "text": text}))
-                await ws.send(msgpack.packb({"event": "flush"}))
-                await ws.send(msgpack.packb({"event": "stop"}))
-                t_sent = time.monotonic()
+                await _send_text(ws, text)
             except Exception:
                 # The warm connection was dead: retry once with a fresh one.
-                if not opened_fresh:
-                    await _close_quietly(ws)
-                    ws = await _open_fish_connection()
-                    await ws.send(msgpack.packb({"event": "text", "text": text}))
-                    await ws.send(msgpack.packb({"event": "flush"}))
-                    await ws.send(msgpack.packb({"event": "stop"}))
-                    t_sent = time.monotonic()
-                else:
+                if opened_fresh:
                     raise
+                await _close_quietly(ws)
+                ws = await _open_fish_connection()
+                await _send_text(ws, text)
+            t_sent = time.monotonic()
 
             async for message in ws:
                 msg = msgpack.unpackb(message)
