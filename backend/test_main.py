@@ -15,7 +15,7 @@ def _mock_request():
 
 
 class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
-    """Tests für _open_fish_connection und _take_warm_connection (51-53, 61-73)."""
+    """Tests for _open_fish_connection and _take_warm_connection (51-53, 61-73)."""
 
     async def test_open_fish_connection_connects_and_sends_start(self):
         mock_ws = AsyncMock()
@@ -57,7 +57,7 @@ class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
 
 
 class TestStreamTts(unittest.IsolatedAsyncioTestCase):
-    """Tests für den HTTP-Streaming-Endpunkt /stream/tts."""
+    """Tests for the HTTP streaming endpoint /stream/tts."""
 
     def _make_ws_mock(self, chunks=None):
         chunks = chunks or [b"chunk1", b"chunk2"]
@@ -102,7 +102,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(collected, b"chunk1chunk2")
 
     async def test_close_exception_during_retry_is_silenced(self):
-        """Lines 120-121: ws.close() wirft während Retry-Cleanup — wird ignoriert."""
+        """Lines 120-121: ws.close() raises during retry cleanup — it is ignored."""
         dead_ws = AsyncMock()
         dead_ws.send.side_effect = Exception("dead")
         dead_ws.close.side_effect = Exception("close also failed")
@@ -117,7 +117,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(collected, b"chunk1chunk2")
 
     async def test_raises_when_fresh_connection_send_fails(self):
-        """Line 127: opened_fresh=True und send schlägt fehl → Exception propagiert."""
+        """Line 127: opened_fresh=True and send fails → exception is propagated."""
         failing_ws = AsyncMock()
         failing_ws.send.side_effect = Exception("Network error")
 
@@ -129,7 +129,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
                     pass
 
     async def test_close_exception_in_finally_is_silenced(self):
-        """Lines 139-140: ws.close() wirft in finally — Exception wird ignoriert."""
+        """Lines 139-140: ws.close() raises in finally — exception is ignored."""
         ws = self._make_ws_mock()
         ws.close.side_effect = Exception("close failed")
 
@@ -148,7 +148,7 @@ class TestStreamTts(unittest.IsolatedAsyncioTestCase):
 
 
 class TestWarmup(unittest.IsolatedAsyncioTestCase):
-    """Tests für den /warmup-Endpunkt."""
+    """Tests for the /warmup endpoint."""
 
     async def test_warmup_opens_connection_and_returns_warm(self):
         mock_ws = AsyncMock()
@@ -173,7 +173,7 @@ class TestWarmup(unittest.IsolatedAsyncioTestCase):
         self.assertIs(main._warm["ws"], new_ws)
 
     async def test_warmup_close_exception_is_silenced(self):
-        """Lines 88-89: close() wirft beim Ersetzen — Exception wird ignoriert."""
+        """Lines 88-89: close() raises while replacing — exception is ignored."""
         old_ws = AsyncMock()
         old_ws.close.side_effect = Exception("close failed")
         new_ws = AsyncMock()
@@ -194,7 +194,7 @@ class TestWarmup(unittest.IsolatedAsyncioTestCase):
 
 
 class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
-    """Tests für den /health-Endpunkt."""
+    """Tests for the /health endpoint."""
 
     @patch("main.httpx.AsyncClient")
     async def test_health_success_includes_voice_and_model(self, mock_client_class):
@@ -211,7 +211,7 @@ class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
             response = await main.health()
 
         self.assertEqual(response["status"], "ok")
-        self.assertNotIn("credits", response)  # Guthaben nicht öffentlich ausgeben
+        self.assertNotIn("credits", response)  # do not expose the credit balance publicly
         self.assertEqual(response["voice"], "voice-abc")
         self.assertEqual(response["model"], "s2-pro")
 
@@ -251,7 +251,7 @@ class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
 
     @patch("main.httpx.AsyncClient")
     async def test_health_generic_exception_returns_error(self, mock_client_class):
-        """Unerwartete Exception wird ohne interne Details als error zurückgegeben."""
+        """Unexpected exception is returned as error without internal details."""
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
         mock_client.get.side_effect = Exception("Unexpected error")

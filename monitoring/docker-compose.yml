@@ -35,7 +35,7 @@ services:
       - "3001:3000"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      # Named Volume — Dashboards, Settings, Passwörter bleiben erhalten
+      # Named volume — dashboards, settings and passwords are kept
       - grafana_data:/var/lib/grafana
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set}
