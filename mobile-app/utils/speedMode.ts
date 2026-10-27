@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { storage } from './storage';
 
-// Schnell-/Eco-Modus fürs Tippen:
-// - Schnell: Sätze werden schon während des Tippens synthetisiert (Antwort sofort
-//   beim Senden, dafür auch Requests für Text, der später geändert wird).
-// - Eco: Es wird erst beim Senden synthetisiert (weniger Requests, längere Wartezeit).
+// Fast / eco mode for typing:
+// - Fast: sentences are synthesized while typing (instant answer on send,
+//   but also requests for text that changes later).
+// - Eco: synthesis starts on send (fewer requests, longer wait).
 const KEY = 'myEchoFastMode';
 
 export function useFastMode(): [boolean, (fast: boolean) => void] {

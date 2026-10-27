@@ -8,7 +8,7 @@
   "panels": [
     {
       "id": 1,
-      "title": "TTS Requests gesamt",
+      "title": "TTS requests total",
       "type": "stat",
       "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
       "options": { "colorMode": "background", "graphMode": "area", "textMode": "auto" },
@@ -45,7 +45,7 @@
     },
     {
       "id": 3,
-      "title": "Latenz p50",
+      "title": "Latency p50",
       "type": "stat",
       "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
       "options": { "colorMode": "background" },
@@ -70,7 +70,7 @@
     },
     {
       "id": 4,
-      "title": "Latenz p95",
+      "title": "Latency p95",
       "type": "stat",
       "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
       "options": { "colorMode": "background" },
@@ -95,7 +95,7 @@
     },
     {
       "id": 5,
-      "title": "Request Rate über Zeit",
+      "title": "Request rate over time",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
       "fieldConfig": {
@@ -118,7 +118,7 @@
     },
     {
       "id": 6,
-      "title": "Latenz über Zeit (p50 / p95 / p99)",
+      "title": "Latency over time (p50 / p95 / p99)",
       "type": "timeseries",
       "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
       "fieldConfig": {
@@ -141,7 +141,7 @@
     },
     {
       "id": 7,
-      "title": "Fehlerrate",
+      "title": "Error rate",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 12, "w": 12, "h": 6 },
       "fieldConfig": {
@@ -153,7 +153,7 @@
       },
       "targets": [{
         "expr": "sum(rate(http_request_duration_seconds_count{handler=~\"/stream/tts|/ws/tts\",status=~\"4..|5..\"}[5m])) / sum(rate(http_request_duration_seconds_count{handler=~\"/stream/tts|/ws/tts\"}[5m]))",
-        "legendFormat": "Fehlerrate"
+        "legendFormat": "Error rate"
       }]
     },
     {

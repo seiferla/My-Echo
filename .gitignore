@@ -1,5 +1,11 @@
 # dependencies
 node_modules/
+__pycache__/
+.venv/
+
+# test output
+.coverage
+coverage.json
 mobile-app/node_modules/
 
 # Expo / React Native
@@ -24,6 +30,7 @@ mobile-app/.idea/
 .env
 .env.local
 .env.*.local
+FETCH_HEAD
 
 # Python
 __pycache__/

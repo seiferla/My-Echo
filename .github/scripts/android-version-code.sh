@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Berechnet den Android-versionCode für ALLE Build-Workflows nach derselben Formel:
-# Sekunden seit 2026-01-01 00:00 UTC.
+# Computes the Android versionCode for ALL build workflows with the same formula:
+# seconds since 2026-01-01 00:00 UTC.
 #
-# Warum Zeit statt github.run_number: Jeder Workflow hat einen eigenen Lauf-Zähler.
-# Mit mehreren Workflows (Release, Merge-Build) laufen die Zähler auseinander, und
-# Play lehnt Bundles mit niedrigerem Code ab ("no existing users can upgrade").
-# Die Zeit steigt über alle Workflows hinweg monoton.
+# Why time instead of github.run_number: every workflow has its own run counter.
+# With several workflows (release, merge build) the counters drift apart, and
+# Play rejects bundles with a lower code ("no existing users can upgrade").
+# Time always grows, across all workflows.
 #
-# Limit: Play erlaubt max. 2.100.000.000. Mit dieser Formel reicht das für ~66 Jahre.
+# Limit: Play allows max. 2,100,000,000. With this formula that lasts ~66 years.
 set -euo pipefail
 
 EPOCH_START=1767225600   # 2026-01-01T00:00:00Z

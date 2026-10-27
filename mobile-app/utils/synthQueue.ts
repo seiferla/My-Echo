@@ -1,12 +1,12 @@
-// Serielle Warteschlange für die Satz-Vorab-Synthese (ohne expo-Abhängigkeit,
-// damit isoliert testbar; die App-Instanz steht in tts.ts).
+// Serial queue for the sentence prefetch. No expo imports, so it can be tested
+// alone; the app instance is in tts.ts.
 //
-// - Ein Request gleichzeitig (begrenzt die Last).
-// - Gleicher Satz → derselbe Job (keine doppelten Requests).
-// - stillWanted: Typing-Jobs, deren Satz beim Start nicht mehr im Text steht,
-//   werden übersprungen. Wartet aber speak() auf den Job (awaitPending/enqueue
-//   ohne stillWanted), wird er trotzdem ausgeführt („forced“) — sonst würde ein
-//   Reset beim Senden genau die Sätze verwerfen, die gleich gesprochen werden.
+// - One request at a time (limits the load).
+// - Same sentence → same job (no double requests).
+// - stillWanted: a typing job whose sentence is no longer in the text is skipped.
+//   But if speak() waits for the job (awaitPending, or enqueue without
+//   stillWanted), it runs anyway ("forced"). Else a reset on send would drop
+//   exactly the sentences that are about to be spoken.
 
 export type SynthFn = (text: string, voice: string, model: string) => Promise<void>;
 
@@ -47,7 +47,7 @@ export function createSynthQueue(synth: SynthFn, onError: (e: unknown) => void =
         return job;
     }
 
-    /** Läuft/wartet ein Job für den Satz? Dann darauf warten (und ihn erzwingen). */
+    /** Returns the running/queued job for the sentence (and forces it), or null. */
     function awaitPending(text: string, voice: string, model: string): Promise<void> | null {
         const key = keyOf(text, voice, model);
         const job = inflight.get(key);
@@ -56,10 +56,5 @@ export function createSynthQueue(synth: SynthFn, onError: (e: unknown) => void =
         return job;
     }
 
-    /** Resolved, sobald die Warteschlange leer ist. */
-    function idle(): Promise<void> {
-        return tail;
-    }
-
-    return { enqueue, awaitPending, idle };
+    return { enqueue, awaitPending };
 }

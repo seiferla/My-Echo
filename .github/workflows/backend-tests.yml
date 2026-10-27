@@ -10,6 +10,20 @@ jobs:
     permissions:
       contents: read
 
+    # The data tests run against a real Postgres (schema from supabase/migrations).
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -28,10 +42,17 @@ jobs:
 
       - name: Run backend tests with coverage
         working-directory: backend
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
         run: |
-          pytest --cov=main --cov-report=term-missing --cov-report=json
+          pytest --cov --cov-report=term-missing --cov-report=json
           COVERAGE=$(python3 -c "import json; d=json.load(open('coverage.json')); print(int(d['totals']['percent_covered_display']))")
           echo "COVERAGE=$COVERAGE" >> $GITHUB_ENV
+
+      - name: Run load test unit tests
+        run: |
+          uv pip install --system -r loadtest/requirements.txt
+          pytest loadtest
 
       - name: Update coverage badge
         if: github.ref == 'refs/heads/main'

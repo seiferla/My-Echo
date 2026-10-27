@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BACKEND_HEALTH_URL } from '../utils/config';
 
 const TAG = '[myEcho][Health]';
-const CHECK_INTERVAL_MS = 30_000; // alle 30 Sekunden
+const CHECK_INTERVAL_MS = 30_000;
 
 interface CloudStatusContextType {
     isAvailable: boolean;
@@ -17,10 +17,9 @@ const CloudStatusContext = createContext<CloudStatusContextType>({
 });
 
 /**
- * Pollt den /health-Endpunkt des Backends und stellt den Status
- * sowie voice + model per Context bereit. voice/model fließen in den
- * Cache-Key ein, damit ein Voice-Wechsel im Backend keine alten Audios mehr
- * abspielt. In _layout.tsx einbinden.
+ * Polls the backend's /health route and provides the status plus voice and
+ * model. voice/model are part of the cache key, so after a voice change in
+ * the backend no old audio is played. Used in _layout.tsx.
  */
 export function CloudStatusProvider({ children }: { children: React.ReactNode }) {
     const [isAvailable, setIsAvailable] = useState(false);
@@ -40,14 +39,11 @@ export function CloudStatusProvider({ children }: { children: React.ReactNode })
                 const latency = Date.now() - t0;
 
                 console.log(`${TAG} Response (${latency} ms): status=${data.status} HTTP=${response.status}`);
-                if (data.credits !== undefined) {
-                    console.log(`${TAG} Credits: ${JSON.stringify(data.credits)}`);
-                }
                 if (data.message) {
                     console.warn(`${TAG} Message: ${data.message}`);
                 }
-                // Voice + Model bei jeder Antwort aktualisieren (auch bei status != ok),
-                // damit der Cache-Key konsistent bleibt sobald das Backend kurz weg war.
+                // Update voice + model on every answer (also when status != ok),
+                // so the cache key stays right after a short backend outage.
                 if (typeof data.voice === 'string') setVoice(data.voice);
                 if (typeof data.model === 'string') setModel(data.model);
 
@@ -59,7 +55,7 @@ export function CloudStatusProvider({ children }: { children: React.ReactNode })
             }
         };
 
-        check(); // sofort beim Start
+        check(); // once at start
         const interval = setInterval(check, CHECK_INTERVAL_MS);
         return () => clearInterval(interval);
     }, []);

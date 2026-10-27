@@ -34,8 +34,8 @@ import { useRouter } from 'expo-router';
 import { usePhrases } from '../context/PhrasesContext';
 import { MAX_VISIBLE_PHRASES, Phrase, reorder } from '../utils/phrases';
 
-// Feste Zeilenhöhe — das Drag & Drop rechnet die Zielposition aus der
-// Fingerbewegung (dy / STEP). Ohne feste Höhe wäre diese Rechnung nicht möglich.
+// Fixed row height: drag & drop computes the target row from the finger
+// movement (dy / STEP), which only works with a fixed height.
 const ROW_H = 88;
 const ROW_GAP = 10;
 const STEP = ROW_H + ROW_GAP;
@@ -56,23 +56,23 @@ export default function PhrasesScreen() {
         setInstantEnabled,
     } = usePhrases();
 
-    // editing === null → Editor geschlossen. editing === 'new' → neue Phrase.
+    // null = editor closed, 'new' = new phrase, otherwise the phrase being edited.
     const [editing, setEditing] = useState<'new' | Phrase | null>(null);
     const [draftText, setDraftText] = useState('');
     const editorScrollRef = useRef<ScrollViewInstance>(null);
 
     // --- Drag & Drop ---------------------------------------------------------
-    // dragIndex = Position, an der die Phrase aufgenommen wurde.
-    // targetIndex = Position, an der sie beim Loslassen landen würde.
+    // dragIndex = row where the phrase was picked up.
+    // targetIndex = row where it would land on release.
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [targetIndex, setTargetIndex] = useState<number | null>(null);
     const targetRef = useRef<number | null>(null);
-    // Position, an der die Karte aufgenommen wurde — Basis für die dy-Rechnung.
+    // Row where the card was picked up; the base for the dy calculation.
     const startRef = useRef<number | null>(null);
-    // Immer der aktuelle Stand der Liste, lesbar aus den Gesten-Callbacks.
+    // Always the current list, readable from the gesture callbacks.
     const phrasesRef = useRef(phrases);
     phrasesRef.current = phrases;
-    // Absolute Y-Position der schwebenden Karte innerhalb der Liste.
+    // Absolute Y position of the floating card inside the list.
     const dragY = useRef(new Animated.Value(0)).current;
 
     const endDrag = () => {
@@ -82,10 +82,9 @@ export default function PhrasesScreen() {
         startRef.current = null;
     };
 
-    // Die PanResponder müssen über Re-Renders hinweg dieselben Objekte bleiben:
-    // ein neu erzeugter Responder hätte mitten in der Geste wieder dy = 0 und
-    // die Karte würde zurückspringen. Deshalb einmal pro Phrase anlegen und
-    // merken; die Position wird zur Laufzeit über die Refs geholt.
+    // A PanResponder must stay the same object across re-renders: a new one would
+    // restart at dy = 0 in the middle of a gesture and the card would jump back.
+    // So create one per phrase and keep it; positions are read from the refs.
     const respondersRef = useRef(new Map<string, PanResponderInstance>());
 
     const getDragResponder = (id: string): PanResponderInstance => {
@@ -94,8 +93,7 @@ export default function PhrasesScreen() {
 
         const responder = PanResponder.create({
             onStartShouldSetPanResponder: () => true,
-            // Erst ab ein paar Pixeln übernehmen, damit ein Antippen des Griffs
-            // die Liste nicht sofort in den Drag-Modus zwingt.
+            // Start only after a few pixels, so a tap on the handle does not start a drag.
             onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 2,
             onPanResponderGrant: () => {
                 const index = phrasesRef.current.findIndex((p) => p.id === id);
@@ -124,8 +122,7 @@ export default function PhrasesScreen() {
                 endDrag();
             },
             onPanResponderTerminate: endDrag,
-            // Ohne das darf die umgebende ScrollView die Geste an sich reißen,
-            // sobald der Finger senkrecht wandert — der Drag bräche dann ab.
+            // Without this the ScrollView takes over the vertical gesture and the drag stops.
             onPanResponderTerminationRequest: () => false,
             onShouldBlockNativeResponder: () => true,
         });
@@ -133,7 +130,7 @@ export default function PhrasesScreen() {
         return responder;
     };
 
-    // Responder gelöschter Phrasen aufräumen, damit die Map nicht mitwächst.
+    // Drop the responders of deleted phrases, so the map does not grow.
     useEffect(() => {
         const alive = new Set(phrases.map((p) => p.id));
         for (const id of respondersRef.current.keys()) {
@@ -141,7 +138,7 @@ export default function PhrasesScreen() {
         }
     }, [phrases]);
 
-    // Während des Ziehens zeigt die Liste schon die künftige Reihenfolge.
+    // While dragging, the list already shows the new order.
     const preview =
         dragIndex !== null && targetIndex !== null
             ? reorder(phrases, dragIndex, targetIndex)
@@ -173,7 +170,7 @@ export default function PhrasesScreen() {
         ]);
     };
 
-    // --- Karte ---------------------------------------------------------------
+    // --- Card ----------------------------------------------------------------
     const renderCard = (phrase: Phrase, index: number, floating = false) => {
         const isVisibleInChat = index < settings.visibleCount;
         const speaks = settings.instantEnabled;
@@ -226,8 +223,7 @@ export default function PhrasesScreen() {
                         {phrase.useCount > 0 ? ` · ${phrase.useCount}×` : ''}
                         {isVisibleInChat ? ' · im Chat' : ''}
                     </Text>
-                    {/* Pfeile bleiben als Alternative zum Ziehen — feinmotorisch
-                        deutlich anspruchsloser als eine Drag-Geste. */}
+                    {/* Arrows as an alternative to dragging: much easier for fine motor skills. */}
                     <View style={styles.arrowRow}>
                         <TouchableOpacity
                             onPress={() => movePhrase(phrase.id, -1)}
@@ -272,11 +268,10 @@ export default function PhrasesScreen() {
 
             <ScrollView
                 contentContainerStyle={styles.list}
-                // Während des Ziehens darf die Liste nicht mitscrollen, sonst
-                // springt die Karte unter dem Finger weg.
+                // No scrolling while dragging, else the card jumps away from the finger.
                 scrollEnabled={dragIndex === null}
             >
-                {/* Einstellungen */}
+                {/* Settings */}
                 <View style={styles.settingsCard}>
                     <Text style={styles.settingsLabel}>Im Chat anzeigen</Text>
                     <View style={styles.segment}>
@@ -329,11 +324,10 @@ export default function PhrasesScreen() {
                     Reihenfolge ändern: am Griff ziehen oder die Pfeile benutzen.
                 </Text>
 
-                {/* Liste mit fester Zeilenhöhe — Basis für das Ziehen */}
+                {/* List with a fixed row height: needed for dragging */}
                 <View style={styles.rows}>
                     {preview.map((phrase) => {
-                        // Der Index in der Vorschau bestimmt die Position; für die
-                        // Aktionen zählt der echte Index in der gespeicherten Liste.
+                        // The preview index sets the position; actions use the real index.
                         const realIndex = phrases.findIndex((p) => p.id === phrase.id);
                         const previewIndex = preview.findIndex((p) => p.id === phrase.id);
                         return (
@@ -346,7 +340,7 @@ export default function PhrasesScreen() {
                         );
                     })}
 
-                    {/* Schwebende Kopie, die dem Finger folgt */}
+                    {/* Floating copy that follows the finger */}
                     {draggedPhrase && (
                         <Animated.View
                             pointerEvents="none"
@@ -366,9 +360,8 @@ export default function PhrasesScreen() {
                 <Plus size={28} color="#ffffff" />
             </TouchableOpacity>
 
-            {/* Editor für neue und bestehende Phrasen — bewusst derselbe
-                Vollbild-Aufbau wie beim Schreiben einer Nachricht (siehe
-                ChatArea): große Schrift, viel Platz, gleiche Bedienung. */}
+            {/* Editor for new and existing phrases. Same full-screen layout as
+                writing a message (see ChatArea): big font, lots of space. */}
             <Modal
                 visible={editing !== null}
                 animationType="slide"
@@ -497,12 +490,12 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         justifyContent: 'space-between',
     },
-    // Hebt die Phrasen hervor, die tatsächlich im Chat sichtbar sind.
+    // Highlights the phrases that are visible in the chat.
     cardVisible: {
         borderColor: '#bae6fd',
         backgroundColor: '#f0f9ff',
     },
-    // Die Karte am Finger — angehoben durch Schatten und leichte Neigung.
+    // The card under the finger: lifted with a shadow and a small scale.
     cardFloating: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 6 },
@@ -511,7 +504,7 @@ const styles = StyleSheet.create({
         elevation: 8,
         transform: [{ scale: 1.02 }],
     },
-    // Die Lücke, aus der die Karte gerade herausgezogen wurde.
+    // The gap the card was dragged out of.
     cardPlaceholder: {
         opacity: 0.25,
         borderStyle: 'dashed',
@@ -559,7 +552,7 @@ const styles = StyleSheet.create({
     editorButton: { padding: 10, borderRadius: 30 },
     editorSave: { backgroundColor: '#10b981' },
     editorDisabled: { opacity: 0.4 },
-    // Gleiche Schriftgröße wie im Nachrichten-Editor der ChatArea.
+    // Same font size as the message editor in ChatArea.
     editorInput: {
         minHeight: 200,
         padding: 20,

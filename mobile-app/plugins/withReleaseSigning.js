@@ -1,32 +1,32 @@
 const { withAppBuildGradle } = require('expo/config-plugins');
 
 /**
- * Expo Config-Plugin: macht android/app/build.gradle CI-tauglich.
+ * Expo config plugin: makes android/app/build.gradle ready for CI.
  *
- * Das native android/-Projekt wird nicht eingecheckt, sondern bei jedem Build
- * per `expo prebuild` neu generiert. Manuelle build.gradle-Änderungen würden dabei
- * verloren gehen – dieses Plugin trägt sie deshalb bei jedem prebuild automatisch
- * wieder ein (lokal wie in GitHub Actions). Es erledigt drei Dinge:
+ * The native android/ project is not checked in. It is generated again on every
+ * build with `expo prebuild`, so manual build.gradle changes would be lost.
+ * This plugin adds them again automatically on every prebuild
+ * (locally and in GitHub Actions). It does three things:
  *
- *   1. Release-Signierung: liest Keystore-Zugangsdaten zur Build-Zeit aus
- *      android/keystore.properties (lokal vorhanden, in CI aus GitHub-Secrets
- *      geschrieben). Fehlt die Datei, fällt der Build auf den Debug-Key zurück
- *      und bricht nicht.
+ *   1. Release signing: reads the keystore credentials at build time from
+ *      android/keystore.properties (exists locally; in CI it is written from
+ *      GitHub secrets). If the file is missing, the build falls back to the
+ *      debug key and does not fail.
  *
- *   2. versionCode: überschreibbar über die Umgebungsvariable ANDROID_VERSION_CODE,
- *      damit CI jeden Build monoton hochzählen kann (Pflicht, um eine bereits
- *      installierte App per Update zu überschreiben).
+ *   2. versionCode: can be overridden with the env variable ANDROID_VERSION_CODE,
+ *      so CI can count every build up monotonically (required to update an
+ *      app that is already installed).
  *
- *   3. versionName: überschreibbar über ANDROID_VERSION_NAME (z.B. aus einem
- *      Git-Tag), sonst der Wert aus app.json.
+ *   3. versionName: can be overridden with ANDROID_VERSION_NAME (e.g. from a
+ *      Git tag), otherwise the value from app.json.
  *
- * Alle Änderungen sind idempotent (Marker-geschützt).
+ * All changes are idempotent (protected by a marker).
  */
 
 const MARKER = '[withReleaseSigning]';
 
 const PROPS_BLOCK = `
-// ${MARKER} Release-Signierung aus android/keystore.properties
+// ${MARKER} Release signing from android/keystore.properties
 def keystorePropertiesFile = rootProject.file("keystore.properties")
 def keystoreProperties = new Properties()
 def hasReleaseKeystore = keystorePropertiesFile.exists()
@@ -38,10 +38,10 @@ if (hasReleaseKeystore) {
 function applySigning(contents) {
     if (contents.includes(MARKER)) return contents;
 
-    // 1. Properties-Block direkt vor dem android { }-Block einfügen.
+    // 1. Insert the properties block right before the android { } block.
     contents = contents.replace(/\nandroid\s*\{/, `\n${PROPS_BLOCK}\nandroid {`);
 
-    // 2. release-signingConfig nach dem debug-Block in signingConfigs { } ergänzen.
+    // 2. Add the release signingConfig after the debug block in signingConfigs { }.
     contents = contents.replace(
         /(signingConfigs\s*\{[\s\S]*?debug\s*\{[\s\S]*?\}\s*\n)(\s*\})/,
         `$1        release {
@@ -55,19 +55,19 @@ function applySigning(contents) {
 $2`
     );
 
-    // 3. release-buildType auf den Release-Key umstellen (Fallback: debug).
+    // 3. Switch the release buildType to the release key (fallback: debug).
     contents = contents.replace(
         /(buildTypes\s*\{[\s\S]*?release\s*\{[\s\S]*?)signingConfig signingConfigs\.debug/,
         `$1signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug`
     );
 
-    // 4. versionCode aus ANDROID_VERSION_CODE (Fallback: ursprünglicher Wert).
+    // 4. versionCode from ANDROID_VERSION_CODE (fallback: original value).
     contents = contents.replace(
         /versionCode\s+(\d+)/,
         'versionCode (System.getenv("ANDROID_VERSION_CODE")?.toInteger() ?: $1)'
     );
 
-    // 5. versionName aus ANDROID_VERSION_NAME (Fallback: ursprünglicher Wert).
+    // 5. versionName from ANDROID_VERSION_NAME (fallback: original value).
     contents = contents.replace(
         /versionName\s+"([^"]*)"/,
         'versionName (System.getenv("ANDROID_VERSION_NAME") ?: "$1")'
@@ -79,7 +79,7 @@ $2`
 module.exports = function withReleaseSigning(config) {
     return withAppBuildGradle(config, (cfg) => {
         if (cfg.modResults.language !== 'groovy') {
-            throw new Error('withReleaseSigning unterstützt nur Groovy-build.gradle.');
+            throw new Error('withReleaseSigning only supports a Groovy build.gradle.');
         }
         cfg.modResults.contents = applySigning(cfg.modResults.contents);
         return cfg;

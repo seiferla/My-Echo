@@ -1,11 +1,11 @@
 name: Backend Deploy
 
-# Baut das Backend-Docker-Image und pusht es zu GitHub Container Registry (GHCR).
-# Portainer auf dem Pi kann dann per "Re-pull image and redeploy" das neue Image holen.
+# Builds the backend Docker image and pushes it to GitHub Container Registry (GHCR).
+# Portainer on the Pi can then get the new image with "Re-pull image and redeploy".
 #
-# Auslöser:
-#   - bei Änderungen in backend/ auf main
-#   - manuell (workflow_dispatch)
+# Triggers:
+#   - changes in backend/ on main
+#   - manual (workflow_dispatch)
 on:
   push:
     branches: [main]
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # nötig um zu GHCR zu pushen
+      packages: write # needed to push to GHCR
 
     steps:
       - name: Checkout repository

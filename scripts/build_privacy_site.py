@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Baut die Datenschutz-Seite fuer GitHub Pages.
+"""Builds the privacy page for GitHub Pages.
 
-Bewusst werden NUR die beiden Datenschutz-Dateien veroeffentlicht — alles
-andere in docs/ bleibt aussen vor.
+On purpose, ONLY the two privacy files are published — everything
+else in docs/ stays out.
 
-Aufruf:  python3 scripts/build_privacy_site.py [ziel-ordner]
+Usage:  python3 scripts/build_privacy_site.py [target-folder]
 """
 import pathlib
 import re
@@ -15,7 +15,7 @@ import markdown
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "site")
 
-# (Quelldatei, Zieldatei, <title>, Link-Text zur anderen Sprache)
+# (source file, target file, <title>, link text to the other language)
 PAGES = [
     ("docs/PRIVACY.md",    "index.html", "Datenschutzerklärung — myEcho", "English version", "privacy-en.html"),
     ("docs/PRIVACY_EN.md", "privacy-en.html", "Privacy Policy — myEcho",  "Deutsche Fassung", "index.html"),
@@ -68,8 +68,8 @@ def build() -> None:
     for src, dst, title, other_label, other_href in PAGES:
         text = (ROOT / src).read_text(encoding="utf-8")
 
-        # HTML-Kommentare entfernen: interne Notizen duerfen nicht im
-        # Seitenquelltext landen (waeren ueber "Quelltext anzeigen" lesbar).
+        # Remove HTML comments: internal notes must not end up in the page
+        # source (they would be readable with "view source").
         text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
 
         body = markdown.markdown(text, extensions=["tables", "sane_lists"])
@@ -83,9 +83,9 @@ def build() -> None:
         (OUT / dst).write_text(html, encoding="utf-8")
         print(f"  {src}  ->  {OUT.name}/{dst}")
 
-    # .nojekyll: GitHub soll die Dateien unveraendert ausliefern
+    # .nojekyll: GitHub should serve the files unchanged
     (OUT / ".nojekyll").write_text("", encoding="utf-8")
-    print(f"fertig: {OUT}")
+    print(f"done: {OUT}")
 
 
 if __name__ == "__main__":
