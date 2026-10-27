@@ -6,22 +6,19 @@ import {
     Text,
     Modal,
     Dimensions,
-    Animated,
     TouchableWithoutFeedback
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Menu, PenSquare } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
 import { Sidebar } from '../components/Sidebar';
 import { ChatArea } from '../components/ChatArea';
 import { useCloudStatus } from '../context/CloudStatusContext';
-import { Chat, ChatMessage, withMessageIds } from '../utils/types';
+import { Chat, ChatMessage } from '../utils/types';
 import { loadChatsForStart, mergeChats, pushChat, deleteChatRemote, persistLocal } from '../utils/chatSync';
 
 const { width } = Dimensions.get('window');
 
 export default function ChatScreen() {
-    const router = useRouter();
     const insets = useSafeAreaInsets();
     const { isAvailable } = useCloudStatus();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -182,7 +179,7 @@ export default function ChatScreen() {
                     <TouchableWithoutFeedback onPress={() => setIsSidebarOpen(false)}>
                         <View style={styles.modalBackground} />
                     </TouchableWithoutFeedback>
-                    <Animated.View style={styles.sidebarWrapper}>
+                    <View style={styles.sidebarWrapper}>
                         <Sidebar
                             chats={chats}
                             currentChatId={currentChatId}
@@ -193,7 +190,7 @@ export default function ChatScreen() {
                             onDeleteChat={deleteChat}
                             onClose={() => setIsSidebarOpen(false)}
                         />
-                    </Animated.View>
+                    </View>
                 </View>
             </Modal>
         </View>

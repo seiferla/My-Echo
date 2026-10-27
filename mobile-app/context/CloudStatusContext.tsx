@@ -39,9 +39,6 @@ export function CloudStatusProvider({ children }: { children: React.ReactNode })
                 const latency = Date.now() - t0;
 
                 console.log(`${TAG} Response (${latency} ms): status=${data.status} HTTP=${response.status}`);
-                if (data.credits !== undefined) {
-                    console.log(`${TAG} Credits: ${JSON.stringify(data.credits)}`);
-                }
                 if (data.message) {
                     console.warn(`${TAG} Message: ${data.message}`);
                 }

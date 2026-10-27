@@ -1,10 +1,5 @@
-
-import { readChats } from './chatStorage';
 import { getTtsStats, syncTtsStats, dayKey, TtsStats } from './ttsLog';
-import { Chat, ChatMessage } from './types';
-
-export type { Chat, ChatMessage };
-export type { TtsStats } from './ttsLog';
+import { Chat } from './types';
 
 /**
  * Calculations for the stats screen.
@@ -31,16 +26,6 @@ const STOPWORDS = new Set([
     'hat', 'habe', 'haben', 'bin', 'bist', 'sind', 'war', 'wird', 'werden',
     'kann', 'will', 'man', 'schon', 'sehr', 'mehr', 'hier', 'doch', 'ja', 'nein',
 ]);
-
-export async function loadChats(): Promise<Chat[]> {
-    const raw = await readChats();
-    if (!raw) return [];
-    try {
-        return JSON.parse(raw) as Chat[];
-    } catch {
-        return [];
-    }
-}
 
 /**
  * Flattens all messages written by the user into one list.
@@ -249,10 +234,6 @@ export interface TtsSummary {
     chars: number;
     durationSec: number;
     perDay: TimeBucket[];
-}
-
-export async function loadTtsStats(): Promise<TtsStats> {
-    return getTtsStats();
 }
 
 /** Syncs with the backend, then returns the current stats. Never throws. */

@@ -56,10 +56,5 @@ export function createSynthQueue(synth: SynthFn, onError: (e: unknown) => void =
         return job;
     }
 
-    /** Resolves when the queue is empty. */
-    function idle(): Promise<void> {
-        return tail;
-    }
-
-    return { enqueue, awaitPending, idle };
+    return { enqueue, awaitPending };
 }

@@ -13,9 +13,7 @@ import { ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { BarChart, PieChart } from 'react-native-chart-kit';
 import {
-    Chat,
     FlatMessage,
-    loadChats,
     flattenMessages,
     filterByRange,
     messagesPerDay,
@@ -26,11 +24,12 @@ import {
     computeTotals,
     summarizeTts,
     ttsAudioPerMonth,
-    loadTtsStats,
     syncAndLoadTtsStats,
-    TtsStats,
     TtsSummary,
 } from '../utils/stats';
+import { Chat } from '../utils/types';
+import { loadLocalChats } from '../utils/chatSync';
+import { getTtsStats, TtsStats } from '../utils/ttsLog';
 import { getCacheStats, clearCache, CacheStats } from '../utils/ttsCache';
 
 const screenWidth = Dimensions.get('window').width;
@@ -83,8 +82,8 @@ export default function StatsScreen() {
     useEffect(() => {
         (async () => {
             const [c, t, cs] = await Promise.all([
-                loadChats(),
-                loadTtsStats(),
+                loadLocalChats(),
+                getTtsStats(),
                 getCacheStats().catch(() => null),
             ]);
             setChats(c);
