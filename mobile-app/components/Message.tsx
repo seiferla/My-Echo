@@ -35,7 +35,7 @@ export function Message({ message, onStartEdit, autoPlay }: MessageProps) {
     const isPreparingShareRef = useRef(false);
     const speakStartRef = useRef<number | null>(null);
 
-    // Protokolliert eine abgeschlossene Sprachausgabe genau einmal.
+    // Records a finished speech output exactly once.
     const logSpeak = () => {
         if (speakStartRef.current === null) return;
         const durationMs = Date.now() - speakStartRef.current;
@@ -52,9 +52,8 @@ export function Message({ message, onStartEdit, autoPlay }: MessageProps) {
         };
     }, []);
 
-    // Long-Press auf die Bubble kopiert den Nachrichten-Text in die Zwischenablage.
-    // Kurze Vibration als haptisches Signal, plus Toast (Android) bzw. Alert (iOS)
-    // als visuelle Bestätigung. Stiller Failsafe bei Clipboard-Fehlern.
+    // Copies the message text. Short vibration plus a toast (Android) or alert (iOS)
+    // as feedback. Clipboard errors are ignored.
     const handleCopy = async () => {
         try {
             await Clipboard.setStringAsync(message.content);
@@ -65,23 +64,21 @@ export function Message({ message, onStartEdit, autoPlay }: MessageProps) {
                 Alert.alert('Kopiert', 'Text in die Zwischenablage übernommen.');
             }
         } catch {
-            // Im seltenen Fehlerfall keine UI-Lawine — der User merkt es am
-            // ausbleibenden Feedback und kann nochmal drücken.
+            // No error dialog: the user sees no feedback and can try again.
         }
     };
 
-    // Teilt den reinen Text über das native Share-Sheet (WhatsApp ist dort eine
-    // Option unter mehreren — kein direkter whatsapp://-Deep-Link nötig).
+    // Shares the text with the native share sheet (WhatsApp is one option there).
     const shareText = async () => {
         try {
             await Share.share({ message: message.content });
         } catch {
-            // User-Abbruch oder Plattformfehler — kein weiteres Feedback nötig.
+            // Cancelled by the user or platform error: no feedback needed.
         }
     };
 
-    // Teilt die gesprochene Version als Audiodatei. Braucht Cloud-TTS (expo-speech
-    // erzeugt keine Datei) — bei Cache-Miss wird erst nachgeladen, das kann kurz dauern.
+    // Shares the spoken version as an audio file. Needs cloud TTS (expo-speech makes
+    // no file). On a cache miss it downloads first, which can take a moment.
     const shareAudio = async () => {
         if (isPreparingShareRef.current) return;
         if (!isAvailable) {

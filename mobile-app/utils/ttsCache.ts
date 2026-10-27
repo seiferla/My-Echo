@@ -32,10 +32,9 @@ export interface CacheStats {
     hitRatePct: number;
 }
 
-// expo-file-system gibt es im Web nicht — dort schon beim Modul-Import ein
-// Directory anzulegen ließ das ganze Bundle crashen. Deshalb: Pfade erst bei
-// Bedarf erzeugen und im Web den Cache komplett überspringen (die Wiedergabe
-// läuft dort direkt über den Backend-Stream).
+// Web has no expo-file-system: creating a Directory at import crashed the whole
+// bundle. So paths are created on demand, and web skips the cache completely
+// (it plays the backend stream directly).
 const isWeb = Platform.OS === 'web';
 
 let _cacheDir: Directory | null = null;
@@ -82,9 +81,8 @@ function hash64(str: string): string {
     return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
 }
 
-// Cache-Key bindet text, voice, model und format zusammen — ein Wechsel
-// von Stimme oder Modell im Backend macht alte Einträge automatisch
-// unauffindbar (sie werden später durch LRU evictet).
+// The key joins text, voice, model and format. A new voice or model in the
+// backend makes old entries unreachable; LRU eviction removes them later.
 function cacheKey(
     text: string,
     voiceId = 'default',
@@ -219,7 +217,7 @@ export async function getCachedUri(
     }
 
     const file = cacheFile(hash);
-    // 0-Byte-Dateien (z.B. nach Abbruch zwischen create und write) wie Miss behandeln
+    // Treat empty files (e.g. after a crash between create and write) as a miss.
     if (!file.exists || file.size === 0) {
         if (file.exists) {
             try { file.delete(); } catch {}
@@ -248,8 +246,7 @@ export async function downloadAndCache(
     format?: string
 ): Promise<string> {
     await ensureInit();
-    // Ohne Dateisystem gibt es nichts zu cachen — der Aufrufer fällt dann auf
-    // Streaming bzw. expo-speech zurück.
+    // No file system, nothing to cache: the caller falls back to streaming or expo-speech.
     if (isWeb) throw new Error('TTS cache unavailable on web');
     const hash = cacheKey(text, voiceId, model, format);
 

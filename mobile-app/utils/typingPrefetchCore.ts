@@ -1,18 +1,18 @@
 import { splitCompletedSentences } from './split';
 
-// Kernlogik der Satz-Vorab-Synthese beim Tippen (ohne Abhängigkeit zu expo-Modulen,
-// damit sie isoliert testbar ist; die App-Instanz steht in typingPrefetch.ts).
+// Core logic of the sentence prefetch while typing. No expo imports, so it can
+// be tested alone; the app instance is in typingPrefetch.ts.
 //
-// Regeln:
-// - Ein Satz, der durch eine Änderung AM ENDE des Textes abgeschlossen wird
-//   (. ! ?), wird sofort synthetisiert. „Am Ende“ zählt auch, wenn die Tastatur
-//   dabei das letzte Wort ersetzt (Autokorrektur, Doppel-Leerzeichen → Punkt).
-// - Jede andere Änderung (Korrektur mitten im Text, Löschen, Einfügen) wartet
-//   idleMs Tipppause ab und synthetisiert dann nur die Endfassung. Sonst würde
-//   jeder Tastendruck in einem fertigen Satz einen neuen Request auslösen.
-// - Der unfertige Rest wird ebenfalls erst nach der Tipppause synthetisiert.
-// - Sätze, die nicht mehr im Text stehen, werden aus der Warteschlange verworfen
-//   (stillWanted) und dürfen später erneut angefragt werden.
+// Rules:
+// - A sentence finished (. ! ?) by an edit AT THE END of the text is synthesized
+//   at once. "At the end" also counts when the keyboard replaces the last word
+//   (autocorrect, double space → period).
+// - Any other edit (fix in the middle, delete, paste) waits idleMs of no typing
+//   and then synthesizes only the final text. Else every key press in a finished
+//   sentence would send a new request.
+// - The unfinished rest is also synthesized only after the typing pause.
+// - Sentences no longer in the text are dropped from the queue (stillWanted)
+//   and may be requested again later.
 
 export type PrefetchFn = (
     sentence: string,
@@ -23,16 +23,15 @@ export type PrefetchFn = (
 
 export const TYPING_IDLE_MS = 1000;
 
-// true, wenn sich prev → next nur am Textende geändert hat (Anhängen, Löschen oder
-// Ersetzen am Ende). Vergleich ohne abschließendes Whitespace. Eine Änderung in der
-// Mitte lässt einen gemeinsamen Rest am Ende stehen → false.
+// true when prev → next changed only at the end (append, delete or replace there).
+// Trailing whitespace is ignored. An edit in the middle leaves a common end → false.
 export function isEditAtEnd(prev: string, next: string): boolean {
     const a = prev.trimEnd();
     const b = next.trimEnd();
     let prefix = 0;
     const max = Math.min(a.length, b.length);
     while (prefix < max && a[prefix] === b[prefix]) prefix++;
-    // Gemeinsames Ende nur hinter dem gemeinsamen Anfang suchen.
+    // Look for a common end only after the common start.
     return a.length === prefix || b.length === prefix || a[a.length - 1] !== b[b.length - 1];
 }
 
@@ -43,9 +42,9 @@ export function createTypingPrefetcher(
 ) {
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
     let prevText = '';
-    // Schon angefragte Sätze (spart den Cache-Lookup bei jedem Tastendruck).
+    // Sentences already requested (saves a cache lookup on every key press).
     const requested = new Set<string>();
-    // Sätze, die im aktuellen Text stehen.
+    // Sentences in the current text.
     let wanted = new Set<string>();
 
     const keyOf = (s: string, voice: string, model: string) => `${voice}|${model}|${s}`;
@@ -55,7 +54,7 @@ export function createTypingPrefetcher(
         if (requested.has(key)) return;
         requested.add(key);
         prefetch(s, voice, model, () => wanted.has(s)).then(() => {
-            // Nicht mehr im Text (verworfen oder überholt) → später neu anfragbar.
+            // No longer in the text (dropped or outdated): may be requested again later.
             if (!wanted.has(s)) requested.delete(key);
         });
     }
@@ -92,7 +91,7 @@ export function createTypingPrefetcher(
         }
     }
 
-    /** Eingabe beendet (gesendet, geschlossen, neuer Test): Timer und Merkliste leeren. */
+    /** Input finished (sent, closed, new test): clear the timer and the lists. */
     function reset(): void {
         clearTimer();
         requested.clear();

@@ -10,24 +10,21 @@ export interface ChatMessage {
 export interface Chat {
     id: string;
     title: string;
-    // Gesetzt, sobald der Titel manuell umbenannt wurde — verhindert, dass
-    // updateChat() ihn beim nächsten Senden wieder aus messages[0] ableitet.
+    // Set after a manual rename, so updateChat() no longer builds the title from messages[0].
     titleIsCustom?: boolean;
     messages: ChatMessage[];
     timestamp: number;
     pinned?: boolean;
 }
 
-// Stabile, eindeutige ID für eine Nachricht. Dient als React-`key`, damit
-// Message-Instanzen beim Chat-Wechsel nicht positionsbasiert wiederverwendet
-// werden — sonst „klebt" z.B. der isPlaying-State an der falschen Bubble und
-// der Mount-Effekt (autoPlay/Cleanup) läuft nicht korrekt.
+// Stable, unique message id. Used as React `key`, so Message components are not
+// reused by position on chat change (else e.g. isPlaying sticks to the wrong
+// bubble and the mount effect for autoPlay/cleanup does not run).
 export function newMessageId(): string {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-// Backfill für Chats, die noch vor Einführung der Message-IDs im Storage
-// gespeichert wurden. Vergibt fehlende IDs, lässt vorhandene unangetastet.
+// Adds missing ids to chats saved before message ids existed. Keeps existing ids.
 export function withMessageIds(chats: Chat[]): Chat[] {
     return chats.map((chat) => ({
         ...chat,

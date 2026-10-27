@@ -48,8 +48,7 @@ function UserScope({ children }: { children: React.ReactNode }) {
 
 export default function Layout() {
   useEffect(() => {
-    // Audio-Session einmalig einrichten, damit die Wiedergabe bei gesperrtem
-    // Bildschirm nicht abbricht.
+    // Set up the audio session once, so playback goes on when the screen is locked.
     configureAudioSession();
   }, []);
 

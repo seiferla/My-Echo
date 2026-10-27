@@ -32,8 +32,7 @@ export default function ChatScreen() {
         let alive = true;
         loadChatsForStart().then(({ chats: loaded, later }) => {
             if (!alive) return;
-            // "Neuer Chat für heute"-Logik bleibt — operiert jetzt auf den
-            // geladenen Backend-Chats statt auf SecureStore-Rohdaten.
+            // A new day starts with a new chat.
             const today = new Date().setHours(0, 0, 0, 0);
             const latest = loaded[0];
             if (latest && new Date(latest.timestamp).setHours(0, 0, 0, 0) < today) {
@@ -46,12 +45,12 @@ export default function ChatScreen() {
                 const updated = [newChat, ...loaded];
                 setChats(updated);
                 setCurrentChatId(newChat.id);
-                pushChat(newChat);                // ← neuen Chat sofort anlegen
+                pushChat(newChat);
             } else if (loaded.length > 0) {
                 setChats(loaded);
                 setCurrentChatId(loaded[0].id);
             } else {
-                // Komplett leerer Zustand — eine Begrüßungs-Hülle anlegen
+                // No chats at all: create an empty welcome chat.
                 const fresh: Chat = {
                     id: '1',
                     title: 'Neuer Chat',
@@ -75,8 +74,8 @@ export default function ChatScreen() {
 
     useEffect(() => {
         if (chats.length === 0) return;
-        persistLocal(chats);                                       // lokaler Cache
-        // Aktuellen Chat pushen — nicht den ganzen Array, das wäre Verschwendung
+        persistLocal(chats);
+        // Push only the current chat, not all of them.
         const current = chats.find((c) => c.id === currentChatId);
         if (current) pushChat(current);
     }, [chats]);
@@ -134,9 +133,7 @@ export default function ChatScreen() {
                 ? {
                     ...chat,
                     messages,
-                    // Manuell umbenannte Chats bleiben unangetastet — sonst würde
-                    // jede weitere Nachricht den Titel wieder aus messages[0] ableiten
-                    // und den Rename überschreiben.
+                    // Keep a manual title; else every message would rebuild it from messages[0].
                     title: chat.titleIsCustom
                         ? chat.title
                         : messages[0]?.content.slice(0, 30) || 'Neuer Chat',

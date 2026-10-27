@@ -8,8 +8,8 @@ import { backendFetch } from './backend';
 
 const TAG = '[myEcho][Phrases]';
 
-// Wie in chatStorage.ts: im Web kein Dateisystem, also localStorage über den
-// storage-Helper. Die File-Instanz wird erst beim ersten Zugriff erzeugt.
+// Like chatStorage.ts: web has no file system, so it uses localStorage
+// through the storage helper. The File object is created on demand.
 const isWeb = Platform.OS === 'web';
 const WEB_KEY_BASE = 'myEchoPhrases';
 
@@ -37,11 +37,11 @@ export interface Phrase {
 }
 
 export interface PhraseSettings {
-    // Wie viele Phrasen in der ChatArea liegen (0 = ausgeblendet).
+    // How many phrases the ChatArea shows (0 = hidden).
     visibleCount: number;
-    // Gilt für alle Phrasen gemeinsam:
-    //   an  → Antippen sendet und spricht sofort (schnellste Antwort)
-    //   aus → Antippen legt den Text nur ins Eingabefeld (nichts wird gesprochen)
+    // For all phrases together:
+    //   on  → a tap sends and speaks at once (fastest answer)
+    //   off → a tap only puts the text into the input (nothing is spoken)
     instantEnabled: boolean;
 }
 
@@ -52,8 +52,8 @@ export interface PhraseStore {
     updatedAt?: number;
 }
 
-// Obergrenze für die ChatArea. Mehr Chips würden die Oberfläche unruhig machen
-// und die Trefferfläche pro Chip verkleinern.
+// Limit for the ChatArea. More chips would make the screen busy and each
+// touch target smaller.
 export const MAX_VISIBLE_PHRASES = 3;
 
 export const DEFAULT_SETTINGS: PhraseSettings = {
@@ -65,9 +65,8 @@ export function newPhraseId(): string {
     return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Startbelegung bei der ersten Installation. Ohne sie wäre die Funktion beim
-// ersten Öffnen leer und damit wertlos — gerade die schnellen Ein-Wort-
-// Antworten ("Ja", "Nein") sind der Kern des Nutzens.
+// Default phrases for a new install. Without them the feature would start
+// empty; the quick one-word answers ("Ja", "Nein") are its main value.
 const DEFAULTS: string[] = [
     'Ja',
     'Nein',
@@ -90,8 +89,8 @@ function seed(): Phrase[] {
     }));
 }
 
-// Nimmt nur die Felder, die es heute noch gibt — ältere Dateien hatten ein
-// "instant" pro Phrase, das inzwischen der globale Schalter ersetzt.
+// Keeps only today's fields. Older files had an "instant" flag per phrase,
+// which the global switch replaced.
 function normalizePhrase(p: Phrase): Phrase {
     return {
         id: p.id || newPhraseId(),
@@ -135,8 +134,7 @@ export async function loadPhraseStore(): Promise<PhraseStore> {
     try {
         const parsed = JSON.parse(raw);
 
-        // Version 1 speicherte nur ein nacktes Array. Einmalig in die neue
-        // Struktur mit Einstellungen überführen, ohne Phrasen zu verlieren.
+        // Version 1 stored a plain array. Migrate it once to the store format.
         if (Array.isArray(parsed)) {
             const migrated: PhraseStore = {
                 phrases: normalizePhrases(parsed),
@@ -219,8 +217,7 @@ export async function syncPhraseStore(local: PhraseStore): Promise<PhraseStore |
     }
 }
 
-// Verschiebt eine Phrase von einer Position auf eine andere (Drag & Drop
-// sowie Pfeiltasten nutzen denselben Weg).
+// Moves a phrase from one position to another (used by drag & drop and the arrows).
 export function reorder(phrases: Phrase[], from: number, to: number): Phrase[] {
     if (from === to || from < 0 || to < 0 || from >= phrases.length || to >= phrases.length) {
         return phrases;
@@ -231,11 +228,9 @@ export function reorder(phrases: Phrase[], from: number, to: number): Phrase[] {
     return next;
 }
 
-// Lädt die Audio-Dateien der Phrasen einmalig in den TTS-Cache.
-// Zweck: Beim Antippen soll *nichts* mehr geladen werden — die Antwort kommt
-// sofort, auch wenn das Netz gerade langsam ist oder ganz fehlt. Läuft
-// nacheinander (nicht parallel), damit das Backend beim App-Start nicht
-// von einem Dutzend Requests gleichzeitig getroffen wird.
+// Loads the audio of the phrases into the TTS cache once, so a tap plays at
+// once, even with a slow or no network. Runs one by one (not in parallel),
+// so the backend does not get a dozen requests at app start.
 export async function prewarmPhrases(
     phrases: Phrase[],
     isAvailable: boolean,

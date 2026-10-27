@@ -4,17 +4,10 @@ import { BACKEND_TTS_STATS_URL } from './config';
 import { backendFetch } from './backend';
 
 /**
- * Lokales Logging der Sprachausgaben (TTS).
+ * TTS usage per day: requests, characters and speaking time, for the stats screen.
  *
- * Hinweis: Aktuell läuft die Sprachausgabe über expo-speech (on-device),
- * es entstehen also keine echten API-Kosten. Wir protokollieren trotzdem
- * Requests, synthetisierte Zeichen und die Sprechdauer, damit der
- * "API/TTS"-Bereich der Statistik echte Zahlen zeigt. Sobald die App auf
- * das vLLM-Backend umgestellt wird, kann dieselbe Funktion dort aufgerufen
- * werden (z.B. mit gemessener Latenz).
- *
- * Gespeichert wird tagesweise aggregiert (Key 'YYYY-MM-DD'), damit der
- * SecureStore-Eintrag dauerhaft klein bleibt.
+ * Stored per day (key 'YYYY-MM-DD'), so the SecureStore entry stays small,
+ * and synced with the backend.
  */
 
 const TAG = '[myEcho][TtsLog]';
@@ -49,9 +42,9 @@ export async function getTtsStats(): Promise<TtsStats> {
 }
 
 /**
- * Protokolliert eine Sprachausgabe für den heutigen Tag.
- * @param chars Anzahl synthetisierter Zeichen
- * @param durationMs Dauer der Sprachausgabe in Millisekunden
+ * Records one speech output for today.
+ * @param chars number of spoken characters
+ * @param durationMs length of the speech output in milliseconds
  */
 export async function recordTtsRequest(chars: number, durationMs: number): Promise<void> {
     const stats = await getTtsStats();

@@ -62,7 +62,7 @@ function formatDate(ts: number): string {
     return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
 }
 
-/** Blendet Achsenbeschriftungen aus, wenn zu viele Balken vorhanden sind. */
+/** Hides axis labels when there are too many bars. */
 function thinLabels(labels: string[], max = 8): string[] {
     if (labels.length <= max) return labels;
     const step = Math.ceil(labels.length / max);
@@ -145,10 +145,10 @@ export default function StatsScreen() {
     const phrases = useMemo(() => topPhrases(msgs, 8), [msgs]);
     const words = useMemo(() => topWords(msgs, 10), [msgs]);
     const tts: TtsSummary = useMemo(() => summarizeTts(ttsStats, from, to), [ttsStats, from, to]);
-    // Audio-Minuten pro Monat — bewusst über ALLE Daten, unabhängig vom Zeitfilter.
+    // Audio minutes per month: on purpose over ALL data, not the time filter.
     const audioPerMonth = useMemo(() => ttsAudioPerMonth(ttsStats), [ttsStats]);
 
-    // Pro Tag bei kurzen Zeiträumen, pro Woche bei langen.
+    // Per day for short ranges, per week for long ones.
     const rangeDays = Math.round((to - from) / DAY_MS) + 1;
     const timeSeries = useMemo(() => {
         if (mode === 'day') return [];
@@ -233,7 +233,7 @@ export default function StatsScreen() {
                     </View>
                 ) : (
                     <>
-                        {/* ---- Aktivität ---- */}
+                        {/* ---- Activity ---- */}
                         <Text style={styles.sectionTitle}>Aktivität</Text>
                         <View style={styles.cardRow}>
                             <StatCard label="Nachrichten" value={totals.totalMessages} />
@@ -286,7 +286,7 @@ export default function StatsScreen() {
                             </ChartCard>
                         )}
 
-                        {/* ---- Kommunikation (AAC) ---- */}
+                        {/* ---- Communication (AAC) ---- */}
                         <Text style={styles.sectionTitle}>Kommunikation</Text>
                         {(totals.sendCount + totals.saveCount) > 0 && (
                             <ChartCard title="Gesprochen vs. gespeichert">

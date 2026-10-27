@@ -234,7 +234,7 @@ export function Sidebar({
                 </View>
             </View>
 
-            {/* Kontext-Menü Modal */}
+            {/* Context menu */}
             <Modal
                 visible={isMenuVisible}
                 transparent={true}
@@ -263,7 +263,7 @@ export function Sidebar({
                 </TouchableWithoutFeedback>
             </Modal>
 
-            {/* Umbenennen Modal */}
+            {/* Rename dialog */}
             <Modal
                 visible={isRenaming}
                 transparent={true}
