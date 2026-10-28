@@ -12,7 +12,7 @@ import {
     Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3, Zap, LogOut } from 'lucide-react-native';
+import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3, Zap, Mic, LogOut } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Chat } from '../utils/types';
 import { useAuth } from '../context/AuthContext';
@@ -130,6 +130,14 @@ export function Sidebar({
                 >
                     <Zap size={24} color="#0284c7" />
                     <Text style={styles.statsButtonText}>Phrasen</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={() => { onClose(); router.push('/voice'); }}
+                    style={styles.voiceButton}
+                >
+                    <Mic size={24} color="#0284c7" />
+                    <Text style={styles.statsButtonText}>Stimme</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -292,6 +300,16 @@ const styles = StyleSheet.create({
         color: '#0284c7',
     },
     phrasesButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#bae6fd',
+        backgroundColor: '#f0f9ff',
+    },
+    voiceButton: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
