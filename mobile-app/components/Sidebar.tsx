@@ -43,7 +43,7 @@ export function Sidebar({
     onClose 
 }: SidebarProps) {
     const router = useRouter();
-    const { session, signOut } = useAuth();
+    const { session, signOut, deleteAccount } = useAuth();
     const email = session?.user.email ?? '';
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
     const [isMenuVisible, setIsMenuVisible] = useState(false);
@@ -61,6 +61,20 @@ export function Sidebar({
             'Deine Chats bleiben gespeichert. Beim nächsten Anmelden sind sie wieder da.',
             'Abmelden',
             () => { onClose(); signOut(); }
+        );
+    };
+
+    const handleDeleteAccount = () => {
+        confirmAction(
+            'Konto löschen',
+            'Dein Konto und alle Daten werden endgültig gelöscht. Deine geklonte Stimme wird ebenfalls entfernt. Das kann nicht rückgängig gemacht werden.',
+            'Konto löschen',
+            () => {
+                onClose();
+                void deleteAccount().then((error) => {
+                    if (error) Alert.alert('Konto löschen fehlgeschlagen', error);
+                });
+            }
         );
     };
 
@@ -204,6 +218,15 @@ export function Sidebar({
                         <LogOut size={24} color="#374151" />
                     </TouchableOpacity>
                 </View>
+                <TouchableOpacity
+                    onPress={handleDeleteAccount}
+                    style={styles.deleteAccountButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Konto löschen"
+                >
+                    <Trash2 size={18} color="#ef4444" />
+                    <Text style={styles.deleteAccountText}>Konto löschen</Text>
+                </TouchableOpacity>
             </View>
 
             {/* Context menu */}
@@ -407,6 +430,19 @@ const styles = StyleSheet.create({
         minHeight: 48,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    deleteAccountButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        minHeight: 48,
+        marginTop: 8,
+    },
+    deleteAccountText: {
+        fontSize: 14,
+        color: '#ef4444',
+        fontWeight: '500',
     },
     menuOverlay: {
         flex: 1,

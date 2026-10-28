@@ -40,6 +40,7 @@ class TestEveryRouteNeedsAToken(unittest.TestCase):
             ("GET", "/stats/tts"), ("POST", "/stats/tts"),
             ("GET", "/stream/tts"), ("GET", "/warmup"),
             ("GET", "/voice"), ("POST", "/voice"), ("DELETE", "/voice"),
+            ("DELETE", "/account"),
             ("GET", "/metrics"), ("GET", "/health"),
         ]:
             self.assertIn(expected, found)

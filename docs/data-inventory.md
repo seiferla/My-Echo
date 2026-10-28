@@ -16,11 +16,11 @@ deletes the user in Supabase Auth; all rows follow through `ON DELETE CASCADE` (
 | Message text sent for speech | In transit: app → backend → Mistral Voxtral | Speech synthesis | Backend does not store it. Mistral retention unknown | Mistral (location and DPA unknown) |
 | Backend logs | Backend host (Docker logs) | Operation, errors | Host default. No message text: app logs only lengths, the access log drops the query string (tested) | Host |
 | Metrics | Prometheus | Monitoring | 90 days. Route templates and status codes, no user IDs, no text | Own Prometheus |
-| Voice sample (uploaded audio) and voice model (G3) | Mistral (voice clone, `POST /v1/audio/voices`) and Supabase Postgres (`user_voices`, only the `voice_id`, no audio) | Own voice per user | Deleted by "Stimme löschen" in the app (Mistral "Delete voice" + `user_voices` row). Account deletion removes the `user_voices` row but not the Mistral voice (G8). Mistral keeps the sample per `retention_notice` (30 days) | Mistral, Supabase |
+| Voice sample (uploaded audio) and voice model (G3) | Mistral (voice clone, `POST /v1/audio/voices`) and Supabase Postgres (`user_voices`, only the `voice_id`, no audio) | Own voice per user | Deleted by "Stimme löschen" in the app, or by account deletion ("Konto löschen" → `DELETE /account`, which deletes the Mistral voice and the Supabase user). Mistral keeps the sample per `retention_notice` (30 days) | Mistral, Supabase |
 
 ## Open points
 
 - **Mistral:** no data processing agreement found, location of processing unknown. Ask Mistral before real users start.
 - **Local data on the phone** stays after logout by design (phrases and statistics would otherwise be lost). A "delete data on this device" option does not exist yet.
-- **Account deletion** is only possible by the admin in Supabase. There is no deletion in the app, and deleting the account does not delete the cloned voice at Mistral (G8).
+- **Account deletion** is possible in the app ("Konto löschen" → `DELETE /account`): it deletes the Supabase user (cascade removes all rows) and the cloned voice at Mistral. The backend needs `SUPABASE_SERVICE_ROLE_KEY` for this.
 - **Message text in the URL** (`/stream/tts?text=…`): hidden from the backend access log, but a reverse proxy (Caddy, G4) must not log query strings either.
