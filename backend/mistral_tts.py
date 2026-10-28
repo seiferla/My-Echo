@@ -19,6 +19,7 @@ logger = logging.getLogger("myecho.tts")
 API_KEY = os.getenv("TTS_API_KEY", "")
 SPEECH_URL = "https://api.mistral.ai/v1/audio/speech"
 MODELS_URL = "https://api.mistral.ai/v1/models"
+VOICES_URL = "https://api.mistral.ai/v1/audio/voices"
 MODEL = os.getenv("TTS_MODEL", "voxtral-mini-tts-3-0")
 VOICE = os.getenv("TTS_VOICE", "")
 
@@ -30,15 +31,16 @@ def _headers() -> dict:
     return {"Authorization": f"Bearer {API_KEY}"}
 
 
-def _payload(text: str) -> dict:
+def _payload(text: str, voice_id: str = "") -> dict:
     payload = {
         "input": text,
         "model": MODEL,
         "response_format": "mp3",
         "stream": True,
     }
-    if VOICE:
-        payload["voice_id"] = VOICE
+    voice = voice_id or VOICE
+    if voice:
+        payload["voice_id"] = voice
     return payload
 
 
@@ -82,17 +84,18 @@ async def _iter_audio(response) -> AsyncIterator[bytes]:
             yield chunk
 
 
-async def stream(text: str) -> AsyncIterator[bytes]:
-    """Yields the MP3 audio of the text chunk by chunk."""
+async def stream(text: str, voice_id: str = "") -> AsyncIterator[bytes]:
+    """Yields the MP3 audio of the text chunk by chunk, spoken with the given voice."""
     t_start = time.monotonic()
     first_audio_logged = False
     chunk_count = 0
     byte_count = 0
+    voice = voice_id or VOICE
 
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             async with client.stream(
-                "POST", SPEECH_URL, json=_payload(text), headers=_headers()
+                "POST", SPEECH_URL, json=_payload(text, voice_id), headers=_headers()
             ) as response:
                 response.raise_for_status()
                 async for chunk in _iter_audio(response):
@@ -103,7 +106,7 @@ async def stream(text: str) -> AsyncIterator[bytes]:
                             int((time.monotonic() - t_start) * 1000),
                             len(text),
                             MODEL,
-                            VOICE or "default",
+                            voice or "default",
                         )
                     chunk_count += 1
                     byte_count += len(chunk)
@@ -135,3 +138,28 @@ async def check_health() -> dict:
             return {"status": "error", "message": f"HTTP {e.response.status_code}"}
         except Exception:
             return {"status": "error", "message": "Internal server error"}
+
+
+async def create_voice(sample_audio_b64: str, filename: str, name: str) -> str:
+    """Creates a cloned voice from a base64-encoded audio sample. Returns the voice id.
+
+    The sample stays at Mistral according to retention_notice (default 30 days);
+    the returned voice id is what the TTS requests use.
+    """
+    payload = {
+        "name": name,
+        "sample_audio": sample_audio_b64,
+        "sample_filename": filename,
+        "retention_notice": 30,
+    }
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        response = await client.post(VOICES_URL, json=payload, headers=_headers())
+        response.raise_for_status()
+        return response.json()["id"]
+
+
+async def delete_voice(voice_id: str) -> None:
+    """Deletes a cloned voice at Mistral. Best effort: a missing voice raises, the caller logs it."""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        response = await client.delete(f"{VOICES_URL}/{voice_id}", headers=_headers())
+        response.raise_for_status()

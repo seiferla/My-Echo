@@ -7,6 +7,8 @@ export const BACKEND_WARMUP_URL  = `${BACKEND_BASE}/warmup`;
 export const BACKEND_CHATS_URL   = `${BACKEND_BASE}/chats`;
 export const BACKEND_PHRASES_URL = `${BACKEND_BASE}/phrases`;
 export const BACKEND_TTS_STATS_URL = `${BACKEND_BASE}/stats/tts`;
+export const BACKEND_VOICE_URL   = `${BACKEND_BASE}/voice`;
+export const BACKEND_ACCOUNT_URL = `${BACKEND_BASE}/account`;
 
 // URL and publishable key are public by design. NEVER put the secret/service_role key here.
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
