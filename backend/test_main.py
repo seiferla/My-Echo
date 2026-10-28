@@ -1,240 +1,154 @@
-import time
+import base64
 import unittest
-import msgpack
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import fish_tts
-import main
-from starlette.requests import Request
+import mistral_tts
 
 
-def _mock_request():
-    """Build a mock Request for tests that call rate-limited endpoints directly."""
-    req = MagicMock(spec=Request)
-    req.client.host = "127.0.0.1"
-    return req
+def _b64(data: bytes) -> str:
+    return base64.b64encode(data).decode()
 
 
-class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
-    """Tests for fish_tts._open_connection and _take_warm_connection (51-53, 61-73)."""
+class _FakeStreamResponse:
+    """Fake SSE response for _iter_audio."""
 
-    async def test_open_fish_connection_connects_and_sends_start(self):
-        mock_ws = AsyncMock()
-        with patch("fish_tts.websockets.connect", AsyncMock(return_value=mock_ws)), \
-             patch("fish_tts.API_KEY", "test_key"), \
-             patch("fish_tts.VOICE", "ref"):
-            result = await fish_tts._open_connection()
+    def __init__(self, chunks):
+        self._lines = []
+        for c in chunks:
+            self._lines.append(f'data: {{"type": "speech.audio.delta", "audio_data": "{_b64(c)}"}}')
+            self._lines.append("")
+        self._lines.append('data: {"type": "speech.audio.done", "usage": {}}')
+        self._lines.append("")
 
-        self.assertIs(result, mock_ws)
-        mock_ws.send.assert_awaited_once()
+    def raise_for_status(self):
+        pass
 
-    async def test_take_warm_connection_returns_fresh_connection(self):
-        fresh_ws = AsyncMock()
-        fish_tts._warm["ws"] = fresh_ws
-        fish_tts._warm["ts"] = time.monotonic()
-
-        result = await fish_tts._take_warm_connection()
-
-        self.assertIs(result, fresh_ws)
-        self.assertIsNone(fish_tts._warm["ws"])
-
-    async def test_take_warm_connection_closes_expired_and_returns_none(self):
-        expired_ws = AsyncMock()
-        fish_tts._warm["ws"] = expired_ws
-        fish_tts._warm["ts"] = time.monotonic() - (fish_tts.WARM_TTL_SECONDS + 1)
-
-        result = await fish_tts._take_warm_connection()
-
-        self.assertIsNone(result)
-        expired_ws.close.assert_awaited_once()
-
-    async def test_take_warm_connection_returns_none_when_empty(self):
-        fish_tts._warm["ws"] = None
-
-        result = await fish_tts._take_warm_connection()
-
-        self.assertIsNone(result)
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
 
 
+def _install_stream_mock(mock_client_class, chunks):
+    """Wire httpx.AsyncClient so stream() returns the fake SSE response."""
+    fake_response = _FakeStreamResponse(chunks)
+    mock_client = AsyncMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.__aexit__.return_value = False
 
-class TestStreamTts(unittest.IsolatedAsyncioTestCase):
-    """Tests for the HTTP streaming endpoint /stream/tts."""
+    stream_cm = AsyncMock()
+    stream_cm.__aenter__.return_value = fake_response
+    stream_cm.__aexit__.return_value = False
 
-    def _make_ws_mock(self, chunks=None):
-        chunks = chunks or [b"chunk1", b"chunk2"]
-        mock_ws = AsyncMock()
-        messages = [msgpack.packb({"event": "audio", "audio": c}) for c in chunks]
-        messages.append(msgpack.packb({"event": "finish"}))
-        mock_ws.__aiter__.return_value = messages
-        return mock_ws
+    # stream() must return the async CM synchronously (no await), else
+    # `async with client.stream(...)` fails on a coroutine.
+    mock_client.stream = MagicMock(return_value=stream_cm)
 
-    async def test_uses_warm_connection_when_available(self):
-        warm_ws = self._make_ws_mock()
+    mock_client_class.return_value = mock_client
+    return fake_response
 
-        with patch.object(fish_tts, "_take_warm_connection", AsyncMock(return_value=warm_ws)):
-            response = await main.stream_tts(_mock_request(), "Hallo Welt")
-            collected = b"".join([c async for c in response.body_iterator])
 
-        self.assertEqual(collected, b"chunk1chunk2")
-        self.assertEqual(warm_ws.send.await_count, 3)
+class TestPayload(unittest.TestCase):
+    """Tests for _payload."""
 
-    async def test_opens_fresh_connection_when_no_warm(self):
-        fresh_ws = self._make_ws_mock()
+    def test_payload_with_voice(self):
+        with patch("mistral_tts.MODEL", "voxtral-mini-tts-3-0"), \
+             patch("mistral_tts.VOICE", "voice-abc"):
+            payload = mistral_tts._payload("Hallo")
 
-        with patch.object(fish_tts, "_take_warm_connection", AsyncMock(return_value=None)), \
-             patch.object(fish_tts, "_open_connection", AsyncMock(return_value=fresh_ws)):
-            response = await main.stream_tts(_mock_request(), "Test")
-            collected = b"".join([c async for c in response.body_iterator])
+        self.assertEqual(payload["input"], "Hallo")
+        self.assertEqual(payload["model"], "voxtral-mini-tts-3-0")
+        self.assertEqual(payload["response_format"], "mp3")
+        self.assertTrue(payload["stream"])
+        self.assertEqual(payload["voice_id"], "voice-abc")
 
-        self.assertEqual(collected, b"chunk1chunk2")
-        self.assertEqual(fresh_ws.send.await_count, 3)
+    def test_payload_without_voice_has_no_voice_id(self):
+        with patch("mistral_tts.VOICE", ""):
+            payload = mistral_tts._payload("Hallo")
 
-    async def test_retries_with_fresh_connection_when_warm_is_dead(self):
-        dead_ws = AsyncMock()
-        dead_ws.send.side_effect = Exception("Connection closed")
+        self.assertNotIn("voice_id", payload)
 
-        fresh_ws = self._make_ws_mock()
 
-        with patch.object(fish_tts, "_take_warm_connection", AsyncMock(return_value=dead_ws)), \
-             patch.object(fish_tts, "_open_connection", AsyncMock(return_value=fresh_ws)):
-            response = await main.stream_tts(_mock_request(), "Retry test")
-            collected = b"".join([c async for c in response.body_iterator])
+class TestParseSseEvent(unittest.TestCase):
+    """Tests for _parse_sse_event."""
 
-        self.assertEqual(collected, b"chunk1chunk2")
+    def test_done_event_returns_done(self):
+        done, chunks = mistral_tts._parse_sse_event(['{"type": "speech.audio.done", "usage": {}}'])
+        self.assertTrue(done)
+        self.assertEqual(chunks, [])
 
-    async def test_close_exception_during_retry_is_silenced(self):
-        """Lines 120-121: ws.close() raises during retry cleanup — it is ignored."""
-        dead_ws = AsyncMock()
-        dead_ws.send.side_effect = Exception("dead")
-        dead_ws.close.side_effect = Exception("close also failed")
+    def test_audio_delta_decodes_base64(self):
+        done, chunks = mistral_tts._parse_sse_event(
+            [f'{{"type": "speech.audio.delta", "audio_data": "{_b64(b"chunk")}"}}']
+        )
+        self.assertFalse(done)
+        self.assertEqual(chunks, [b"chunk"])
 
-        fresh_ws = self._make_ws_mock()
+    def test_invalid_json_is_ignored(self):
+        done, chunks = mistral_tts._parse_sse_event(["not json"])
+        self.assertFalse(done)
+        self.assertEqual(chunks, [])
 
-        with patch.object(fish_tts, "_take_warm_connection", AsyncMock(return_value=dead_ws)), \
-             patch.object(fish_tts, "_open_connection", AsyncMock(return_value=fresh_ws)):
-            response = await main.stream_tts(_mock_request(), "Close exception test")
-            collected = b"".join([c async for c in response.body_iterator])
+    def test_missing_audio_data_is_ignored(self):
+        done, chunks = mistral_tts._parse_sse_event(['{"type": "speech.audio.delta"}'])
+        self.assertFalse(done)
+        self.assertEqual(chunks, [])
+
+
+class TestIterAudio(unittest.IsolatedAsyncioTestCase):
+    """Tests for _iter_audio."""
+
+    async def test_yields_decoded_chunks_and_stops_on_done(self):
+        response = _FakeStreamResponse([b"chunk1", b"chunk2"])
+        collected = [c async for c in mistral_tts._iter_audio(response)]
+        self.assertEqual(collected, [b"chunk1", b"chunk2"])
+
+
+class TestStream(unittest.IsolatedAsyncioTestCase):
+    """Tests for stream()."""
+
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_streams_audio_bytes(self, mock_client_class):
+        _install_stream_mock(mock_client_class, [b"chunk1", b"chunk2"])
+
+        collected = b"".join([c async for c in mistral_tts.stream("Hallo Welt")])
 
         self.assertEqual(collected, b"chunk1chunk2")
-
-    async def test_raises_when_fresh_connection_send_fails(self):
-        """Line 127: opened_fresh=True and send fails → exception is propagated."""
-        failing_ws = AsyncMock()
-        failing_ws.send.side_effect = Exception("Network error")
-
-        with patch.object(fish_tts, "_take_warm_connection", AsyncMock(return_value=None)), \
-             patch.object(fish_tts, "_open_connection", AsyncMock(return_value=failing_ws)):
-            response = await main.stream_tts(_mock_request(), "fail")
-            with self.assertRaises(Exception):
-                async for _ in response.body_iterator:
-                    pass
-
-    async def test_close_exception_in_finally_is_silenced(self):
-        """Lines 139-140: ws.close() raises in finally — exception is ignored."""
-        ws = self._make_ws_mock()
-        ws.close.side_effect = Exception("close failed")
-
-        with patch.object(fish_tts, "_take_warm_connection", AsyncMock(return_value=ws)):
-            response = await main.stream_tts(_mock_request(), "finally test")
-            collected = b"".join([c async for c in response.body_iterator])
-
-        self.assertEqual(collected, b"chunk1chunk2")
-
-    async def test_response_media_type_is_audio_mpeg(self):
-        ws = self._make_ws_mock()
-        with patch.object(fish_tts, "_take_warm_connection", AsyncMock(return_value=None)), \
-             patch.object(fish_tts, "_open_connection", AsyncMock(return_value=ws)):
-            response = await main.stream_tts(_mock_request(), "Audio-Typ Test")
-            self.assertEqual(response.media_type, "audio/mpeg")
 
 
 class TestWarmup(unittest.IsolatedAsyncioTestCase):
-    """Tests for the /warmup endpoint."""
+    """Tests for warm_up()."""
 
-    async def test_warmup_opens_connection_and_returns_warm(self):
-        mock_ws = AsyncMock()
-
-        with patch.object(fish_tts, "_open_connection", AsyncMock(return_value=mock_ws)):
-            fish_tts._warm["ws"] = None
-            result = await main.warmup()
-
-        self.assertEqual(result, {"status": "warm"})
-        self.assertIs(fish_tts._warm["ws"], mock_ws)
-
-    async def test_warmup_replaces_existing_connection(self):
-        old_ws = AsyncMock()
-        new_ws = AsyncMock()
-        fish_tts._warm["ws"] = old_ws
-
-        with patch.object(fish_tts, "_open_connection", AsyncMock(return_value=new_ws)):
-            result = await main.warmup()
-
-        self.assertEqual(result, {"status": "warm"})
-        old_ws.close.assert_awaited_once()
-        self.assertIs(fish_tts._warm["ws"], new_ws)
-
-    async def test_warmup_close_exception_is_silenced(self):
-        """Lines 88-89: close() raises while replacing — exception is ignored."""
-        old_ws = AsyncMock()
-        old_ws.close.side_effect = Exception("close failed")
-        new_ws = AsyncMock()
-        fish_tts._warm["ws"] = old_ws
-
-        with patch.object(fish_tts, "_open_connection", AsyncMock(return_value=new_ws)):
-            result = await main.warmup()
-
-        self.assertEqual(result, {"status": "warm"})
-
-    async def test_warmup_returns_error_on_exception(self):
-        with patch.object(fish_tts, "_open_connection", AsyncMock(side_effect=Exception("Verbindungsfehler"))):
-            fish_tts._warm["ws"] = None
-            result = await main.warmup()
-
-        self.assertEqual(result["status"], "error")
-        self.assertEqual("Internal server error", result["message"])
+    async def test_warmup_is_a_noop(self):
+        self.assertEqual(await mistral_tts.warm_up(), {"status": "warm"})
 
 
-class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
-    """Tests for the /health endpoint."""
+class TestHealth(unittest.IsolatedAsyncioTestCase):
+    """Tests for check_health()."""
 
-    @patch("fish_tts.httpx.AsyncClient")
-    async def test_health_success_includes_voice_and_model(self, mock_client_class):
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_health_ok(self, mock_client_class):
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
-        mock_client.get.return_value = MagicMock(
-            status_code=200,
-            json=lambda: {"credit": 100},
-        )
+        mock_client.get.return_value = MagicMock(status_code=200, json=lambda: {"data": []})
         mock_client_class.return_value = mock_client
 
-        with patch("fish_tts.VOICE", "voice-abc"), \
-             patch("fish_tts.MODEL", "s2-pro"):
-            response = await main.health()
+        self.assertEqual(await mistral_tts.check_health(), {"status": "ok"})
 
-        self.assertEqual(response["status"], "ok")
-        self.assertNotIn("credits", response)  # do not expose the credit balance publicly
-        self.assertEqual(response["voice"], "voice-abc")
-        self.assertEqual(response["model"], "s2-pro")
-
-    @patch("fish_tts.httpx.AsyncClient")
-    async def test_health_timeout_still_returns_voice_and_model(self, mock_client_class):
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_health_timeout(self, mock_client_class):
         import httpx
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
         mock_client.get.side_effect = httpx.TimeoutException("Timeout")
         mock_client_class.return_value = mock_client
 
-        with patch("fish_tts.VOICE", "voice-abc"), \
-             patch("fish_tts.MODEL", "s2-pro"):
-            response = await main.health()
+        result = await mistral_tts.check_health()
 
-        self.assertEqual(response["status"], "unavailable")
-        self.assertEqual(response["message"], "Fish Audio API Timeout")
-        self.assertEqual(response["voice"], "voice-abc")
-        self.assertEqual(response["model"], "s2-pro")
+        self.assertEqual(result["status"], "unavailable")
+        self.assertEqual(result["message"], "Mistral API Timeout")
 
-    @patch("fish_tts.httpx.AsyncClient")
-    async def test_health_http_error_returns_error_status(self, mock_client_class):
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_health_http_error(self, mock_client_class):
         import httpx
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
@@ -245,20 +159,19 @@ class TestHealthEndpoint(unittest.IsolatedAsyncioTestCase):
         )
         mock_client_class.return_value = mock_client
 
-        response = await main.health()
+        result = await mistral_tts.check_health()
 
-        self.assertEqual(response["status"], "error")
-        self.assertIn("401", response["message"])
+        self.assertEqual(result["status"], "error")
+        self.assertIn("401", result["message"])
 
-    @patch("fish_tts.httpx.AsyncClient")
-    async def test_health_generic_exception_returns_error(self, mock_client_class):
-        """Unexpected exception is returned as error without internal details."""
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_health_generic_exception(self, mock_client_class):
         mock_client = AsyncMock()
         mock_client.__aenter__.return_value = mock_client
-        mock_client.get.side_effect = Exception("Unexpected error")
+        mock_client.get.side_effect = Exception("Unexpected")
         mock_client_class.return_value = mock_client
 
-        response = await main.health()
+        result = await mistral_tts.check_health()
 
-        self.assertEqual(response["status"], "error")
-        self.assertEqual("Internal server error", response["message"])
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["message"], "Internal server error")

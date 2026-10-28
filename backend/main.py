@@ -10,7 +10,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-import fish_tts
+import mistral_tts
 import mock_tts
 from auth import CurrentUser, current_user, require_metrics_token
 from db import (
@@ -91,15 +91,15 @@ app.add_middleware(
 
 
 def _resolve_provider(value: str) -> str:
-    """Returns "fish" (default) or "mock". A typo stops the start, so paid speech never switches silently."""
-    value = (value or "fish").strip().lower()
-    if value not in ("fish", "mock"):
-        raise RuntimeError(f"TTS_PROVIDER must be 'fish' or 'mock', got {value!r}")
+    """Returns "mistral" (default) or "mock". A typo stops the start, so paid speech never switches silently."""
+    value = (value or "mistral").strip().lower()
+    if value not in ("mistral", "mock"):
+        raise RuntimeError(f"TTS_PROVIDER must be 'mistral' or 'mock', got {value!r}")
     return value
 
 
-# "mock" sends silent MP3 instead of calling Fish Audio. For load tests only.
-TTS_PROVIDER = _resolve_provider(os.getenv("TTS_PROVIDER", "fish"))
+# "mock" sends silent MP3 instead of calling Mistral. For load tests only.
+TTS_PROVIDER = _resolve_provider(os.getenv("TTS_PROVIDER", "mistral"))
 
 
 @app.get("/warmup", dependencies=[Depends(current_user)])
@@ -107,7 +107,7 @@ async def warmup():
     """Opens a TTS connection in advance (called when the user starts typing)."""
     if TTS_PROVIDER == "mock":
         return {"status": "warm"}
-    return await fish_tts.warm_up()
+    return await mistral_tts.warm_up()
 
 
 @app.get("/stream/tts", dependencies=[Depends(current_user)])
@@ -129,7 +129,7 @@ async def stream_tts(
         )
 
     return StreamingResponse(
-        fish_tts.stream(text),
+        mistral_tts.stream(text),
         media_type="audio/mpeg",
         headers={"Cache-Control": "no-cache"},
     )
@@ -137,10 +137,10 @@ async def stream_tts(
 
 @app.get("/health")
 async def health():
-    base = {"voice": fish_tts.VOICE, "model": fish_tts.MODEL, "provider": TTS_PROVIDER}
+    base = {"voice": mistral_tts.VOICE, "model": mistral_tts.MODEL, "provider": TTS_PROVIDER}
     if TTS_PROVIDER == "mock":
-        return {**base, "status": "ok"}  # no call to Fish, so the mock runs without a key
-    return {**base, **await fish_tts.check_health()}
+        return {**base, "status": "ok"}  # no call to Mistral, so the mock runs without a key
+    return {**base, **await mistral_tts.check_health()}
 
 
 @app.get("/chats", response_model=list[ChatModel])

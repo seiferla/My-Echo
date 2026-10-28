@@ -104,15 +104,15 @@ im Auftrag des Verantwortlichen.
   Hetzner abschliessen, bevor echte Nutzer kommen.
 -->
 
-**c) Sprachsynthese durch einen Drittanbieter (Fish Audio)**
+**c) Sprachsynthese durch einen Drittanbieter (Mistral AI)**
 Zur Umwandlung von Text in Sprache wird der eingegebene **Text an den
-Dienstleister Fish Audio** (https://fish.audio) übermittelt und dort verarbeitet.
+Dienstleister Mistral AI** (https://mistral.ai) übermittelt und dort verarbeitet.
 Übertragen wird ausschließlich der Text selbst — **keine Kennung des Geräts,
 kein Nutzername, kein Chat-Verlauf**. Bitte beachte hierzu die
-Datenschutzerklärung von Fish Audio. Die Übertragung dient ausschließlich der
+Datenschutzerklärung von Mistral AI. Die Übertragung dient ausschließlich der
 Erzeugung der Sprachausgabe.
 
-*Übermittlung in ein Drittland:* Fish Audio verarbeitet die Daten
+*Übermittlung in ein Drittland:* Mistral AI verarbeitet die Daten
 voraussichtlich auf Servern **außerhalb der EU/des EWR**. Für diese Länder
 liegt kein Angemessenheitsbeschluss der EU-Kommission vor, und es wurden keine
 eigenen Standardvertragsklauseln mit dem Anbieter geschlossen. Die Übermittlung
@@ -153,7 +153,7 @@ ausdrücklichen Einwilligung durch die Nutzung der App (Art. 9 Abs. 2 lit. a DSG
 
 Eine Weitergabe erfolgt **ausschließlich** an die unter 3b und 3c genannten
 Dienstleister: Supabase (Anmeldung und Datenbank), Hetzner (Server des Backends)
-und Fish Audio (Sprachausgabe), soweit dies für die Funktion der App
+und Mistral AI (Sprachausgabe), soweit dies für die Funktion der App
 erforderlich ist. Es findet **kein Verkauf** von Daten und **keine Nutzung für
 Werbung** statt.
 
@@ -196,7 +196,7 @@ Bitte beachte dabei zwei Punkte:
 - Chats und Audio-Cache liegen im privaten Bereich der App auf dem Gerät. Das
   Betriebssystem schützt diesen Bereich, die App verschlüsselt die Dateien aber
   nicht zusätzlich.
-- Die Übertragung an den Sprachsynthese-Dienstleister (Fish Audio) erfolgt über
+- Die Übertragung an den Sprachsynthese-Dienstleister (Mistral AI) erfolgt über
   das Internet und ist dorthin verschlüsselt (TLS).
 
 ---

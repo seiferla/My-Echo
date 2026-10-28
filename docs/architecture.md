@@ -35,7 +35,7 @@ flowchart TB
         host["Host (G4)<br/><i>Hetzner VM, Caddy, Terraform</i>"]:::planned
     end
 
-    fish["Fish Audio API<br/><i>cloud TTS</i>"]:::ext
+    mistral["Mistral Voxtral API<br/><i>cloud TTS</i>"]:::ext
     mon["Monitoring<br/><i>Prometheus, Grafana</i>"]:::done
     load["Load test (G5)<br/><i>Locust, mock TTS</i>"]:::planned
 
@@ -49,7 +49,7 @@ flowchart TB
     verify --> tts
     verify -.->|"public keys (JWKS)"| sauth
     api -->|"SQL, WHERE user_id"| pg
-    tts <-->|"WebSocket"| fish
+    tts -->|"HTTP (SSE)"| mistral
     mon -.->|"scrape /metrics"| api
     load -.-> verify
 ```
@@ -89,14 +89,14 @@ refreshes the token itself.
 | Backend API | Chats, phrases, statistics, TTS proxy | FastAPI, Uvicorn, asyncpg | local / Docker | done | ADR 0002 |
 | Database | Data per user | Supabase Postgres, RLS on every table | Supabase, Ireland | done | ADR 0002 |
 | Schema | Versioned database changes | Supabase CLI, SQL files in `supabase/migrations/` | repo | done | |
-| Speech | Text to speech | Fish Audio API, model `s2-pro` | Fish Audio cloud | done | |
+| Speech | Text to speech | Mistral Voxtral API, model `voxtral-mini-tts-3-0` | Mistral cloud | done | |
 | CI | Tests, Android builds | GitHub Actions, Postgres 17 for backend tests | GitHub | done | |
 | Monitoring | Metrics | Prometheus, Grafana (`monitoring/`) | separate stack | done, `/metrics` is still public | |
 | Hosting | VM, HTTPS, infrastructure as code | Hetzner VM, Docker Compose, Caddy, Terraform | Hetzner | planned (G4) | ADR 0002 |
 | Passkeys | Sign-in without typing | `react-native-passkeys`, Supabase passkeys | app, Supabase | planned, 2-day spike (G1) | ADR 0002 |
-| Own voice | Voice clone per user | Fish Audio voice clone | Fish Audio cloud | planned (G3) | |
+| Own voice | Voice clone per user | Mistral voice clone | Mistral cloud | planned (G3) | |
 | Usage metering | Cost per user | table with one row per TTS request | Postgres | planned (G7) | |
-| Mock TTS | Stands in for Fish Audio in load tests (silent MP3, set delay) | `TTS_PROVIDER=mock` in the backend | backend | done (G5) | |
+| Mock TTS | Stands in for Mistral in load tests (silent MP3, set delay) | `TTS_PROVIDER=mock` in the backend | backend | done (G5) | |
 | Load test | Scaling evidence | Locust | separate VM | planned (G5, G6) | |
 
 ## How to keep this current

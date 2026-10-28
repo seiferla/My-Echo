@@ -107,10 +107,6 @@
           "legendFormat": "TTS Stream ✓"
         },
         {
-          "expr": "rate(http_request_duration_seconds_count{handler=\"/warmup\",status=~\"2..\"}[5m])",
-          "legendFormat": "Warmup ✓"
-        },
-        {
           "expr": "rate(http_request_duration_seconds_count{handler=~\"/stream/tts|/ws/tts\",status=~\"4..|5..\"}[5m])",
           "legendFormat": "Errors ✗"
         }
@@ -158,17 +154,13 @@
     },
     {
       "id": 8,
-      "title": "Warmup Hit Rate",
+      "title": "Health Checks",
       "type": "timeseries",
       "gridPos": { "x": 12, "y": 12, "w": 12, "h": 6 },
       "fieldConfig": {
         "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } }
       },
       "targets": [
-        {
-          "expr": "rate(http_request_duration_seconds_count{handler=\"/warmup\",status=~\"2..\"}[5m])",
-          "legendFormat": "Warmup Calls"
-        },
         {
           "expr": "rate(http_request_duration_seconds_count{handler=\"/health\",status=~\"2..\"}[5m])",
           "legendFormat": "Health Checks"

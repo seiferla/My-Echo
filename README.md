@@ -77,14 +77,13 @@ Speaking can be exhausting, painful, or impossible — and existing solutions ar
 
 > Diagram source: [`docs/architecture.puml`](docs/architecture.puml) (PlantUML). Regenerate with `java -jar plantuml.jar -tsvg docs/architecture.puml`.
 
-1. User opens the compose field → backend pre-warms the Fish Audio connection
-2. In **Schnell** mode (default), finished sentences are already synthesized while the user types; in **Eco** mode, synthesis starts only on send
-3. User taps Send → the first sentence starts playing; the remaining sentences are prepared while it plays
-4. App checks the on-device audio cache → cache hit plays instantly from local file
-5. Cache miss: app requests audio via HTTP streaming from the self-hosted backend
-6. Backend forwards text to Fish Audio and streams MP3 chunks back in real time
-7. The MP3 is stored in the device cache so the next playback of the same phrase is instant
-8. If the backend is unreachable, the app falls back to local speech synthesis automatically
+1. In **Schnell** mode (default), finished sentences are already synthesized while the user types; in **Eco** mode, synthesis starts only on send
+2. User taps Send → the first sentence starts playing; the remaining sentences are prepared while it plays
+3. App checks the on-device audio cache → cache hit plays instantly from local file
+4. Cache miss: app requests audio via HTTP streaming from the self-hosted backend
+5. Backend forwards text to Mistral Voxtral and streams MP3 chunks back in real time
+6. The MP3 is stored in the device cache so the next playback of the same phrase is instant
+7. If the backend is unreachable, the app falls back to local speech synthesis automatically
 
 Chats sync independently of audio: on startup the app **merges** backend and local chats, so history is never overwritten and survives a reinstall. Offline changes are synced on the next reachable start.
 
@@ -117,7 +116,7 @@ Details, edit handling and raw data: [ADR 0001 — Sentence pre-synthesis while 
 
 ```
 My-Echo/
-├── backend/                    FastAPI — TTS streaming, warmup, health, chats (SQLite) + pytest
+├── backend/                    FastAPI — TTS streaming, warmup, health, chats + pytest
 ├── mobile-app/
 │   ├── app/                    expo-router screens (chat, phrases, stats)
 │   ├── components/             ChatArea, Sidebar, Message, PhraseBar
@@ -138,7 +137,7 @@ My-Echo/
 
 ### Features
 
-- **Your own voice** — messages are spoken in a cloned voice via Fish Audio cloud TTS
+- **Your own voice** — messages are spoken in a cloned voice via Mistral Voxtral cloud TTS
 - **Fast start** — *Schnell* mode prepares speech while you type; *Eco* mode prepares it only on send and uses fewer requests
 - **Sentence-by-sentence streaming** — playback starts with the first sentence, with no audible gap to the next one
 - **On-device audio cache** — repeated phrases play instantly (LRU cache, 100 MB cap)
@@ -163,15 +162,15 @@ npm start
 
 ## Backend
 
-A lightweight FastAPI service that proxies streaming TTS requests to Fish Audio and persists chat history in a local SQLite database. Self-hosted on a Raspberry Pi, accessible via WireGuard VPN. Distributed as a Docker image via GHCR.
+A lightweight FastAPI service that proxies streaming TTS requests to Mistral Voxtral and persists chat history in a local SQLite database. Self-hosted on a Raspberry Pi, accessible via WireGuard VPN. Distributed as a Docker image via GHCR.
 
 ### Endpoints
 
 | Method   | Path            | Description                                            |
 |----------|-----------------|--------------------------------------------------------|
 | `GET`    | `/stream/tts`   | Streams MP3 audio for `?text=...` via chunked HTTP (30/min per client) |
-| `GET`    | `/warmup`       | Pre-warms Fish Audio connection before user sends      |
-| `GET`    | `/health`       | Returns provider status, voice/model, and API credits  |
+| `GET`    | `/warmup`       | No-op (Voxtral is stateless; kept for client compatibility) |
+| `GET`    | `/health`       | Returns provider status, voice, and model              |
 | `GET`    | `/chats`        | Returns all stored chats                               |
 | `PUT`    | `/chats/{id}`   | Creates or updates a chat (upsert)                     |
 | `DELETE` | `/chats/{id}`   | Deletes a chat                                         |
@@ -181,11 +180,9 @@ A lightweight FastAPI service that proxies streaming TTS requests to Fish Audio 
 
 | Variable           | Default          | Purpose                       |
 |--------------------|------------------|-------------------------------|
-| `TTS_API_KEY`      | —                | Fish Audio API key            |
-| `TTS_MODEL`        | `s2-pro`         | Model name                    |
-| `TTS_VOICE`        | —                | Voice / reference ID          |
-| `TTS_LATENCY`      | `balanced`       | `normal`, `balanced`, or `low`|
-| `TTS_CHUNK_LENGTH` | `50`             | Tokens before first audio chunk (lower = faster TTFA) |
+| `TTS_API_KEY`      | —                | Mistral API key            |
+| `TTS_MODEL`        | `voxtral-mini-tts-3-0` | Voxtral TTS model     |
+| `TTS_VOICE`        | —                | Voice ID (preset or custom)   |
 | `DB_PATH`          | `/data/chats.db` | SQLite chat database location |
 
 <details>
@@ -215,6 +212,10 @@ cp monitoring/.env.example monitoring/.env   # set BACKEND_HOST to your Pi IP
 docker compose -f monitoring/docker-compose.yml up -d
 ```
 
+Shows request rate, latency (p50/p95/p99) and error rate.
+The full stack lives in [`monitoring/`](monitoring/) — deploy `monitoring/docker-compose.yml` the same way as the backend; the Grafana dashboard and Prometheus datasource are provisioned automatically.
+
+---
 ---
 
 ## Status
