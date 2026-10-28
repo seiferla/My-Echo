@@ -74,7 +74,7 @@ TEST_DB = os.getenv("TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0
 MIGRATIONS = sorted((pathlib.Path(__file__).parent.parent / "supabase" / "migrations").glob("*.sql"))
 USER_A = "11111111-1111-1111-1111-111111111111"
 USER_B = "22222222-2222-2222-2222-222222222222"
-USER_TABLES = ("chats", "messages", "phrase_stores", "tts_daily_stats")
+USER_TABLES = ("chats", "messages", "phrase_stores", "tts_daily_stats", "user_voices")
 
 
 def with_test_db(action):
@@ -122,6 +122,7 @@ def clear_user_data() -> None:
         await conn.execute("DELETE FROM public.chats")  # messages go with them (CASCADE)
         await conn.execute("DELETE FROM public.phrase_stores")
         await conn.execute("DELETE FROM public.tts_daily_stats")
+        await conn.execute("DELETE FROM public.user_voices")
         await _add_test_users(conn)
 
     with_test_db(run)

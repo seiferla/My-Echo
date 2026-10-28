@@ -30,6 +30,7 @@ function RootStack() {
         <Stack.Screen name="index" />
         <Stack.Screen name="stats" />
         <Stack.Screen name="phrases" />
+        <Stack.Screen name="voice" />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="login" />

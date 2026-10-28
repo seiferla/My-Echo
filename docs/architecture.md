@@ -1,6 +1,6 @@
 # myEcho Multi-User: Architecture
 
-Status: 2026-10-22, branch `multiuser`. The diagrams are Mermaid code, GitHub renders them.
+Status: 2026-10-28, branch `multiuser`. The diagrams are Mermaid code, GitHub renders them.
 Solid boxes exist and run. Dashed boxes are planned (goal IDs from [goals.md](goals.md)).
 
 The single-user version on `main` (Raspberry Pi, SQLite) is in
@@ -21,6 +21,7 @@ flowchart TB
         local[("Local data per account<br/><i>chats, phrases, stats</i>")]:::done
         acache[("Audio cache per account<br/><i>LRU, 100 MB</i>")]:::done
         speech["Offline speech<br/><i>expo-speech</i>"]:::done
+        voiceui["Own voice<br/><i>upload audio sample</i>"]:::done
     end
 
     subgraph supa["Supabase · managed, Ireland (eu-west-1)"]
@@ -32,10 +33,11 @@ flowchart TB
         verify["Token check<br/><i>PyJWT, JWKS</i>"]:::done
         api["Data API<br/><i>/chats /phrases /stats/tts</i>"]:::done
         tts["TTS proxy<br/><i>/stream/tts /warmup</i>"]:::done
+        voice["Voice API<br/><i>/voice (clone)</i>"]:::done
         host["Host (G4)<br/><i>Hetzner VM, Caddy, Terraform</i>"]:::planned
     end
 
-    mistral["Mistral Voxtral API<br/><i>cloud TTS</i>"]:::ext
+    mistral["Mistral Voxtral API<br/><i>cloud TTS + voice clone</i>"]:::ext
     mon["Monitoring<br/><i>Prometheus, Grafana</i>"]:::done
     load["Load test (G5)<br/><i>Locust, mock TTS</i>"]:::planned
 
@@ -47,8 +49,13 @@ flowchart TB
     ui -->|"Bearer JWT"| verify
     verify --> api
     verify --> tts
+    verify --> voice
     verify -.->|"public keys (JWKS)"| sauth
     api -->|"SQL, WHERE user_id"| pg
+    tts -->|"voice_id"| pg
+    voice -->|"voice_id (user_voices)"| pg
+    voice -->|"POST /v1/audio/voices"| mistral
+    voiceui -->|"audio sample"| voice
     tts -->|"HTTP (SSE)"| mistral
     mon -.->|"scrape /metrics"| api
     load -.-> verify
@@ -94,7 +101,7 @@ refreshes the token itself.
 | Monitoring | Metrics | Prometheus, Grafana (`monitoring/`) | separate stack | done, `/metrics` is still public | |
 | Hosting | VM, HTTPS, infrastructure as code | Hetzner VM, Docker Compose, Caddy, Terraform | Hetzner | planned (G4) | ADR 0002 |
 | Passkeys | Sign-in without typing | `react-native-passkeys`, Supabase passkeys | app, Supabase | planned, 2-day spike (G1) | ADR 0002 |
-| Own voice | Voice clone per user | Mistral voice clone | Mistral cloud | planned (G3) | |
+| Own voice | Voice clone per user (upload + store `voice_id`) | Mistral `/v1/audio/voices`, `user_voices` table | Mistral cloud + Supabase | done (G3) | |
 | Usage metering | Cost per user | table with one row per TTS request | Postgres | planned (G7) | |
 | Mock TTS | Stands in for Mistral in load tests (silent MP3, set delay) | `TTS_PROVIDER=mock` in the backend | backend | done (G5) | |
 | Load test | Scaling evidence | Locust | separate VM | planned (G5, G6) | |
