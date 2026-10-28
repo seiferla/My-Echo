@@ -14,7 +14,7 @@ from slowapi.errors import RateLimitExceeded
 
 import mistral_tts
 import mock_tts
-from auth import CurrentUser, current_user, require_metrics_token
+from auth import CurrentUser, current_user, delete_supabase_user, require_metrics_token
 from db import (
     init_db, close_db, list_chats, upsert_chat, delete_chat,
     get_phrase_store, put_phrase_store, get_tts_stats, merge_tts_stats,
@@ -261,4 +261,25 @@ async def remove_voice(user_id: CurrentUser):
     deleted = await delete_user_voice(user_id)
     if not deleted and not voice:
         raise HTTPException(404, "no voice stored")
+    return {"status": "deleted"}
+
+
+@app.delete("/account")
+async def delete_account(user_id: CurrentUser):
+    """Deletes the user's account (Supabase Auth) and their cloned voice at Mistral."""
+    voice = await get_user_voice(user_id)
+
+    # Delete the auth user first: all database rows follow via ON DELETE CASCADE.
+    try:
+        await delete_supabase_user(user_id)
+    except Exception as e:
+        raise HTTPException(502, f"Supabase user deletion failed: {e}") from None
+
+    # Best effort: remove the cloned voice at Mistral, so nothing is orphaned.
+    if voice and voice["voiceId"]:
+        try:
+            await mistral_tts.delete_voice(voice["voiceId"])
+        except Exception:
+            logger.warning("could not delete voice %s after account deletion", voice["voiceId"])
+
     return {"status": "deleted"}
