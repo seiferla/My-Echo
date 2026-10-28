@@ -130,3 +130,38 @@ class TestVoiceIsolation(_VoiceTestCase):
         # USER_A's voice is untouched.
         self.as_user(USER_A)
         self.assertEqual(self.client.get("/voice").json()["voiceId"], "voice-a")
+
+
+class TestAccountDeletion(_VoiceTestCase):
+    @patch("mistral_tts.delete_voice", new=AsyncMock())
+    @patch("mistral_tts.create_voice", new=AsyncMock(return_value="voice-a"))
+    @patch("main.delete_supabase_user", new=AsyncMock())
+    def test_delete_account_deletes_the_user_and_the_voice(self):
+        self._upload()
+
+        r = self.client.delete("/account")
+
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json(), {"status": "deleted"})
+        main.delete_supabase_user.assert_awaited_once_with(USER_A)
+        main.mistral_tts.delete_voice.assert_awaited_once_with("voice-a")
+
+    @patch("mistral_tts.delete_voice", new=AsyncMock())
+    @patch("main.delete_supabase_user", new=AsyncMock())
+    def test_delete_account_without_voice_still_deletes_the_user(self):
+        r = self.client.delete("/account")
+
+        self.assertEqual(r.status_code, 200, r.text)
+        main.delete_supabase_user.assert_awaited_once_with(USER_A)
+        main.mistral_tts.delete_voice.assert_not_awaited()
+
+    @patch("mistral_tts.delete_voice", new=AsyncMock())
+    @patch("mistral_tts.create_voice", new=AsyncMock(return_value="voice-a"))
+    @patch("main.delete_supabase_user", new=AsyncMock(side_effect=Exception("boom")))
+    def test_delete_account_fails_when_supabase_fails(self):
+        self._upload()
+
+        r = self.client.delete("/account")
+
+        self.assertEqual(r.status_code, 502)
+        main.mistral_tts.delete_voice.assert_not_awaited()

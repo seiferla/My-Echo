@@ -7,12 +7,15 @@ import os
 import secrets
 from typing import Annotated
 
+import httpx
 import jwt
 from jwt import PyJWKClient
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+# Admin key for account deletion (deletes the auth user). Never exposed to the app.
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
 # Asymmetric only. HS256 (shared secret) and "none" are not allowed on purpose.
 ALLOWED_ALGORITHMS = ["ES256", "RS256"]
@@ -67,3 +70,21 @@ def require_metrics_token(credentials: BearerToken) -> None:
         credentials.credentials.encode(), expected.encode()
     ):
         raise HTTPException(401, "not authenticated")
+
+
+async def delete_supabase_user(user_id: str) -> None:
+    """Deletes the user in Supabase Auth via the admin API (service role key).
+
+    The database rows follow through ON DELETE CASCADE. This is the only place
+    that uses the service role key; the app never sees it.
+    """
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required to delete an account")
+    url = f"{SUPABASE_URL}/auth/v1/admin/users/{user_id}"
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+    }
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.delete(url, headers=headers)
+        response.raise_for_status()
