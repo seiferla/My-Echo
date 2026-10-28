@@ -1,6 +1,6 @@
 """Rate limit per user: users behind the same IP do not share a limit.
 
-Uses the real token check and the mock TTS, so no database and no Fish Audio.
+Uses the real token check and the mock TTS, so no database and no Mistral.
 """
 import os
 import time

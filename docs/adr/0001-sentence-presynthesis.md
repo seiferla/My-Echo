@@ -8,7 +8,7 @@
 
 myEcho is an assistive communication app for people with voice disorders. The
 user types a message and the app speaks it with a cloned voice (cloud TTS via
-the backend proxy, Fish Audio). For a conversation, the important number is
+the backend proxy, Mistral Voxtral). For a conversation, the important number is
 **TTFA (time to first audio)**: the time from pressing *send* to the first
 audible sound. Every second of silence interrupts the conversation partner.
 

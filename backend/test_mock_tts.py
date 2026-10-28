@@ -1,4 +1,4 @@
-"""Tests for the mock TTS. Main rule: in mock mode there is NEVER a connection to Fish Audio."""
+"""Tests for the mock TTS. Main rule: in mock mode there is NEVER a connection to Mistral."""
 import asyncio
 import os
 import time
@@ -7,33 +7,31 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-import fish_tts
 import main
+import mistral_tts
 import mock_tts
 from auth import current_user
 from schemas import MAX_MESSAGE_CHARS
 from testutils import FAST_MOCK, LogCapture
 
 
-def _forbid_fish():
-    """Every access to Fish Audio fails the test."""
-    boom = AssertionError("Fish Audio must not be used in mock mode")
+def _forbid_mistral():
+    """Every access to Mistral fails the test."""
+    boom = AssertionError("Mistral must not be used in mock mode")
     return [
-        patch.object(fish_tts, "_open_connection", AsyncMock(side_effect=boom)),
-        patch.object(fish_tts, "_take_warm_connection", AsyncMock(side_effect=boom)),
-        patch.object(fish_tts.httpx, "AsyncClient", MagicMock(side_effect=boom)),
-        patch.object(fish_tts.websockets, "connect", AsyncMock(side_effect=boom)),
+        patch.object(mistral_tts.httpx, "AsyncClient", MagicMock(side_effect=boom)),
+        patch.object(mistral_tts, "warm_up", AsyncMock(side_effect=boom)),
     ]
 
 
 class MockMode(unittest.TestCase):
-    """Base class: mock on, Fish blocked, user signed in."""
+    """Base class: mock on, Mistral blocked, user signed in."""
 
     def setUp(self):
         patches = [
             patch.object(main, "TTS_PROVIDER", "mock"),
             patch.dict(os.environ, FAST_MOCK),
-            *_forbid_fish(),
+            *_forbid_mistral(),
         ]
         for p in patches:
             p.start()
@@ -66,7 +64,7 @@ class TestAudioFile(unittest.TestCase):
 
 
 class TestStreamEndpoint(MockMode):
-    def test_returns_audio_without_touching_fish(self):
+    def test_returns_audio_without_touching_mistral(self):
         r = self.client.get("/stream/tts", params={"text": "Hallo Welt"})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.headers["content-type"], "audio/mpeg")
@@ -115,16 +113,16 @@ class TestWarmupAndHealth(MockMode):
         r = self.client.get("/warmup")
         self.assertEqual(r.json(), {"status": "warm"})
 
-    def test_health_is_ok_without_fish_and_names_the_provider(self):
+    def test_health_is_ok_without_mistral_and_names_the_provider(self):
         r = self.client.get("/health")
         self.assertEqual(r.json()["status"], "ok")
         self.assertEqual(r.json()["provider"], "mock")
 
 
 class TestProviderSwitch(unittest.TestCase):
-    def test_default_is_fish(self):
-        self.assertEqual(main._resolve_provider(""), "fish")
-        self.assertEqual(main._resolve_provider("fish"), "fish")
+    def test_default_is_mistral(self):
+        self.assertEqual(main._resolve_provider(""), "mistral")
+        self.assertEqual(main._resolve_provider("mistral"), "mistral")
 
     def test_mock_is_accepted_in_any_case(self):
         self.assertEqual(main._resolve_provider(" Mock "), "mock")
@@ -133,15 +131,15 @@ class TestProviderSwitch(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             main._resolve_provider("moc")
 
-    def test_health_reports_fish_when_not_mocked(self):
-        with patch.object(main, "TTS_PROVIDER", "fish"), \
-             patch.object(fish_tts.httpx, "AsyncClient") as client_class:
+    def test_health_reports_mistral_when_not_mocked(self):
+        with patch.object(main, "TTS_PROVIDER", "mistral"), \
+             patch.object(mistral_tts.httpx, "AsyncClient") as client_class:
             client = AsyncMock()
             client.__aenter__.return_value = client
             client.get.return_value = MagicMock(status_code=200)
             client_class.return_value = client
             result = asyncio.run(main.health())
-        self.assertEqual(result["provider"], "fish")
+        self.assertEqual(result["provider"], "mistral")
 
 
 if __name__ == "__main__":
