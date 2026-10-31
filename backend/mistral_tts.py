@@ -3,7 +3,7 @@
 Settings (env, read at import):
   TTS_API_KEY    Mistral API key
   TTS_MODEL      Voxtral TTS model, default voxtral-mini-tts-2603
-  TTS_VOICE      voice id (preset or custom); empty = model default voice
+  TTS_VOICE      voice id (preset or custom). REQUIRED: Mistral has no default voice
 """
 import base64
 import json
@@ -21,6 +21,8 @@ SPEECH_URL = "https://api.mistral.ai/v1/audio/speech"
 MODELS_URL = "https://api.mistral.ai/v1/models"
 MODEL = os.getenv("TTS_MODEL", "voxtral-mini-tts-2603")
 VOICE = os.getenv("TTS_VOICE", "")
+if not VOICE:
+    logger.error("TTS_VOICE is not set: Mistral rejects every speech request without a voice id.")
 
 # Generous streaming timeout so long messages finish.
 TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
@@ -123,7 +125,9 @@ async def warm_up() -> dict:
 
 
 async def check_health() -> dict:
-    """Checks the API key with a cheap call. Returns {"status": ...} plus a "message" on errors."""
+    """Checks voice and API key. Returns {"status": ...} plus a "message" on errors."""
+    if not VOICE:
+        return {"status": "error", "message": "TTS_VOICE is not set (Mistral needs a voice id)"}
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:
             response = await client.get(MODELS_URL, headers=_headers())

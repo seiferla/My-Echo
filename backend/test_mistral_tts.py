@@ -122,6 +122,15 @@ class TestWarmup(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await mistral_tts.warm_up(), {"status": "warm"})
 
 
+class TestHealthWithoutVoice(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_voice_is_reported(self):
+        with patch("mistral_tts.VOICE", ""):
+            result = await mistral_tts.check_health()
+        self.assertEqual(result["status"], "error")
+        self.assertIn("TTS_VOICE", result["message"])
+
+
+@patch("mistral_tts.VOICE", "voice-abc")
 class TestHealth(unittest.IsolatedAsyncioTestCase):
     """Tests for check_health()."""
 
