@@ -8,8 +8,7 @@ import {
     Dimensions,
     Modal,
     TouchableWithoutFeedback,
-    TextInput,
-    Alert
+    TextInput
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3, Zap, LogOut } from 'lucide-react-native';
@@ -92,21 +91,16 @@ export function Sidebar({
 
     const handleDelete = () => {
         if (selectedChatId) {
-            Alert.alert(
-                "Chat löschen",
-                "Möchten Sie diesen Chat wirklich löschen?",
-                [
-                    { text: "Abbrechen", style: "cancel", onPress: () => setIsMenuVisible(false) },
-                    { 
-                        text: "Löschen", 
-                        style: "destructive", 
-                        onPress: () => {
-                            onDeleteChat(selectedChatId);
-                            setIsMenuVisible(false);
-                            setSelectedChatId(null);
-                        } 
-                    }
-                ]
+            confirmAction(
+                'Chat löschen',
+                'Möchten Sie diesen Chat wirklich löschen?',
+                'Löschen',
+                () => {
+                    onDeleteChat(selectedChatId);
+                    setIsMenuVisible(false);
+                    setSelectedChatId(null);
+                },
+                () => setIsMenuVisible(false)
             );
         }
     };
