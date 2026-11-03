@@ -13,15 +13,16 @@
   "dependencies": {
     "@expo/metro-runtime": "~58.0.15",
     "@supabase/supabase-js": "^2.118.0",
-    "expo": "58.0.17",
+    "expo": "58.0.19",
     "expo-asset": "~58.0.16",
     "expo-audio": "~58.0.10",
     "expo-build-properties": "~58.0.11",
     "expo-clipboard": "~58.0.4",
     "expo-constants": "~58.0.12",
+    "expo-document-picker": "~58.0.4",
     "expo-file-system": "~58.0.9",
     "expo-linking": "~58.0.14",
-    "expo-router": "~58.0.25",
+    "expo-router": "~58.0.26",
     "expo-secure-store": "~58.0.2",
     "expo-sharing": "~58.0.20",
     "expo-speech": "~58.0.3",
@@ -60,7 +61,8 @@
     "glob@^10.4.1": "^14.0.2",
     "minimatch@^10.2.2": "^11.0.1",
     "minimatch@^9.0.4": "^11.0.1",
-    "test-exclude@^6.0.0": "^7.0.2"
+    "test-exclude@^6.0.0": "^7.0.2",
+    "zod": "^4.6.6"
   },
   "jest": {
     "preset": "jest-expo"

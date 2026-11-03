@@ -2,7 +2,7 @@
 
 Method and limits: [docs/goals.md](../docs/goals.md), section "Load test method". Issue #218.
 The test measures **our own system** (backend, token check, database). Speech is a mock
-(`TTS_PROVIDER=mock`), so it costs nothing and needs no Fish Audio key.
+(`TTS_PROVIDER=mock`), so it costs nothing and needs no Mistral key.
 
 ## Setup E1 (this folder, as it is today)
 

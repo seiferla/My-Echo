@@ -27,16 +27,16 @@ node "Mobile App (Android)" as device {
 }
 
 node "Backend — Raspberry Pi\n(FastAPI · Docker)" as pi {
-  [TTS proxy\n/stream/tts · /warmup] as tts
+  [TTS proxy\n/stream/tts] as tts
   [Chat API\n/chats] as chatapi
   database "SQLite\nchats & messages" as db
 }
 
-cloud "Fish Audio API" as fish
+cloud "Mistral Voxtral API" as voice
 
 ui  -->  tts      : text (HTTP stream)
 tts -->  ui       : MP3 chunks
-tts <--> fish     : WebSocket
+tts -->  voice    : HTTP (SSE)
 ui  ..>  acache   : cache hit / store
 ui  ..>  fallback : offline fallback
 

@@ -179,3 +179,45 @@ async def merge_tts_stats(user_id: str, stats: dict[str, dict[str, int]]) -> Non
                 for day, s in stats.items()
             ],
         )
+
+
+# --- Voice clone (G3) -----------------------------------------------------------
+
+async def get_user_voice(user_id: str) -> dict[str, Any] | None:
+    """The user's cloned voice, or None when they have not uploaded one yet."""
+    async with pool().acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT voice_id, name, created_at, consented_at FROM user_voices WHERE user_id = $1",
+            user_id,
+        )
+    if row is None:
+        return None
+    return {
+        "voiceId": row["voice_id"],
+        "name": row["name"],
+        "createdAt": row["created_at"],
+        "consentedAt": row["consented_at"],
+    }
+
+
+async def set_user_voice(user_id: str, voice_id: str, name: str, consented_at: int) -> None:
+    """Stores the voice id for the user. Replaces an existing one (one voice per user)."""
+    now = int(time.time() * 1000)
+    async with pool().acquire() as conn:
+        await conn.execute(
+            """INSERT INTO user_voices (user_id, voice_id, name, created_at, consented_at)
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT (user_id) DO UPDATE SET
+                   voice_id = EXCLUDED.voice_id,
+                   name = EXCLUDED.name,
+                   created_at = EXCLUDED.created_at,
+                   consented_at = EXCLUDED.consented_at""",
+            user_id, voice_id, name, now, consented_at,
+        )
+
+
+async def delete_user_voice(user_id: str) -> bool:
+    """Removes the user's stored voice id. Returns False when there was none."""
+    async with pool().acquire() as conn:
+        result = await conn.execute("DELETE FROM user_voices WHERE user_id = $1", user_id)
+    return result == "DELETE 1"

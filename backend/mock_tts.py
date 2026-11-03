@@ -1,4 +1,4 @@
-"""Fake TTS for load tests (TTS_PROVIDER=mock): silent MP3, no Fish Audio, no cost.
+"""Fake TTS for load tests (TTS_PROVIDER=mock): silent MP3, no Mistral, no cost.
 
 Settings (env, read on every call):
   MOCK_TTS_FIRST_AUDIO_MS    delay until the first byte     default 1500

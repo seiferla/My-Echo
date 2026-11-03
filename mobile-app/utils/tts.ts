@@ -22,7 +22,7 @@ const DOWNLOAD_TIMEOUT_MS = 15_000;
 // cache. So short texts are downloaded and cached instead.
 const SHORT_TEXT_CHARS = 60;
 
-/** Keeps the backend's Fish connection warm. Errors are ignored: it is only an optimization. */
+/** Keeps the backend TTS connection warm. Errors are ignored: it is only an optimization. */
 export async function warmBackend(): Promise<void> {
     try {
         await fetch(BACKEND_WARMUP_URL, { headers: await authHeaders() });

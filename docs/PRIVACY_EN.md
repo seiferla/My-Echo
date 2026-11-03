@@ -87,14 +87,14 @@ Hetzner process the data on our behalf.
   Hetzner abschliessen, bevor echte Nutzer kommen.
 -->
 
-**c) Speech synthesis by a third party (Fish Audio)**
+**c) Speech synthesis by a third party (Mistral AI)**
 To turn text into speech, the text you typed is sent to the service provider
-**Fish Audio** (https://fish.audio) and processed there. Only the text itself is
-sent — **no device ID, no user name, no chat history**. Please also read Fish
-Audio's own privacy policy. The transfer happens only to create the spoken
+**Mistral AI** (https://mistral.ai) and processed there. Only the text itself is
+sent — **no device ID, no user name, no chat history**. Please also read Mistral
+AI's own privacy policy. The transfer happens only to create the spoken
 output.
 
-*Transfer outside the EU:* Fish Audio most likely processes the data on servers
+*Transfer outside the EU:* Mistral AI most likely processes the data on servers
 **outside the EU/EEA**. For those countries there is no adequacy decision by the
 EU Commission, and we have not signed Standard Contractual Clauses with the
 provider. The transfer therefore relies on your **explicit consent**
@@ -132,7 +132,7 @@ given by using the app (Art. 9(2)(a) GDPR).
 ## 5. Sharing with others
 
 We share data **only** with the service providers named in 3b and 3c: Supabase
-(sign-in and database), Hetzner (the server our backend runs on) and Fish Audio
+(sign-in and database), Hetzner (the server our backend runs on) and Mistral AI
 (speech), and only as far as it is needed for the app to work. We do **not
 sell** data and we do **not use it for advertising**.
 
@@ -174,7 +174,7 @@ We want to be open about two points:
 - Chats and the audio cache are stored in the private area of the app on your
   device. The operating system protects this area, but the app does not
   encrypt the files in addition.
-- The connection to the speech provider (Fish Audio) goes over the internet and
+- The connection to the speech provider (Mistral AI) goes over the internet and
   **is encrypted (TLS)**.
 
 ---

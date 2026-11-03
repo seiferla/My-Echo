@@ -77,14 +77,13 @@ Sprechen kann anstrengend, schmerzhaft oder unmöglich sein — und bestehende L
 
 > Diagramm-Quelle: [`docs/architecture.puml`](docs/architecture.puml) (PlantUML). Neu erzeugen mit `java -jar plantuml.jar -tsvg docs/architecture.puml`.
 
-1. Der Nutzer öffnet das Eingabefeld → das Backend wärmt die Fish-Audio-Verbindung vor
-2. Im Modus **Schnell** (Standard) werden fertige Sätze schon während des Tippens synthetisiert; im Modus **Eco** erst beim Senden
-3. Der Nutzer drückt auf Senden → der erste Satz startet sofort; die restlichen Sätze werden während der Wiedergabe vorbereitet
-4. Die App prüft den Audio-Cache auf dem Gerät → bei einem Treffer wird sofort aus der lokalen Datei abgespielt
-5. Cache-Miss: Die App fordert das Audio per HTTP-Streaming vom selbst gehosteten Backend an
-6. Das Backend leitet den Text an Fish Audio weiter und streamt MP3-Chunks in Echtzeit zurück
-7. Die MP3 wird im Geräte-Cache gespeichert, sodass dieselbe Phrase beim nächsten Mal sofort abgespielt wird
-8. Ist das Backend nicht erreichbar, wechselt die App automatisch auf lokale Sprachsynthese
+1. Im Modus **Schnell** (Standard) werden fertige Sätze schon während des Tippens synthetisiert; im Modus **Eco** erst beim Senden
+2. Der Nutzer drückt auf Senden → der erste Satz startet sofort; die restlichen Sätze werden während der Wiedergabe vorbereitet
+3. Die App prüft den Audio-Cache auf dem Gerät → bei einem Treffer wird sofort aus der lokalen Datei abgespielt
+4. Cache-Miss: Die App fordert das Audio per HTTP-Streaming vom selbst gehosteten Backend an
+5. Das Backend leitet den Text an Mistral Voxtral weiter und streamt MP3-Chunks in Echtzeit zurück
+6. Die MP3 wird im Geräte-Cache gespeichert, sodass dieselbe Phrase beim nächsten Mal sofort abgespielt wird
+7. Ist das Backend nicht erreichbar, wechselt die App automatisch auf lokale Sprachsynthese
 
 Chats werden unabhängig vom Audio synchronisiert: Beim Start **führt** die App Backend- und lokale Chats **zusammen**, der Verlauf wird also nie überschrieben und übersteht eine Neuinstallation. Offline-Änderungen werden beim nächsten erreichbaren Start synchronisiert.
 
@@ -117,7 +116,7 @@ Details, Umgang mit Korrekturen und Rohdaten: [ADR 0001 — Sentence pre-synthes
 
 ```
 My-Echo/
-├── backend/                    FastAPI — TTS-Streaming, Warmup, Health, Chats (SQLite) + pytest
+├── backend/                    FastAPI — TTS-Streaming, Warmup, Health, Chats + pytest
 ├── mobile-app/
 │   ├── app/                    expo-router Screens (Chat, Phrasen, Statistik)
 │   ├── components/             ChatArea, Sidebar, Message, PhraseBar
@@ -138,7 +137,7 @@ My-Echo/
 
 ### Funktionen
 
-- **Die eigene Stimme** — Nachrichten werden mit einer geklonten Stimme über Fish-Audio-Cloud-TTS gesprochen
+- **Die eigene Stimme** — Nachrichten werden mit einer geklonten Stimme über Mistral-Voxtral-Cloud-TTS gesprochen
 - **Schneller Start** — der Modus *Schnell* bereitet die Sprache schon beim Tippen vor; *Eco* erst beim Senden und mit weniger Anfragen
 - **Satzweises Streaming** — die Wiedergabe startet mit dem ersten Satz, ohne hörbare Pause zum nächsten
 - **Audio-Cache auf dem Gerät** — wiederholte Phrasen werden sofort abgespielt (LRU-Cache, 100 MB Limit)
@@ -163,15 +162,15 @@ npm start
 
 ## Backend
 
-Ein schlanker FastAPI-Dienst, der Streaming-TTS-Anfragen an Fish Audio weiterleitet und den Chatverlauf in einer lokalen SQLite-Datenbank speichert. Selbst gehostet auf einem Raspberry Pi, erreichbar über WireGuard-VPN. Wird als Docker-Image über GHCR verteilt.
+Ein schlanker FastAPI-Dienst, der Streaming-TTS-Anfragen an Mistral Voxtral weiterleitet und den Chatverlauf in einer lokalen SQLite-Datenbank speichert. Selbst gehostet auf einem Raspberry Pi, erreichbar über WireGuard-VPN. Wird als Docker-Image über GHCR verteilt.
 
 ### Endpunkte
 
 | Methode  | Pfad            | Beschreibung                                                   |
 |----------|-----------------|----------------------------------------------------------------|
 | `GET`    | `/stream/tts`   | Streamt MP3-Audio für `?text=...` per Chunked HTTP (30/min pro Client) |
-| `GET`    | `/warmup`       | Wärmt die Fish-Audio-Verbindung vor, bevor der Nutzer sendet   |
-| `GET`    | `/health`       | Liefert Provider-Status, Stimme/Modell und API-Guthaben        |
+| `GET`    | `/warmup`       | No-op (Voxtral ist zustandslos; für Client-Kompatibilität)   |
+| `GET`    | `/health`       | Liefert Provider-Status, Stimme und Modell                   |
 | `GET`    | `/chats`        | Liefert alle gespeicherten Chats                               |
 | `PUT`    | `/chats/{id}`   | Erstellt oder aktualisiert einen Chat (Upsert)                 |
 | `DELETE` | `/chats/{id}`   | Löscht einen Chat                                              |
@@ -181,11 +180,9 @@ Ein schlanker FastAPI-Dienst, der Streaming-TTS-Anfragen an Fish Audio weiterlei
 
 | Variable           | Standard         | Zweck                                                         |
 |--------------------|------------------|---------------------------------------------------------------|
-| `TTS_API_KEY`      | —                | Fish-Audio-API-Key                                            |
-| `TTS_MODEL`        | `s2-pro`         | Modellname                                                    |
-| `TTS_VOICE`        | —                | Stimme / Referenz-ID                                          |
-| `TTS_LATENCY`      | `balanced`       | `normal`, `balanced` oder `low`                               |
-| `TTS_CHUNK_LENGTH` | `50`             | Tokens bis zum ersten Audio-Chunk (niedriger = schnelleres TTFA) |
+| `TTS_API_KEY`      | —                | Mistral-API-Key                                               |
+| `TTS_MODEL`        | `voxtral-mini-tts-3-0` | Voxtral-TTS-Modell                                     |
+| `TTS_VOICE`        | —                | Stimmen-ID (Preset oder Custom)                               |
 | `DB_PATH`          | `/data/chats.db` | Speicherort der SQLite-Chat-Datenbank                         |
 
 <details>
@@ -208,7 +205,7 @@ GitHub Actions führt die Backend-Tests aus (mit Coverage-Badge), prüft und bau
 
 ## Monitoring
 
-Prometheus + Grafana Dashboard, selbst gehostet auf dem Pi. Zeigt Request-Rate, Latenz (p50/p95/p99), Fehlerrate und Warmup-Trefferquote. Dashboard und Datasource werden automatisch eingerichtet.
+Prometheus + Grafana Dashboard, selbst gehostet auf dem Pi. Zeigt Request-Rate, Latenz (p50/p95/p99) und Fehlerrate. Dashboard und Datasource werden automatisch eingerichtet.
 
 ```bash
 cp monitoring/.env.example monitoring/.env   # BACKEND_HOST auf die Pi-IP setzen
