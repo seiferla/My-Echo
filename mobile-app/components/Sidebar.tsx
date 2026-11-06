@@ -12,7 +12,7 @@ import {
     Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3, Zap, LogOut } from 'lucide-react-native';
+import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3, Zap, Mic, LogOut } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Chat } from '../utils/types';
 import { useAuth } from '../context/AuthContext';
@@ -43,7 +43,7 @@ export function Sidebar({
     onClose 
 }: SidebarProps) {
     const router = useRouter();
-    const { session, signOut } = useAuth();
+    const { session, signOut, deleteAccount } = useAuth();
     const email = session?.user.email ?? '';
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
     const [isMenuVisible, setIsMenuVisible] = useState(false);
@@ -61,6 +61,20 @@ export function Sidebar({
             'Deine Chats bleiben gespeichert. Beim nächsten Anmelden sind sie wieder da.',
             'Abmelden',
             () => { onClose(); signOut(); }
+        );
+    };
+
+    const handleDeleteAccount = () => {
+        confirmAction(
+            'Konto löschen',
+            'Dein Konto und alle Daten werden endgültig gelöscht. Deine geklonte Stimme wird ebenfalls entfernt. Das kann nicht rückgängig gemacht werden.',
+            'Konto löschen',
+            () => {
+                onClose();
+                void deleteAccount().then((error) => {
+                    if (error) Alert.alert('Konto löschen fehlgeschlagen', error);
+                });
+            }
         );
     };
 
@@ -133,6 +147,14 @@ export function Sidebar({
                 </TouchableOpacity>
 
                 <TouchableOpacity
+                    onPress={() => { onClose(); router.push('/voice'); }}
+                    style={styles.voiceButton}
+                >
+                    <Mic size={24} color="#0284c7" />
+                    <Text style={styles.statsButtonText}>Stimme</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                     onPress={onNewChat}
                     style={styles.newChatButton}
                 >
@@ -196,6 +218,15 @@ export function Sidebar({
                         <LogOut size={24} color="#374151" />
                     </TouchableOpacity>
                 </View>
+                <TouchableOpacity
+                    onPress={handleDeleteAccount}
+                    style={styles.deleteAccountButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Konto löschen"
+                >
+                    <Trash2 size={18} color="#ef4444" />
+                    <Text style={styles.deleteAccountText}>Konto löschen</Text>
+                </TouchableOpacity>
             </View>
 
             {/* Context menu */}
@@ -301,6 +332,16 @@ const styles = StyleSheet.create({
         borderColor: '#bae6fd',
         backgroundColor: '#f0f9ff',
     },
+    voiceButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#bae6fd',
+        backgroundColor: '#f0f9ff',
+    },
     newChatButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -389,6 +430,19 @@ const styles = StyleSheet.create({
         minHeight: 48,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    deleteAccountButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        minHeight: 48,
+        marginTop: 8,
+    },
+    deleteAccountText: {
+        fontSize: 14,
+        color: '#ef4444',
+        fontWeight: '500',
     },
     menuOverlay: {
         flex: 1,
