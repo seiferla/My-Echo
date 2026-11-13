@@ -41,3 +41,9 @@ __pycache__/
 
 # nur lokal: enthaelt interne Angaben (Heimnetz-IP, Keystore-/Signing-Schritte)
 /docs/PLAY_DEPLOYMENT.md
+
+# deploy secrets / terraform state
+deploy/.env
+deploy/terraform/.terraform/
+deploy/terraform/*.tfstate*
+deploy/terraform/*.tfvars

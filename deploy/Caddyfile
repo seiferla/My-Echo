@@ -1,0 +1,20 @@
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Do not buffer the audio stream: first audio bytes must reach the app at once.
+	reverse_proxy backend:4444 {
+		flush_interval -1
+	}
+
+	# No message text in the access log (G8): only metadata.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>headers delete
+				request>uri delete
+			}
+		}
+	}
+}
