@@ -77,7 +77,7 @@ resource "hcloud_server" "backend" {
     #cloud-config
     package_update: true
     runcmd:
-      - git clone https://github.com/seiferla/My-Echo.git /opt/My-Echo
+      - git clone -b multiuser https://github.com/seiferla/My-Echo.git /opt/My-Echo
       - bash /opt/My-Echo/deploy/setup.sh
   EOT
 }

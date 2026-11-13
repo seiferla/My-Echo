@@ -1,52 +1,86 @@
-# Deploy myEcho backend (Hetzner VM + Docker Compose + Caddy)
+# Deploy myEcho backend (VM + Docker Compose + Caddy)
 
-Database and auth are at Supabase. The VM only runs the backend and Caddy (HTTPS).
+Database and auth are at Supabase. The server only runs the backend and Caddy (HTTPS).
+The backend image is built on the server from `backend/` (branch `multiuser`).
 
-## 1. Prepare once
-
-- DNS: A record `api.<your-domain>` -> VM IP.
-- Supabase: apply the schema from the repo (from your laptop, project linked):
-  ```bash
-  npx supabase db push
-  ```
-- Supabase: Auth > turn **sign-ups off**; create users in the dashboard (confirmed e-mail).
-
-## 2. On the VM (as root)
-
-```bash
-git clone https://github.com/seiferla/My-Echo.git && cd My-Echo/deploy
-sudo bash setup.sh                 # Docker, firewall, fail2ban
-cp .env.example .env && nano .env  # fill in the values; chmod 600 .env
-docker compose up -d
+```
+App ──HTTPS──> Caddy (:443) ──> backend (:4444, not public) ──> Supabase Postgres (pooler)
+ └──────────── login ─────────────────────────────────────────> Supabase Auth
 ```
 
-## 3. Check
+## 1. Once, in the Supabase dashboard
+
+- Authentication: turn **sign-ups off**. Create users by hand (confirmed e-mail).
+- Authentication > Sessions: access token 3600 s, refresh token rotation on (ADR 0002).
+- Project settings > Data API: turn it off (the app only talks to the backend).
+- Database > Advisors > Security: no "RLS disabled" warning.
+- Optional, after the backend works: Database > Network Restrictions -> only the server IP.
+
+## 2. Once, DNS
+
+A record for your domain -> server IP. Check: `dig +short <domain>`.
+DuckDNS is fine for tests (duckdns.org, set "current ip").
+
+## 3. Once, on the server
 
 ```bash
-docker compose ps                         # backend must be "healthy"
-curl -i https://api.<your-domain>/health  # 200
-curl -i https://api.<your-domain>/chats   # 401 (no token = good)
-docker compose logs -f
+git clone -b multiuser https://github.com/seiferla/My-Echo.git && cd My-Echo/deploy
+sudo bash setup.sh          # Docker, firewall, fail2ban, docker group
+exit                        # log in again so the docker group works
 ```
+
+```bash
+cd ~/My-Echo/deploy
+cp .env.example .env && nano .env
+./deploy.sh
+```
+
+`deploy.sh` checks `.env`, pulls the code, applies `supabase/migrations`, builds and starts
+the containers, and tests `/health` (200), `/chats` (401) and `/docs` (not public).
+It prints how long the deploy took (G4).
 
 ## Update
 
 ```bash
-git pull && docker compose up -d --build
+cd ~/My-Echo/deploy && ./deploy.sh
 ```
+
+Do not edit files on the server. Change them in the repo, push, then run `./deploy.sh`.
+
+## Logs
+
+```bash
+docker compose ps
+docker compose logs backend --tail 50
+docker compose logs caddy --tail 50
+```
+
+| Problem | Cause |
+|---|---|
+| `tenant/user ... not found` | `DATABASE_URL` user is not `postgres.<project-ref>` |
+| `Network is unreachable` | direct connection (IPv6) used; use the Session pooler |
+| `password authentication failed` | wrong password, or special characters not URL-encoded |
+| Caddy certificate error | DNS does not point to the server, or port 80 blocked |
+| `permission denied ... docker.sock` | not logged in again after `setup.sh` |
 
 ## Backup / restore (G4)
 
-State is in Supabase, not on the VM. Backup the database from your laptop:
-
 ```bash
-pg_dump "$DATABASE_URL" -Fc -f myecho-$(date +%F).dump
-pg_restore --clean --if-exists -d "$TARGET_DATABASE_URL" myecho-<date>.dump
+./backup.sh                                     # -> backups/myecho-<time>.dump (keeps 14)
+./backup.sh restore backups/<file>.dump "<test-db-url>"
 ```
 
-Test the restore once on a local Supabase (`npx supabase start`) and write the result down.
+Restore once into a test database (for example a local `npx supabase start`,
+`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) and write the result down.
+Daily backup with cron (`crontab -e`):
 
-## Terraform (optional, empty project -> running VM)
+```
+0 3 * * * cd /home/<user>/My-Echo/deploy && ./backup.sh >> backups/backup.log 2>&1
+```
 
-See `terraform/`. It creates the VM and firewall and runs `setup.sh` through cloud-init.
-You still copy `.env` to the VM (secrets stay out of the repo).
+Backups contain user data. Keep them on the server or in encrypted storage only.
+
+## Terraform (optional, Hetzner: empty project -> running VM)
+
+See `terraform/`. It creates the VM and firewall, clones `multiuser` and runs `setup.sh`.
+You still copy `.env` to the VM and run `./deploy.sh` (secrets stay out of the repo).
