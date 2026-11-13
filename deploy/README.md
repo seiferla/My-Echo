@@ -32,7 +32,7 @@ docker compose logs -f
 ## Update
 
 ```bash
-docker compose pull && docker compose up -d
+git pull && docker compose up -d --build
 ```
 
 ## Backup / restore (G4)

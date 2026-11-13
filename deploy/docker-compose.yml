@@ -1,6 +1,8 @@
 services:
   backend:
-    image: ghcr.io/seiferla/myecho-backend:latest
+    # Built from the cloned repo: the GHCR image is arm64 only (Raspberry Pi) and comes from main.
+    build:
+      context: ../backend
     container_name: myecho-backend
     restart: unless-stopped
     # No public port: only Caddy can reach the backend (inside the Docker network).
