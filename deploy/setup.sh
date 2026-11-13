@@ -18,6 +18,11 @@ if ! command -v docker >/dev/null; then
 fi
 systemctl enable --now docker
 
+# Let the login user run docker without sudo (takes effect after a new SSH login).
+if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+  usermod -aG docker "$SUDO_USER"
+fi
+
 # Firewall: SSH + HTTP + HTTPS only
 ufw default deny incoming
 ufw default allow outgoing
@@ -29,4 +34,5 @@ ufw --force enable
 systemctl enable --now fail2ban
 dpkg-reconfigure -f noninteractive unattended-upgrades
 
-echo "Done. Next: cd deploy && cp .env.example .env && nano .env && docker compose up -d"
+echo "Done. Log out and in again (docker group), then:"
+echo "  cd deploy && cp .env.example .env && nano .env && ./deploy.sh"

@@ -47,3 +47,4 @@ deploy/.env
 deploy/terraform/.terraform/
 deploy/terraform/*.tfstate*
 deploy/terraform/*.tfvars
+deploy/backups/
