@@ -50,3 +50,10 @@ class TtsDayStatModel(BaseModel):
     requests: int = Field(ge=0, le=1_000_000_000)
     chars: int = Field(ge=0, le=1_000_000_000)
     durationMs: int = Field(ge=0, le=10**12)
+
+
+class VoiceModel(BaseModel):
+    voiceId: str
+    name: str
+    createdAt: int
+    consentedAt: int
