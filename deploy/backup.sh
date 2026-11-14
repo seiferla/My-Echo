@@ -86,7 +86,8 @@ fi
 mkdir -p backups
 chmod 700 backups
 name="myecho-$(date +%Y%m%d-%H%M%S).dump"
-DB_URL=$(env_get DATABASE_URL) docker run --rm -e DB_URL -v "$PWD/backups:/backup" $PG_IMAGE \
+# Run as the current user, so the dump file is not owned by root.
+DB_URL=$(env_get DATABASE_URL) docker run --rm --user "$(id -u):$(id -g)" -e DB_URL -v "$PWD/backups:/backup" $PG_IMAGE \
   sh -c "pg_dump \"\$DB_URL\" --schema=public -Fc -f /backup/$name"
 chmod 600 "backups/$name"
 echo "Backup written: deploy/backups/$name ($(du -h "backups/$name" | cut -f1))"
