@@ -66,12 +66,15 @@ docker compose logs caddy --tail 50
 ## Backup / restore (G4)
 
 ```bash
-./backup.sh                                     # -> backups/myecho-<time>.dump (keeps 14)
-./backup.sh restore backups/<file>.dump "<test-db-url>"
+./backup.sh          # backup -> backups/myecho-<time>.dump (keeps the newest 14)
+./backup.sh verify   # backup + restore into a throwaway Postgres + compare (the G4 restore test)
 ```
 
-Restore once into a test database (for example a local `npx supabase start`,
-`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) and write the result down.
+`verify` compares the row count of every table with the source and checks that RLS is on for
+every restored table. It prints `RESTORE TEST PASSED` or fails with exit code 1.
+It restores only into a throwaway container, never into production.
+To restore into your own test database: `./backup.sh restore backups/<file>.dump "<test-db-url>"`.
+
 Daily backup with cron (`crontab -e`):
 
 ```
@@ -79,6 +82,7 @@ Daily backup with cron (`crontab -e`):
 ```
 
 Backups contain user data. Keep them on the server or in encrypted storage only.
+Note: `auth.users` (accounts, passwords) is owned by Supabase and is not in this backup.
 
 ## Terraform (optional, Hetzner: empty project -> running VM)
 
