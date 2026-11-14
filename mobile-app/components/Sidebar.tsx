@@ -106,21 +106,16 @@ export function Sidebar({
 
     const handleDelete = () => {
         if (selectedChatId) {
-            Alert.alert(
-                "Chat löschen",
-                "Möchten Sie diesen Chat wirklich löschen?",
-                [
-                    { text: "Abbrechen", style: "cancel", onPress: () => setIsMenuVisible(false) },
-                    { 
-                        text: "Löschen", 
-                        style: "destructive", 
-                        onPress: () => {
-                            onDeleteChat(selectedChatId);
-                            setIsMenuVisible(false);
-                            setSelectedChatId(null);
-                        } 
-                    }
-                ]
+            confirmAction(
+                'Chat löschen',
+                'Möchten Sie diesen Chat wirklich löschen?',
+                'Löschen',
+                () => {
+                    onDeleteChat(selectedChatId);
+                    setIsMenuVisible(false);
+                    setSelectedChatId(null);
+                },
+                () => setIsMenuVisible(false)
             );
         }
     };
