@@ -5,14 +5,16 @@ export function confirmAction(
     title: string,
     message: string,
     confirmLabel: string,
-    onConfirm: () => void
+    onConfirm: () => void,
+    onCancel?: () => void
 ): void {
     if (Platform.OS === 'web') {
         if (window.confirm(`${title}\n\n${message}`)) onConfirm();
+        else onCancel?.();
         return;
     }
     Alert.alert(title, message, [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Abbrechen', style: 'cancel', onPress: onCancel },
         { text: confirmLabel, style: 'destructive', onPress: onConfirm },
     ]);
 }

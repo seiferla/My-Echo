@@ -62,13 +62,23 @@ export function useChats() {
         setCurrentChatId(newChat.id);
     };
 
+    // The effect above pushes only the open chat. Pin and rename can change any chat
+    // (long press in the sidebar), so push that chat here.
+    const pushIfNotOpen = (id: string, change: Partial<Chat>) => {
+        const chat = chats.find(c => c.id === id);
+        if (chat && id !== currentChatId) pushChat({ ...chat, ...change });
+    };
+
     const pinChat = (id: string) => {
+        const pinned = !chats.find(c => c.id === id)?.pinned;
+        pushIfNotOpen(id, { pinned });
         setChats(prevChats => prevChats.map(chat =>
-            chat.id === id ? { ...chat, pinned: !chat.pinned } : chat
+            chat.id === id ? { ...chat, pinned } : chat
         ));
     };
 
     const renameChat = (id: string, newTitle: string) => {
+        pushIfNotOpen(id, { title: newTitle, titleIsCustom: true });
         setChats(prevChats => prevChats.map(chat =>
             chat.id === id ? { ...chat, title: newTitle, titleIsCustom: true } : chat
         ));
