@@ -1,14 +1,6 @@
-"""Maps emojis in the user text to Voxtral emotion tags.
+"""Maps emojis to Voxtral emotion tags, e.g. "[emotion=happy]Text".
 
-Voxtral syntax: "[emotion=happy]Text". A tag is not spoken and applies until
-the next tag or the end of the input. Unknown values are ignored by the API.
-Docs: https://docs.mistral.ai/studio/audio/text-to-speech/emotion-tags
-Valid emotions (34): amused, angry, anxious, apologetic, appreciative,
-assertive, bored, calm, confident, confused, critical, curious, determined,
-disappointed, disgusted, excited, frustrated, grateful, happy, hopeful,
-playful, proud, reflective, resigned, sad, sarcastic, skeptical, somber,
-surprised, tense, tired, urgent, warm, wistful.
-Pace values: very-slow, slow, moderate, fast, very-fast (tag: [pace=slow]).
+Valid emotion values: https://docs.mistral.ai/studio/audio/text-to-speech/emotion-tags
 """
 import re
 
