@@ -14,6 +14,8 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from emotion_tags import apply_emotion_tags
+
 logger = logging.getLogger("myecho.tts")
 
 API_KEY = os.getenv("TTS_API_KEY", "")
@@ -32,7 +34,7 @@ def _headers() -> dict:
 
 def _payload(text: str) -> dict:
     payload = {
-        "input": text,
+        "input": apply_emotion_tags(text),
         "model": MODEL,
         "response_format": "mp3",
         "stream": True,
