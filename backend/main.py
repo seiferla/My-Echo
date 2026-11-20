@@ -1,8 +1,10 @@
+import base64
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import Annotated
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -12,13 +14,15 @@ from slowapi.errors import RateLimitExceeded
 
 import mistral_tts
 import mock_tts
-from auth import CurrentUser, current_user, require_metrics_token
+from auth import CurrentUser, current_user, delete_supabase_user, require_metrics_token
 from db import (
     init_db, close_db, list_chats, upsert_chat, delete_chat,
     get_phrase_store, put_phrase_store, get_tts_stats, merge_tts_stats,
+    get_user_voice, set_user_voice, delete_user_voice,
 )
 from schemas import (
     MAX_MESSAGE_CHARS, MAX_STAT_DAYS, ChatModel, DayKey, PhraseStoreModel, TtsDayStatModel,
+    VoiceModel,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -101,6 +105,9 @@ def _resolve_provider(value: str) -> str:
 # "mock" sends silent MP3 instead of calling Mistral. For load tests only.
 TTS_PROVIDER = _resolve_provider(os.getenv("TTS_PROVIDER", "mistral"))
 
+# Maximum size of an uploaded voice sample (10 MB).
+VOICE_MAX_BYTES = 10 * 1024 * 1024
+
 
 @app.get("/warmup", dependencies=[Depends(current_user)])
 async def warmup():
@@ -128,8 +135,13 @@ async def stream_tts(
             },
         )
 
+    # The user's cloned voice wins over the global default voice.
+    user_id = getattr(request.state, "user_id", None)
+    voice = await get_user_voice(user_id) if user_id else None
+    voice_id = voice["voiceId"] if voice else ""
+
     return StreamingResponse(
-        mistral_tts.stream(text),
+        mistral_tts.stream(text, voice_id),
         media_type="audio/mpeg",
         headers={"Cache-Control": "no-cache"},
     )
@@ -190,3 +202,84 @@ async def post_stats_tts(stats: dict[DayKey, TtsDayStatModel], user_id: CurrentU
         raise HTTPException(413, f"too many days (max {MAX_STAT_DAYS})")
     await merge_tts_stats(user_id, {day: s.model_dump() for day, s in stats.items()})
     return {"status": "ok"}
+
+
+# --- Voice clone (G3) -----------------------------------------------------------
+
+@app.get("/voice", response_model=VoiceModel | None)
+async def get_voice(user_id: CurrentUser):
+    """The user's cloned voice, or null when they have none."""
+    return await get_user_voice(user_id)
+
+
+@app.post("/voice", response_model=VoiceModel)
+async def upload_voice(
+    user_id: CurrentUser,
+    file: Annotated[UploadFile, File(...)],
+    name: Annotated[str, Form(...)],
+    consent: Annotated[bool, Form(...)],
+):
+    """Clones the user's voice from an uploaded audio sample and stores the voice id."""
+    if not consent:
+        raise HTTPException(400, "consent is required before uploading a voice")
+    name = name.strip()
+    if not name:
+        raise HTTPException(400, "voice name is required")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "empty voice sample")
+    if len(data) > VOICE_MAX_BYTES:
+        raise HTTPException(413, f"voice sample too large (max {VOICE_MAX_BYTES} bytes)")
+
+    # Replace an existing voice: delete the old one at Mistral first, so no orphan is left.
+    old = await get_user_voice(user_id)
+    if old and old["voiceId"]:
+        try:
+            await mistral_tts.delete_voice(old["voiceId"])
+        except Exception:
+            logger.warning("could not delete old voice %s", old["voiceId"])
+
+    try:
+        sample_b64 = base64.b64encode(data).decode()
+        voice_id = await mistral_tts.create_voice(sample_b64, file.filename or "sample.wav", name)
+    except Exception as e:
+        raise HTTPException(502, f"Mistral voice creation failed: {e}") from None
+
+    await set_user_voice(user_id, voice_id, name, int(time.time() * 1000))
+    return await get_user_voice(user_id)
+
+
+@app.delete("/voice")
+async def remove_voice(user_id: CurrentUser):
+    """Deletes the user's cloned voice at Mistral and removes the stored id."""
+    voice = await get_user_voice(user_id)
+    if voice and voice["voiceId"]:
+        try:
+            await mistral_tts.delete_voice(voice["voiceId"])
+        except Exception:
+            logger.warning("could not delete voice %s at Mistral", voice["voiceId"])
+    deleted = await delete_user_voice(user_id)
+    if not deleted and not voice:
+        raise HTTPException(404, "no voice stored")
+    return {"status": "deleted"}
+
+
+@app.delete("/account")
+async def delete_account(user_id: CurrentUser):
+    """Deletes the user's account (Supabase Auth) and their cloned voice at Mistral."""
+    voice = await get_user_voice(user_id)
+
+    # Delete the auth user first: all database rows follow via ON DELETE CASCADE.
+    try:
+        await delete_supabase_user(user_id)
+    except Exception as e:
+        raise HTTPException(502, f"Supabase user deletion failed: {e}") from None
+
+    # Best effort: remove the cloned voice at Mistral, so nothing is orphaned.
+    if voice and voice["voiceId"]:
+        try:
+            await mistral_tts.delete_voice(voice["voiceId"])
+        except Exception:
+            logger.warning("could not delete voice %s after account deletion", voice["voiceId"])
+
+    return {"status": "deleted"}

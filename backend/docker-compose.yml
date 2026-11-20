@@ -15,6 +15,7 @@ services:
       TTS_MODEL: ${TTS_MODEL:-voxtral-mini-tts-3-0}
       TTS_VOICE: ${TTS_VOICE:-}
       SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       DATABASE_URL: ${DATABASE_URL}
       METRICS_TOKEN: ${METRICS_TOKEN:-}
     healthcheck:

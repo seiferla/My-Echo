@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import type { AuthError, Session } from '@supabase/supabase-js';
 import { supabase } from '../utils/supabase';
+import { deleteAccount as deleteAccountRequest } from '../utils/account';
 import { adoptLegacyData, setLocalUser } from '../utils/localUser';
 import { stopSpeaking } from '../utils/tts';
 
@@ -13,6 +14,8 @@ interface AuthContextType {
     /** Returns an error message for the user, or null on success. */
     signIn: (email: string, password: string) => Promise<string | null>;
     signOut: () => Promise<void>;
+    /** Deletes the account (voice at Mistral + Supabase user). Returns an error message or null. */
+    deleteAccount: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -20,6 +23,7 @@ const AuthContext = createContext<AuthContextType>({
     isLoading: true,
     signIn: async () => 'Anmeldung nicht verfügbar.',
     signOut: async () => {},
+    deleteAccount: async () => 'Konto-Löschung nicht verfügbar.',
 });
 
 function toMessage(error: AuthError): string {
@@ -104,8 +108,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) console.warn(`${TAG} Sign-out failed: ${error.message}`);
     };
 
+    const deleteAccount = async (): Promise<string | null> => {
+        if (!supabase) return 'Konto-Löschung ist nicht eingerichtet (Supabase-Konfiguration fehlt).';
+        try {
+            await deleteAccountRequest();
+        } catch (e) {
+            console.warn(`${TAG} Account deletion failed: ${(e as Error)?.message ?? e}`);
+            return 'Konto konnte nicht gelöscht werden. Bitte erneut versuchen.';
+        }
+        stopSpeaking();
+        // The user is gone on the server: sign out locally only (no logout call).
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
+        if (error) console.warn(`${TAG} Local sign-out failed: ${error.message}`);
+        setLocalUser(null);
+        setSession(null);
+        return null;
+    };
+
     return (
-        <AuthContext.Provider value={{ session, isLoading, signIn, signOut }}>
+        <AuthContext.Provider value={{ session, isLoading, signIn, signOut, deleteAccount }}>
             {children}
         </AuthContext.Provider>
     );
