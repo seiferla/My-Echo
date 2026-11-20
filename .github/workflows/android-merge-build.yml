@@ -46,9 +46,19 @@ jobs:
     env:
       # Backend URL of the shipped APK (same as android-release.yml).
       EXPO_PUBLIC_BACKEND_URL: ${{ vars.EXPO_PUBLIC_BACKEND_URL || 'http://192.168.178.21:4444' }}
+      # Supabase login (same as android-release.yml).
+      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
+      - name: Check Supabase config
+        run: |
+          if [ -z "$EXPO_PUBLIC_SUPABASE_URL" ] || [ -z "$EXPO_PUBLIC_SUPABASE_KEY" ]; then
+            echo "::error::Set the repository variables EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY"
+            exit 1
+          fi
 
       - name: Set up Node
         uses: actions/setup-node@v7
