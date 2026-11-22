@@ -73,7 +73,9 @@ export default function VoiceScreen() {
             setFile(null);
             setConsent(false);
         } catch (e) {
-            Alert.alert('Hochladen fehlgeschlagen', 'Die Stimme konnte nicht erstellt werden.');
+            const reason = e instanceof Error ? e.message : String(e);
+            console.warn('Voice upload failed:', reason);
+            Alert.alert('Hochladen fehlgeschlagen', `Die Stimme konnte nicht erstellt werden.\n\n${reason}`);
         } finally {
             setUploading(false);
         }

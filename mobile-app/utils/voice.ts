@@ -35,7 +35,11 @@ export async function uploadVoice(opts: {
         headers: await authHeaders(),
         body: form,
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+        // Include the server's reason (e.g. "Unsupported audio type") for the error dialog.
+        const detail = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status} ${detail}`.trim().slice(0, 300));
+    }
     return response.json();
 }
 

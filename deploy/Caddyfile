@@ -1,3 +1,18 @@
+{
+	# Same filter for ALL logs, also proxy warnings (they contain the full
+	# /stream/tts?text=... URL otherwise). G8: no message text in logs.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>headers delete
+				request>uri delete
+			}
+		}
+	}
+}
+
 {$DOMAIN} {
 	encode zstd gzip
 
