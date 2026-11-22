@@ -65,7 +65,6 @@ export default function VoiceScreen() {
         try {
             setVoice(await uploadVoice({
                 uri: file.uri,
-                fileName: file.name,
                 mimeType: file.mimeType,
                 name: voice?.name || 'Meine Stimme',
                 consent,
