@@ -65,7 +65,6 @@ export default function VoiceScreen() {
         try {
             setVoice(await uploadVoice({
                 uri: file.uri,
-                fileName: file.name,
                 mimeType: file.mimeType,
                 name: voice?.name || 'Meine Stimme',
                 consent,
@@ -73,7 +72,9 @@ export default function VoiceScreen() {
             setFile(null);
             setConsent(false);
         } catch (e) {
-            Alert.alert('Hochladen fehlgeschlagen', 'Die Stimme konnte nicht erstellt werden.');
+            const reason = e instanceof Error ? e.message : String(e);
+            console.warn('Voice upload failed:', reason);
+            Alert.alert('Hochladen fehlgeschlagen', `Die Stimme konnte nicht erstellt werden.\n\n${reason}`);
         } finally {
             setUploading(false);
         }
