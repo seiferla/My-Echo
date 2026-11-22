@@ -99,7 +99,12 @@ async def stream(text: str, voice_id: str = "") -> AsyncIterator[bytes]:
             async with client.stream(
                 "POST", SPEECH_URL, json=_payload(text, voice_id), headers=_headers()
             ) as response:
-                response.raise_for_status()
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError:
+                    await response.aread()
+                    _log_api_error("TTS", response, voice)
+                    raise
                 async for chunk in _iter_audio(response):
                     if not first_audio_logged:
                         first_audio_logged = True
@@ -120,6 +125,17 @@ async def stream(text: str, voice_id: str = "") -> AsyncIterator[bytes]:
             chunk_count,
             byte_count,
         )
+
+
+def _log_api_error(action: str, response: httpx.Response, voice: str | None = None) -> None:
+    """Logs status and Mistral's error message. Never the request (it holds the user's text)."""
+    logger.warning(
+        "Mistral %s failed: HTTP %d, voice=%s, response=%s",
+        action,
+        response.status_code,
+        voice or "none",
+        response.text[:300],
+    )
 
 
 async def warm_up() -> dict:
@@ -156,7 +172,11 @@ async def create_voice(sample_audio_b64: str, filename: str, name: str) -> str:
     }
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         response = await client.post(VOICES_URL, json=payload, headers=_headers())
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            _log_api_error("create voice", response)
+            raise
         return response.json()["id"]
 
 

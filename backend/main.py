@@ -243,7 +243,10 @@ async def upload_voice(
         sample_b64 = base64.b64encode(data).decode()
         voice_id = await mistral_tts.create_voice(sample_b64, file.filename or "sample.wav", name)
     except Exception as e:
+        logger.warning("voice upload failed: user=%s, bytes=%d, error=%s", user_id[:8], len(data), e)
         raise HTTPException(502, f"Mistral voice creation failed: {e}") from None
+
+    logger.info("voice created: user=%s, bytes=%d, file=%s", user_id[:8], len(data), file.content_type)
 
     await set_user_voice(user_id, voice_id, name, int(time.time() * 1000))
     return await get_user_voice(user_id)
