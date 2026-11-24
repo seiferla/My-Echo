@@ -253,3 +253,120 @@ class TestDeleteVoice(unittest.IsolatedAsyncioTestCase):
 
         url = mock_client.delete.call_args.args[0]
         self.assertEqual(url, "https://api.mistral.ai/v1/audio/voices/voice-123")
+
+
+class _ErrorResponse(_FakeStreamResponse):
+    """Fake Mistral error answer (e.g. 429)."""
+
+    def __init__(self, status_code, headers=None):
+        super().__init__([])
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.text = "error"
+
+    def raise_for_status(self):
+        import httpx
+        raise httpx.HTTPStatusError("error", request=MagicMock(), response=self)
+
+    async def aread(self):
+        return b""
+
+
+def _install_responses(mock_client_class, responses):
+    """client.stream() returns the given responses one after the other."""
+    mock_client = AsyncMock()
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.__aexit__.return_value = False
+    cms = []
+    for r in responses:
+        cm = AsyncMock()
+        cm.__aenter__.return_value = r
+        cm.__aexit__.return_value = False
+        cms.append(cm)
+    mock_client.stream = MagicMock(side_effect=cms)
+    mock_client_class.return_value = mock_client
+    return mock_client
+
+
+def _count_429():
+    return mistral_tts.MISTRAL_429._value.get()
+
+
+class TestRetry(unittest.IsolatedAsyncioTestCase):
+    """429 and 5xx are retried with backoff (G5, #283)."""
+
+    @patch("mistral_tts.asyncio.sleep", new_callable=AsyncMock)
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_retries_429_then_streams(self, mock_client_class, sleep):
+        client = _install_responses(
+            mock_client_class,
+            [_ErrorResponse(429), _ErrorResponse(429), _FakeStreamResponse([b"ok"])],
+        )
+        before = _count_429()
+
+        collected = b"".join([c async for c in mistral_tts.stream("Hallo")])
+
+        self.assertEqual(collected, b"ok")
+        self.assertEqual(client.stream.call_count, 3)
+        self.assertEqual(sleep.await_count, 2)
+        self.assertEqual(_count_429() - before, 2)
+
+    @patch("mistral_tts.asyncio.sleep", new_callable=AsyncMock)
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_retries_5xx(self, mock_client_class, sleep):
+        _install_responses(mock_client_class, [_ErrorResponse(503), _FakeStreamResponse([b"ok"])])
+        before = _count_429()
+
+        collected = b"".join([c async for c in mistral_tts.stream("Hallo")])
+
+        self.assertEqual(collected, b"ok")
+        self.assertEqual(_count_429(), before)  # 503 is not counted as 429
+
+    @patch("mistral_tts.asyncio.sleep", new_callable=AsyncMock)
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_gives_up_after_max_retries(self, mock_client_class, sleep):
+        import httpx
+        client = _install_responses(
+            mock_client_class, [_ErrorResponse(429) for _ in range(mistral_tts.MAX_RETRIES + 1)]
+        )
+
+        with self.assertRaises(httpx.HTTPStatusError):
+            _ = [c async for c in mistral_tts.stream("Hallo")]
+
+        self.assertEqual(client.stream.call_count, mistral_tts.MAX_RETRIES + 1)
+
+    @patch("mistral_tts.asyncio.sleep", new_callable=AsyncMock)
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_does_not_retry_other_client_errors(self, mock_client_class, sleep):
+        import httpx
+        client = _install_responses(mock_client_class, [_ErrorResponse(400)])
+
+        with self.assertRaises(httpx.HTTPStatusError):
+            _ = [c async for c in mistral_tts.stream("Hallo")]
+
+        self.assertEqual(client.stream.call_count, 1)
+        sleep.assert_not_awaited()
+
+    @patch("mistral_tts.asyncio.sleep", new_callable=AsyncMock)
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_uses_retry_after_header(self, mock_client_class, sleep):
+        _install_responses(
+            mock_client_class,
+            [_ErrorResponse(429, {"retry-after": "2"}), _FakeStreamResponse([b"ok"])],
+        )
+
+        _ = [c async for c in mistral_tts.stream("Hallo")]
+
+        sleep.assert_awaited_once_with(2.0)
+
+    def test_backoff_grows_and_is_capped(self):
+        response = MagicMock(headers={})
+        d0 = mistral_tts._retry_delay(0, response)
+        d2 = mistral_tts._retry_delay(2, response)
+        d9 = mistral_tts._retry_delay(9, response)
+        self.assertLess(d0, d2)
+        self.assertLessEqual(d9, mistral_tts.RETRY_MAX_DELAY + 0.25)
+
+    def test_counter_is_exposed_at_metrics(self):
+        from prometheus_client import generate_latest
+        self.assertIn(b"mistral_429_total", generate_latest())
