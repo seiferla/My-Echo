@@ -4,15 +4,21 @@ Settings (env, read at import):
   TTS_API_KEY    Mistral API key
   TTS_MODEL      Voxtral TTS model, default voxtral-mini-tts-3-0
   TTS_VOICE      voice id (preset or custom); empty = model default voice
+
+Mistral limits new requests per second. 429 and 5xx answers are retried with
+backoff before the first audio byte, so a speech request waits instead of failing.
 """
+import asyncio
 import base64
 import json
 import logging
 import os
+import random
 import time
 from collections.abc import AsyncIterator
 
 import httpx
+from prometheus_client import Counter
 
 from emotion_tags import apply_emotion_tags
 
@@ -25,12 +31,33 @@ VOICES_URL = "https://api.mistral.ai/v1/audio/voices"
 MODEL = os.getenv("TTS_MODEL", "voxtral-mini-tts-3-0")
 VOICE = os.getenv("TTS_VOICE", "")
 
+# Retries of 429 and 5xx (before any audio was sent). Wait = base * 2^attempt + jitter, capped.
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 0.5
+RETRY_MAX_DELAY = 8.0
+
+# Shown at /metrics as mistral_429_total.
+MISTRAL_429 = Counter("mistral_429", "Mistral answered HTTP 429 (too many requests)")
+
 # Generous streaming timeout so long messages finish.
 TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
 
 
 def _headers() -> dict:
     return {"Authorization": f"Bearer {API_KEY}"}
+
+
+def _is_retryable(status_code: int) -> bool:
+    return status_code == 429 or status_code >= 500
+
+
+def _retry_delay(attempt: int, response: httpx.Response) -> float:
+    """Seconds to wait before the next try. Uses Retry-After (seconds) if Mistral sends it."""
+    try:
+        return min(float(response.headers["retry-after"]), RETRY_MAX_DELAY)
+    except (KeyError, ValueError, TypeError):
+        pass
+    return min(RETRY_BASE_DELAY * 2**attempt, RETRY_MAX_DELAY) + random.uniform(0, 0.25)
 
 
 def _payload(text: str, voice_id: str = "") -> dict:
@@ -96,28 +123,38 @@ async def stream(text: str, voice_id: str = "") -> AsyncIterator[bytes]:
 
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            async with client.stream(
-                "POST", SPEECH_URL, json=_payload(text, voice_id), headers=_headers()
-            ) as response:
-                try:
-                    response.raise_for_status()
-                except httpx.HTTPStatusError:
-                    await response.aread()
-                    _log_api_error("TTS", response, voice)
-                    raise
-                async for chunk in _iter_audio(response):
-                    if not first_audio_logged:
-                        first_audio_logged = True
-                        logger.info(
-                            "TTS first audio: %d ms total, chars=%d, model=%s, voice=%s",
-                            int((time.monotonic() - t_start) * 1000),
-                            len(text),
-                            MODEL,
-                            voice or "default",
-                        )
-                    chunk_count += 1
-                    byte_count += len(chunk)
-                    yield chunk
+            for attempt in range(MAX_RETRIES + 1):
+                delay = None
+                async with client.stream(
+                    "POST", SPEECH_URL, json=_payload(text, voice_id), headers=_headers()
+                ) as response:
+                    try:
+                        response.raise_for_status()
+                    except httpx.HTTPStatusError:
+                        await response.aread()
+                        _log_api_error("TTS", response, voice)
+                        if response.status_code == 429:
+                            MISTRAL_429.inc()
+                        if not _is_retryable(response.status_code) or attempt == MAX_RETRIES:
+                            raise
+                        delay = _retry_delay(attempt, response)
+                    else:
+                        async for chunk in _iter_audio(response):
+                            if not first_audio_logged:
+                                first_audio_logged = True
+                                logger.info(
+                                    "TTS first audio: %d ms total, chars=%d, model=%s, voice=%s",
+                                    int((time.monotonic() - t_start) * 1000),
+                                    len(text),
+                                    MODEL,
+                                    voice or "default",
+                                )
+                            chunk_count += 1
+                            byte_count += len(chunk)
+                            yield chunk
+                        return
+                logger.info("Mistral busy, retry %d/%d in %.1f s", attempt + 1, MAX_RETRIES, delay)
+                await asyncio.sleep(delay)
     finally:
         logger.info(
             "TTS finished: %d ms total, %d audio chunks, %d bytes",
