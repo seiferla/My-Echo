@@ -219,7 +219,7 @@ class TestCreateVoice(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["name"], "My voice")
         self.assertEqual(payload["sample_audio"], "aGVsbG8=")
         self.assertEqual(payload["sample_filename"], "sample.mp3")
-        self.assertEqual(payload["retention_notice"], 30)
+        self.assertEqual(payload["retention_notice"], 1)
 
     @patch("mistral_tts.httpx.AsyncClient")
     async def test_raises_on_mistral_error(self, mock_client_class):
@@ -252,4 +252,42 @@ class TestDeleteVoice(unittest.IsolatedAsyncioTestCase):
         await mistral_tts.delete_voice("voice-123")
 
         url = mock_client.delete.call_args.args[0]
-        self.assertEqual(url, "https://api.mistral.ai/v1/audio/voices/voice-123")
+        self.assertEqual(url, "https://api.eu.mistral.ai/v1/audio/voices/voice-123")
+
+
+class TestBaseUrl(unittest.IsolatedAsyncioTestCase):
+    """MISTRAL_BASE_URL is used for speech, models and voices."""
+
+    def test_default_is_the_eu_endpoint(self):
+        self.assertEqual(mistral_tts.BASE_URL, "https://api.eu.mistral.ai")
+
+    def test_urls_follow_base_url(self):
+        with patch("mistral_tts.BASE_URL", "https://example.test"):
+            self.assertEqual(mistral_tts._url("audio/speech"), "https://example.test/v1/audio/speech")
+            self.assertEqual(mistral_tts._url("models"), "https://example.test/v1/models")
+
+    @patch("mistral_tts.httpx.AsyncClient")
+    async def test_all_calls_use_base_url(self, mock_client_class):
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = False
+        mock_client.get.return_value = MagicMock()
+        mock_client.post.return_value = MagicMock(json=lambda: {"id": "v1"})
+        mock_client.delete.return_value = MagicMock()
+        mock_client_class.return_value = mock_client
+        _install_stream_mock(mock_client_class, [b"a"])
+        stream_client = mock_client_class.return_value
+        stream_client.get = mock_client.get
+        stream_client.post = mock_client.post
+        stream_client.delete = mock_client.delete
+
+        with patch("mistral_tts.BASE_URL", "https://example.test"):
+            _ = [c async for c in mistral_tts.stream("Hi")]
+            await mistral_tts.check_health()
+            await mistral_tts.create_voice("aGk=", "s.mp3", "n")
+            await mistral_tts.delete_voice("v1")
+
+        self.assertEqual(stream_client.stream.call_args.args[1], "https://example.test/v1/audio/speech")
+        self.assertEqual(stream_client.get.call_args.args[0], "https://example.test/v1/models")
+        self.assertEqual(stream_client.post.call_args.args[0], "https://example.test/v1/audio/voices")
+        self.assertEqual(stream_client.delete.call_args.args[0], "https://example.test/v1/audio/voices/v1")
