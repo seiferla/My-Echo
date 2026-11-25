@@ -30,6 +30,8 @@ Type what you want to say — myEcho speaks it in your own voice.
 ![Android](https://img.shields.io/badge/Android-3DDC84?logo=android&logoColor=white)
 ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![Backend Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/seiferla/6a78432e927c4d553d55828c74b8859d/raw/myecho-coverage.json)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=seiferla_My-Echo&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=seiferla_My-Echo)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=seiferla_My-Echo&metric=coverage)](https://sonarcloud.io/summary/new_code?id=seiferla_My-Echo)
 
 </div>
 
@@ -199,7 +201,7 @@ Updates: push to `main` → GitHub Actions builds new image → Portainer **Pull
 
 ### CI/CD
 
-GitHub Actions runs the backend tests (with coverage badge), typechecks and builds the Android app, creates signed releases on tags, pushes the backend Docker image to GHCR, and publishes the website to GitHub Pages.
+GitHub Actions runs the backend tests (with coverage badge), typechecks and builds the Android app, creates signed releases on tags, pushes the backend Docker image to GHCR, and publishes the website to GitHub Pages. A SonarQube Cloud scan checks code quality and the combined backend + mobile coverage on every PR.
 
 ---
 

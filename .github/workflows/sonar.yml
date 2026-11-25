@@ -1,0 +1,92 @@
+name: SonarQube Cloud
+
+# Runs backend and mobile tests with coverage, then sends both reports to
+# SonarQube Cloud in one scan. On PRs the quality gate shows up as a check.
+#
+# Setup (once, in GitHub repo settings):
+#   - secret SONAR_TOKEN (SonarQube Cloud → My Account → Security)
+# Organization and project key are in sonar-project.properties.
+# Turn off "Automatic Analysis" in SonarQube Cloud, it can't read coverage.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: sonar-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+
+    # The backend data tests need a real Postgres (schema from supabase/migrations).
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # Sonar needs the git history to tell new code from old code
+
+      # --- Backend ---------------------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.4.0
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv pip install --system -r requirements.txt pytest
+
+      - name: Backend tests with coverage
+        working-directory: backend
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: pytest --cov --cov-report=xml
+
+      # --- Mobile app ------------------------------------------------------------
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: mobile-app/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: mobile-app
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Mobile tests with coverage
+        working-directory: mobile-app
+        run: |
+          npm test -- --ci --coverage --coverageReporters=lcov
+          # Sonar reads paths from the repo root: make relative paths start with mobile-app/
+          sed -i -E 's#^SF:([^/])#SF:mobile-app/\1#' coverage/lcov.info
+
+      # --- Scan ------------------------------------------------------------------
+      # Skipped for Dependabot PRs: they get no access to SONAR_TOKEN.
+      - name: SonarQube Cloud scan
+        if: github.actor != 'dependabot[bot]'
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
