@@ -4,9 +4,8 @@ name: SonarQube Cloud
 # SonarQube Cloud in one scan. On PRs the quality gate shows up as a check.
 #
 # Setup (once, in GitHub repo settings):
-#   - secret   SONAR_TOKEN        (SonarQube Cloud → My Account → Security)
-#   - variable SONAR_ORGANIZATION (organization key)
-#   - variable SONAR_PROJECT_KEY  (project key)
+#   - secret SONAR_TOKEN (SonarQube Cloud → My Account → Security)
+# Organization and project key are in sonar-project.properties.
 # Turn off "Automatic Analysis" in SonarQube Cloud, it can't read coverage.
 
 on:
@@ -85,14 +84,9 @@ jobs:
           sed -i -E 's#^SF:([^/])#SF:mobile-app/\1#' coverage/lcov.info
 
       # --- Scan ------------------------------------------------------------------
-      # Skipped until the repo variables exist, and for Dependabot PRs
-      # (they get no access to SONAR_TOKEN).
+      # Skipped for Dependabot PRs: they get no access to SONAR_TOKEN.
       - name: SonarQube Cloud scan
-        if: vars.SONAR_PROJECT_KEY != '' && github.actor != 'dependabot[bot]'
+        if: github.actor != 'dependabot[bot]'
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
-            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}

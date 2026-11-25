@@ -30,6 +30,8 @@ Tippe, was du sagen möchtest — myEcho spricht es mit deiner eigenen Stimme au
 ![Android](https://img.shields.io/badge/Android-3DDC84?logo=android&logoColor=white)
 ![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![Backend Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/seiferla/6a78432e927c4d553d55828c74b8859d/raw/myecho-coverage.json)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=seiferla_My-Echo&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=seiferla_My-Echo)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=seiferla_My-Echo&metric=coverage)](https://sonarcloud.io/summary/new_code?id=seiferla_My-Echo)
 
 </div>
 
