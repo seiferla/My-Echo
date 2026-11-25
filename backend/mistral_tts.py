@@ -4,6 +4,8 @@ Settings (env, read at import):
   TTS_API_KEY    Mistral API key
   TTS_MODEL      Voxtral TTS model, default voxtral-mini-tts-3-0
   TTS_VOICE      voice id (preset or custom); empty = model default voice
+  MISTRAL_BASE_URL  API address, default https://api.eu.mistral.ai (EU endpoint).
+                 The EU endpoint covers inference only, not the storage of cloned voices.
 """
 import base64
 import json
@@ -19,14 +21,17 @@ from emotion_tags import apply_emotion_tags
 logger = logging.getLogger("myecho.tts")
 
 API_KEY = os.getenv("TTS_API_KEY", "")
-SPEECH_URL = "https://api.mistral.ai/v1/audio/speech"
-MODELS_URL = "https://api.mistral.ai/v1/models"
-VOICES_URL = "https://api.mistral.ai/v1/audio/voices"
+BASE_URL = os.getenv("MISTRAL_BASE_URL", "https://api.eu.mistral.ai").rstrip("/")
 MODEL = os.getenv("TTS_MODEL", "voxtral-mini-tts-3-0")
 VOICE = os.getenv("TTS_VOICE", "")
 
 # Generous streaming timeout so long messages finish.
 TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
+
+
+def _url(path: str) -> str:
+    """Full Mistral URL for speech, models and voices. Read on every call, so tests can change BASE_URL."""
+    return f"{BASE_URL}/v1/{path}"
 
 
 def _headers() -> dict:
@@ -97,7 +102,7 @@ async def stream(text: str, voice_id: str = "") -> AsyncIterator[bytes]:
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             async with client.stream(
-                "POST", SPEECH_URL, json=_payload(text, voice_id), headers=_headers()
+                "POST", _url("audio/speech"), json=_payload(text, voice_id), headers=_headers()
             ) as response:
                 try:
                     response.raise_for_status()
@@ -147,7 +152,7 @@ async def check_health() -> dict:
     """Checks the API key with a cheap call. Returns {"status": ...} plus a "message" on errors."""
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:
-            response = await client.get(MODELS_URL, headers=_headers())
+            response = await client.get(_url("models"), headers=_headers())
             response.raise_for_status()
             return {"status": "ok"}
         except httpx.TimeoutException:
@@ -161,17 +166,17 @@ async def check_health() -> dict:
 async def create_voice(sample_audio_b64: str, filename: str, name: str) -> str:
     """Creates a cloned voice from a base64-encoded audio sample. Returns the voice id.
 
-    The sample stays at Mistral according to retention_notice (default 30 days);
+    retention_notice=1 sets the shortest delay after which Mistral removes the sample;
     the returned voice id is what the TTS requests use.
     """
     payload = {
         "name": name,
         "sample_audio": sample_audio_b64,
         "sample_filename": filename,
-        "retention_notice": 30,
+        "retention_notice": 1,
     }
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.post(VOICES_URL, json=payload, headers=_headers())
+        response = await client.post(_url("audio/voices"), json=payload, headers=_headers())
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError:
@@ -183,5 +188,5 @@ async def create_voice(sample_audio_b64: str, filename: str, name: str) -> str:
 async def delete_voice(voice_id: str) -> None:
     """Deletes a cloned voice at Mistral. Best effort: a missing voice raises, the caller logs it."""
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        response = await client.delete(f"{VOICES_URL}/{voice_id}", headers=_headers())
+        response = await client.delete(_url(f"audio/voices/{voice_id}"), headers=_headers())
         response.raise_for_status()
