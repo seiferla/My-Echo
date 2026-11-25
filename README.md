@@ -199,7 +199,7 @@ Updates: push to `main` → GitHub Actions builds new image → Portainer **Pull
 
 ### CI/CD
 
-GitHub Actions runs the backend tests (with coverage badge), typechecks and builds the Android app, creates signed releases on tags, pushes the backend Docker image to GHCR, and publishes the website to GitHub Pages.
+GitHub Actions runs the backend tests (with coverage badge), typechecks and builds the Android app, creates signed releases on tags, pushes the backend Docker image to GHCR, and publishes the website to GitHub Pages. A SonarQube Cloud scan checks code quality and the combined backend + mobile coverage on every PR.
 
 ---
 

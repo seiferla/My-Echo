@@ -6,6 +6,8 @@ __pycache__/
 # test output
 .coverage
 coverage.json
+coverage.xml
+mobile-app/coverage/
 mobile-app/node_modules/
 
 # Expo / React Native

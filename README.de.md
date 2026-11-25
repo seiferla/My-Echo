@@ -199,7 +199,7 @@ Updates: Push auf `main` → GitHub Actions baut ein neues Image → in Portaine
 
 ### CI/CD
 
-GitHub Actions führt die Backend-Tests aus (mit Coverage-Badge), prüft und baut die Android-App, erstellt signierte Releases bei Tags, pusht das Backend-Docker-Image nach GHCR und veröffentlicht die Website auf GitHub Pages.
+GitHub Actions führt die Backend-Tests aus (mit Coverage-Badge), prüft und baut die Android-App, erstellt signierte Releases bei Tags, pusht das Backend-Docker-Image nach GHCR und veröffentlicht die Website auf GitHub Pages. Ein SonarQube-Cloud-Scan prüft bei jedem PR die Codequalität und die gemeinsame Coverage von Backend und App.
 
 ---
 
