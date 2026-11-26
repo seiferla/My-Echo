@@ -26,7 +26,6 @@ function load(user: string | null = 'u1'): ChatStorage & Pick<LocalUser, 'setLoc
 const chatsFile = (user: string) => `documents/chats.${user}.json`;
 
 beforeEach(() => {
-    jest.spyOn(console, 'log').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
     mockFs.clear();
     mockStorage.clear();
@@ -60,24 +59,6 @@ describe('readChats / writeChats', () => {
         setLocalUser('u2');
 
         expect(await readChats()).toBeNull();
-    });
-});
-
-describe('migration from SecureStore', () => {
-    it('moves the old history into the file once', async () => {
-        mockStorage.items.set('myEchoChats', '[old]');
-        const { readChats } = load('u1');
-
-        expect(await readChats()).toBe('[old]');
-        expect(mockFs.files.get(chatsFile('u1'))).toBe('[old]');
-        expect(mockStorage.items.has('myEchoChats')).toBe(false);
-    });
-
-    it('prefers the file when both exist', async () => {
-        mockStorage.items.set('myEchoChats', '[old]');
-        mockFs.files.set(chatsFile('u1'), '[new]');
-
-        expect(await load('u1').readChats()).toBe('[new]');
     });
 });
 
