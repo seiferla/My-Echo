@@ -32,7 +32,8 @@ export function createFakeFileSystem() {
         }
         delete() {
             dirs.delete(this.uri);
-            for (const path of [...files.keys()]) {
+            // Deleting while iterating is safe for a Map.
+            for (const path of files.keys()) {
                 if (path.startsWith(`${this.uri}/`)) files.delete(path);
             }
         }

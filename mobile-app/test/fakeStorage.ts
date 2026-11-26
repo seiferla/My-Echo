@@ -12,12 +12,15 @@ export function createFakeStorage() {
         /** Pass this to jest.mock('.../storage', ...). */
         module: {
             storage: {
-                getItem: async (key: string) => items.get(key) ?? null,
-                setItem: async (key: string, value: string) => {
+                // Same promise-based API as the real storage helper.
+                getItem: (key: string) => Promise.resolve(items.get(key) ?? null),
+                setItem: (key: string, value: string) => {
                     items.set(key, value);
+                    return Promise.resolve();
                 },
-                removeItem: async (key: string) => {
+                removeItem: (key: string) => {
                     items.delete(key);
+                    return Promise.resolve();
                 },
             },
         },
