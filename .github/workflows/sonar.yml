@@ -87,6 +87,6 @@ jobs:
       # Skipped for Dependabot PRs: they get no access to SONAR_TOKEN.
       - name: SonarQube Cloud scan
         if: github.actor != 'dependabot[bot]'
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@v7
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
