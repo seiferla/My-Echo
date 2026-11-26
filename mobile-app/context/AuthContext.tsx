@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import type { AuthError, Session } from '@supabase/supabase-js';
 import { supabase } from '../utils/supabase';
 import { deleteAccount as deleteAccountRequest } from '../utils/account';
-import { adoptLegacyData, setLocalUser } from '../utils/localUser';
+import { setLocalUser } from '../utils/localUser';
 import { stopSpeaking } from '../utils/tts';
 
 const TAG = '[myEcho][Auth]';
@@ -44,25 +44,12 @@ function toMessage(error: AuthError): string {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const queue = useRef<Promise<void>>(Promise.resolve());
 
     // Set the local data owner BEFORE the session: the app screens mount only after
-    // that, so they read the data of this account only. Queued because Supabase
-    // can send several events right after each other.
-    const applySession = (next: Session | null): Promise<void> => {
-        queue.current = queue.current.then(async () => {
-            try {
-                setLocalUser(next?.user.id ?? null);
-                if (next) await adoptLegacyData(next.user.id);
-                setSession(next);
-            } catch (e) {
-                // Better signed out than showing data of another account.
-                console.error(`${TAG} Could not prepare local data, staying signed out:`, e);
-                setLocalUser(null);
-                setSession(null);
-            }
-        });
-        return queue.current;
+    // that, so they read the data of this account only.
+    const applySession = (next: Session | null): void => {
+        setLocalUser(next?.user.id ?? null);
+        setSession(next);
     };
 
     useEffect(() => {
