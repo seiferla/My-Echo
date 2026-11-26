@@ -18,30 +18,18 @@ function chatsFileRef(): File {
     return new File(Paths.document, `${scoped('chats')}.json`);
 }
 
-// Old SecureStore key, only needed for the one-time migration.
-const LEGACY_KEY = 'myEchoChats';
-
 export async function readChats(): Promise<string | null> {
     if (isWeb) return storage.getItem(scoped(WEB_KEY_BASE));
 
-    if (chatsFileRef().exists) {
-        try {
-            return chatsFileRef().textSync();
-        } catch (e) {
-            console.error(`${TAG} read failed:`, e);
-            return null;
-        }
-    }
+    // No file yet: a new account or a new install.
+    if (!chatsFileRef().exists) return null;
 
-    // No file yet: a new install, or the history is still in the old SecureStore
-    // entry. Move it over once, so no chat is lost.
-    const legacy = await storage.getItem(LEGACY_KEY);
-    if (legacy) {
-        console.log(`${TAG} Migrating chat history out of SecureStore`);
-        await writeChats(legacy);
-        await storage.removeItem(LEGACY_KEY);
+    try {
+        return chatsFileRef().textSync();
+    } catch (e) {
+        console.error(`${TAG} read failed:`, e);
+        return null;
     }
-    return legacy;
 }
 
 export async function writeChats(json: string): Promise<void> {
