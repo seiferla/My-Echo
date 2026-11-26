@@ -12,11 +12,10 @@ import {
     Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Plus, MessageSquare, Pin, Pencil, Trash2, BarChart3, Zap, Mic, LogOut } from 'lucide-react-native';
+import { Plus, MessageSquare, Pin, Pencil, Trash2, Zap, ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Chat } from '../utils/types';
 import { useAuth } from '../context/AuthContext';
-import { confirmAction } from '../utils/confirm';
 import { groupChatsByDate } from '../utils/chatGroups';
 
 const { width } = Dimensions.get('window');
@@ -43,7 +42,7 @@ export function Sidebar({
     onClose 
 }: SidebarProps) {
     const router = useRouter();
-    const { session, signOut, deleteAccount } = useAuth();
+    const { session } = useAuth();
     const email = session?.user.email ?? '';
     const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
     const [isMenuVisible, setIsMenuVisible] = useState(false);
@@ -55,27 +54,9 @@ export function Sidebar({
         onClose();
     };
 
-    const handleLogout = () => {
-        confirmAction(
-            'Abmelden',
-            'Deine Chats bleiben gespeichert. Beim nächsten Anmelden sind sie wieder da.',
-            'Abmelden',
-            () => { onClose(); signOut(); }
-        );
-    };
-
-    const handleDeleteAccount = () => {
-        confirmAction(
-            'Konto löschen',
-            'Dein Konto und alle Daten werden endgültig gelöscht. Deine geklonte Stimme wird ebenfalls entfernt. Das kann nicht rückgängig gemacht werden.',
-            'Konto löschen',
-            () => {
-                onClose();
-                void deleteAccount().then((error) => {
-                    if (error) Alert.alert('Konto löschen fehlgeschlagen', error);
-                });
-            }
-        );
+    const openScreen = (path: '/phrases' | '/settings') => {
+        onClose();
+        router.push(path);
     };
 
     const handleLongPress = (id: string, currentTitle: string) => {
@@ -129,37 +110,26 @@ export function Sidebar({
 
     return (
         <SafeAreaView style={styles.container}>
+            {/* Only the daily actions live here; rare settings are one tap away in the footer. */}
             <View style={styles.header}>
-                <TouchableOpacity
-                    onPress={() => { onClose(); router.push('/stats'); }}
-                    style={styles.statsButton}
-                >
-                    <BarChart3 size={24} color="#0284c7" />
-                    <Text style={styles.statsButtonText}>Statistik</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    onPress={() => { onClose(); router.push('/phrases'); }}
-                    style={styles.phrasesButton}
-                >
-                    <Zap size={24} color="#0284c7" />
-                    <Text style={styles.statsButtonText}>Phrasen</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    onPress={() => { onClose(); router.push('/voice'); }}
-                    style={styles.voiceButton}
-                >
-                    <Mic size={24} color="#0284c7" />
-                    <Text style={styles.statsButtonText}>Stimme</Text>
-                </TouchableOpacity>
-
                 <TouchableOpacity
                     onPress={onNewChat}
                     style={styles.newChatButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Neuer Chat"
                 >
-                    <Plus size={24} color="#374151" />
+                    <Plus size={24} color="#0284c7" />
                     <Text style={styles.newChatText}>Neuer Chat</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={() => openScreen('/phrases')}
+                    style={styles.phrasesButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Phrasen bearbeiten"
+                >
+                    <Zap size={22} color="#374151" />
+                    <Text style={styles.phrasesText}>Phrasen</Text>
                 </TouchableOpacity>
             </View>
 
@@ -204,28 +174,21 @@ export function Sidebar({
             </ScrollView>
 
             <View style={styles.footer}>
-                <View style={styles.userInfo}>
+                <TouchableOpacity
+                    onPress={() => openScreen('/settings')}
+                    style={styles.settingsRow}
+                    accessibilityRole="button"
+                    accessibilityLabel="Einstellungen"
+                    accessibilityHint="Stimme, Statistik und Konto"
+                >
                     <View style={styles.userAvatar}>
                         <Text style={styles.userAvatarText}>{email.charAt(0).toUpperCase() || 'U'}</Text>
                     </View>
-                    <Text style={styles.userName} numberOfLines={1}>{email}</Text>
-                    <TouchableOpacity
-                        onPress={handleLogout}
-                        style={styles.logoutButton}
-                        accessibilityRole="button"
-                        accessibilityLabel="Abmelden"
-                    >
-                        <LogOut size={24} color="#374151" />
-                    </TouchableOpacity>
-                </View>
-                <TouchableOpacity
-                    onPress={handleDeleteAccount}
-                    style={styles.deleteAccountButton}
-                    accessibilityRole="button"
-                    accessibilityLabel="Konto löschen"
-                >
-                    <Trash2 size={18} color="#ef4444" />
-                    <Text style={styles.deleteAccountText}>Konto löschen</Text>
+                    <View style={styles.settingsText}>
+                        <Text style={styles.settingsTitle}>Einstellungen</Text>
+                        <Text style={styles.userName} numberOfLines={1}>{email}</Text>
+                    </View>
+                    <ChevronRight size={24} color="#6b7280" />
                 </TouchableOpacity>
             </View>
 
@@ -307,41 +270,7 @@ const styles = StyleSheet.create({
         padding: 20,
         gap: 12,
     },
-    statsButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        padding: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#bae6fd',
-        backgroundColor: '#f0f9ff',
-    },
-    statsButtonText: {
-        fontSize: 18,
-        fontWeight: '500',
-        color: '#0284c7',
-    },
-    phrasesButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        padding: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#bae6fd',
-        backgroundColor: '#f0f9ff',
-    },
-    voiceButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        padding: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#bae6fd',
-        backgroundColor: '#f0f9ff',
-    },
+    // Main action: accent colour, so it is the first thing the eye finds.
     newChatButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -349,11 +278,27 @@ const styles = StyleSheet.create({
         padding: 16,
         borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#d1d5db',
-        backgroundColor: '#ffffff',
+        borderColor: '#bae6fd',
+        backgroundColor: '#f0f9ff',
     },
     newChatText: {
         fontSize: 18,
+        fontWeight: '600',
+        color: '#0284c7',
+    },
+    phrasesButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 16,
+        minHeight: 56,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+        backgroundColor: '#ffffff',
+    },
+    phrasesText: {
+        fontSize: 17,
         fontWeight: '500',
         color: '#374151',
     },
@@ -396,14 +341,29 @@ const styles = StyleSheet.create({
         color: '#0369a1',
     },
     footer: {
-        padding: 20,
+        padding: 16,
         borderTopWidth: 1,
         borderTopColor: '#e5e7eb',
     },
-    userInfo: {
+    // One big target instead of several small ones next to each other.
+    settingsRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
+        minHeight: 64,
+        paddingHorizontal: 12,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#d1d5db',
+        backgroundColor: '#ffffff',
+    },
+    settingsText: {
+        flex: 1,
+    },
+    settingsTitle: {
+        fontSize: 17,
+        fontWeight: '600',
+        color: '#111827',
     },
     userAvatar: {
         width: 40,
@@ -419,30 +379,8 @@ const styles = StyleSheet.create({
         fontSize: 16,
     },
     userName: {
-        flex: 1,
-        fontSize: 16,
-        color: '#374151',
-        fontWeight: '500',
-    },
-    // At least 48 px touch target, like the other buttons.
-    logoutButton: {
-        minWidth: 48,
-        minHeight: 48,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    deleteAccountButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        minHeight: 48,
-        marginTop: 8,
-    },
-    deleteAccountText: {
         fontSize: 14,
-        color: '#ef4444',
-        fontWeight: '500',
+        color: '#6b7280',
     },
     menuOverlay: {
         flex: 1,

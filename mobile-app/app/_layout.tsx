@@ -31,6 +31,7 @@ function RootStack() {
         <Stack.Screen name="stats" />
         <Stack.Screen name="phrases" />
         <Stack.Screen name="voice" />
+        <Stack.Screen name="settings" />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
         <Stack.Screen name="login" />
